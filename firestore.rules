@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /models/{modelId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /pricing/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    match /priceLists/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /calculationHistory/{docId} {
+      allow read, update, delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    match /paymentOrders/{document=**} {
+      allow read, write: if false;
+    }
+    match /paymentFunnel/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /bugReports/{docId} {
+      allow read, update, delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    match /reports/{docId} {
+      allow read, update, delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    /// Коды подтверждения почты — только Admin SDK (серверные API).
+    match /emailVerificationCodes/{uid} {
+      allow read, write: if false;
+    }
+  }
+}

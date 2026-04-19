@@ -1,0 +1,25 @@
+{
+  "redirects": [
+    {
+      "source": "/verify-email",
+      "destination": "/verify-email-code",
+      "permanent": true
+    },
+    {
+      "source": "/verify-email/:path*",
+      "destination": "/verify-email-code",
+      "permanent": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    }
+  ]
+}

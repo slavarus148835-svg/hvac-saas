@@ -1,0 +1,12 @@
+{
+  "id": "305554f7-3335-4267-9b98-19cc77a0816d",
+  "ok": true,
+  "result": {
+    "mode": "cursor-cli",
+    "summary": "Task 305554f7-3335-4267-9b98-19cc77a0816d handled in cursor-cli mode",
+    "changedFiles": [],
+    "logs": "prompt: \ncwd: C:\\Users\\User\\hvac-saas\ncursor --version exit=0\n3.1.14\nd8673fb56ba50fda33ad78382000b519bb8acb70\nx64\n\n"
+  },
+  "errorText": null,
+  "savedAt": "2026-04-16T09:36:36.573Z"
+}

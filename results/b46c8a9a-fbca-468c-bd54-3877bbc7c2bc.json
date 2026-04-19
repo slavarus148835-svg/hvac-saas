@@ -1,0 +1,12 @@
+{
+  "id": "b46c8a9a-fbca-468c-bd54-3877bbc7c2bc",
+  "ok": true,
+  "result": {
+    "mode": "cursor-cli",
+    "summary": "Task b46c8a9a-fbca-468c-bd54-3877bbc7c2bc handled in cursor-cli mode",
+    "changedFiles": [],
+    "logs": "prompt: TEST_TASK_20260416_122215\ncwd: C:\\Users\\User\\hvac-saas\ncursor --version exit=0\n3.1.14\nd8673fb56ba50fda33ad78382000b519bb8acb70\nx64\n\n"
+  },
+  "errorText": null,
+  "savedAt": "2026-04-16T09:22:20.684Z"
+}

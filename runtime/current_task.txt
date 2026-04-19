@@ -1,0 +1,5 @@
+id=9469036a-dc0b-40d3-b0f3-ee083ad38761
+type=code_task
+status=running
+prompt:
+Какая ?

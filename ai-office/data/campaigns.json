@@ -1,0 +1,20 @@
+[
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-18T16:11:43.924Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "clinic",
+    "at": "2026-04-18T16:12:24.883Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "hotel",
+    "at": "2026-04-18T16:12:55.112Z",
+    "leads": 3
+  }
+]

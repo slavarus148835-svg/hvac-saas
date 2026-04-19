@@ -1,0 +1,26 @@
+{
+  "name": "chatgpt-worker-bridge",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup-data.mjs && npm run db:migrate",
+    "install:all": "npm install && npm run db:generate",
+    "db:generate": "prisma generate --schema ./packages/db/prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema ./packages/db/prisma/schema.prisma",
+    "build": "npm run build -w @bridge/db && npm run build -w @bridge/server && npm run build -w @bridge/worker",
+    "dev": "concurrently -n server,worker -c blue,green \"npm run dev -w @bridge/server\" \"npm run dev -w @bridge/worker\"",
+    "dev:server": "npm run dev -w @bridge/server",
+    "dev:worker": "npm run dev -w @bridge/worker",
+    "start:server": "npm run start -w @bridge/server",
+    "start:worker": "npm run start -w @bridge/worker",
+    "postinstall": "npm run db:generate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prisma": "^6.3.0",
+    "typescript": "^5.7.2"
+  }
+}

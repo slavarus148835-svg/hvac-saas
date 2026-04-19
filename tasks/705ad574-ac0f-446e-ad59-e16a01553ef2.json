@@ -1,0 +1,15 @@
+{
+  "id": "705ad574-ac0f-446e-ad59-e16a01553ef2",
+  "type": "code_task",
+  "payload": {
+    "prompt": "Manual validation prompt",
+    "source": "telegram"
+  },
+  "status": "done",
+  "createdAt": "2026-04-16T09:42:17.761Z",
+  "updatedAt": "2026-04-16T09:42:20.804Z",
+  "claimedAt": "2026-04-16T09:42:19.854Z",
+  "runningAt": "2026-04-16T09:42:19.873Z",
+  "completedAt": "2026-04-16T09:42:20.803Z",
+  "errorText": null
+}

@@ -1,0 +1,15 @@
+{
+  "id": "9469036a-dc0b-40d3-b0f3-ee083ad38761",
+  "type": "code_task",
+  "payload": {
+    "prompt": "Какая ?",
+    "source": "telegram"
+  },
+  "status": "done",
+  "createdAt": "2026-04-16T19:21:07.531Z",
+  "updatedAt": "2026-04-16T19:21:25.215Z",
+  "claimedAt": "2026-04-16T19:21:22.006Z",
+  "runningAt": "2026-04-16T19:21:22.030Z",
+  "completedAt": "2026-04-16T19:21:25.214Z",
+  "errorText": null
+}

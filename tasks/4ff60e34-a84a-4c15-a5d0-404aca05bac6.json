@@ -1,0 +1,15 @@
+{
+  "id": "4ff60e34-a84a-4c15-a5d0-404aca05bac6",
+  "type": "code_task",
+  "payload": {
+    "prompt": "Добавь кнопку сохранить расчет",
+    "source": "telegram"
+  },
+  "status": "done",
+  "createdAt": "2026-04-16T12:44:13.377Z",
+  "updatedAt": "2026-04-16T19:21:18.463Z",
+  "claimedAt": "2026-04-16T12:44:13.706Z",
+  "runningAt": "2026-04-16T12:44:13.732Z",
+  "completedAt": "2026-04-16T19:21:18.463Z",
+  "errorText": null
+}

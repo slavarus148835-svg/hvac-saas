@@ -1,0 +1,14 @@
+{
+  "id": "b46c8a9a-fbca-468c-bd54-3877bbc7c2bc",
+  "type": "code_task",
+  "payload": {
+    "prompt": "TEST_TASK_20260416_122215"
+  },
+  "status": "done",
+  "createdAt": "2026-04-16T09:22:16.485Z",
+  "updatedAt": "2026-04-16T09:22:20.686Z",
+  "claimedAt": "2026-04-16T09:22:19.366Z",
+  "runningAt": "2026-04-16T09:22:19.393Z",
+  "completedAt": "2026-04-16T09:22:20.685Z",
+  "errorText": null
+}

@@ -1,0 +1,15 @@
+{
+  "id": "ed85cf94-aa5b-490c-ad84-a92e9429b458",
+  "type": "code_task",
+  "payload": {
+    "prompt": "Self-test: return short status line",
+    "repoPath": "."
+  },
+  "status": "done",
+  "createdAt": "2026-04-16T08:39:05.106Z",
+  "updatedAt": "2026-04-16T08:39:10.200Z",
+  "claimedAt": "2026-04-16T08:39:06.838Z",
+  "runningAt": "2026-04-16T08:39:06.847Z",
+  "completedAt": "2026-04-16T08:39:10.199Z",
+  "errorText": null
+}

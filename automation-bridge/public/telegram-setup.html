@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Telegram setup — Automation Bridge</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --card: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --accent: #111827;
+        --ok: #166534;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 14px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+      h1 {
+        margin: 0 0 10px 0;
+        font-size: 24px;
+      }
+      h2 {
+        margin: 0 0 12px 0;
+        font-size: 18px;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        min-height: 52px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 16px;
+      }
+      button {
+        min-height: 50px;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        background: #fff;
+        padding: 12px 16px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      .btn-secondary {
+        margin-top: 10px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .status-ok {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #ecfdf5;
+        color: var(--ok);
+        font-weight: 700;
+        display: none;
+      }
+      .status-ok.visible {
+        display: block;
+      }
+      .hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      a {
+        color: #1d4ed8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Telegram setup</h1>
+        <p class="muted">
+          Настройки пишутся в файл <code>.env</code> в папке <code>automation-bridge</code>. После сохранения бот
+          перезапускается автоматически (полный перезапуск bridge не нужен).
+        </p>
+        <p class="muted"><a href="/">← На главную панель</a></p>
+      </div>
+
+      <div class="card">
+        <h2>Параметры</h2>
+        <label for="tokenField">Bot token</label>
+        <input id="tokenField" type="password" autocomplete="off" placeholder="из @BotFather" />
+        <p id="tokenHint" class="hint"></p>
+
+        <label for="chatField" style="margin-top: 14px">Chat id</label>
+        <input id="chatField" type="text" inputmode="numeric" placeholder="числовой id чата" />
+
+        <button id="saveBtn" class="btn-primary" style="margin-top: 14px">Сохранить Telegram настройки</button>
+
+        <button id="probeBtn" class="btn-secondary" type="button" style="display: none">
+          Проверить сообщения
+        </button>
+
+        <div id="statusOk" class="status-ok">сохранено</div>
+        <p id="msgLine" class="hint"></p>
+      </div>
+    </div>
+
+    <script>
+      const tokenField = document.getElementById("tokenField");
+      const chatField = document.getElementById("chatField");
+      const saveBtn = document.getElementById("saveBtn");
+      const probeBtn = document.getElementById("probeBtn");
+      const statusOk = document.getElementById("statusOk");
+      const msgLine = document.getElementById("msgLine");
+      const tokenHint = document.getElementById("tokenHint");
+
+      function hideSaved() {
+        statusOk.classList.remove("visible");
+      }
+
+      function showSaved() {
+        statusOk.classList.add("visible");
+        setTimeout(() => statusOk.classList.remove("visible"), 4000);
+      }
+
+      async function refreshStatus() {
+        hideSaved();
+        const res = await fetch("/api/telegram-status");
+        const data = await res.json();
+        tokenHint.textContent = data.hasToken
+          ? "Токен уже есть в .env — оставьте поле пустым, если не хотите менять его."
+          : "Введите токен бота (обязательно при первой настройке).";
+        probeBtn.style.display = data.needsChatProbe ? "block" : "none";
+        if (data.chatId) {
+          chatField.placeholder = "текущий: " + data.chatId;
+        }
+        msgLine.textContent = data.telegramEnabled
+          ? "Состояние: Telegram включён (polling: " + (data.runtimePolling ? "да" : "нет") + ")"
+          : "Состояние: Telegram выключен (нужны token и chat id).";
+      }
+
+      saveBtn.addEventListener("click", async () => {
+        hideSaved();
+        msgLine.textContent = "";
+        const payload = {};
+        const t = tokenField.value.trim();
+        const c = chatField.value.trim();
+        if (t) payload.token = t;
+        if (c) payload.chatId = c;
+        if (!Object.keys(payload).length) {
+          msgLine.textContent = "Введите token и/или chat id.";
+          return;
+        }
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Сохранение...";
+        try {
+          const res = await fetch("/api/telegram-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            msgLine.textContent = data.error || "Ошибка сохранения";
+            return;
+          }
+          showSaved();
+          msgLine.textContent = data.message || "Готово";
+          tokenField.value = "";
+          await refreshStatus();
+        } catch (e) {
+          msgLine.textContent = e.message || "Сеть недоступна";
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Сохранить Telegram настройки";
+        }
+      });
+
+      probeBtn.addEventListener("click", async () => {
+        hideSaved();
+        msgLine.textContent = "";
+        probeBtn.disabled = true;
+        probeBtn.textContent = "Проверка...";
+        try {
+          const body = {};
+          const t = tokenField.value.trim();
+          if (t) body.token = t;
+          const res = await fetch("/api/telegram-probe-updates", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            msgLine.textContent = data.error || "Ошибка getUpdates";
+            return;
+          }
+          if (data.found && data.chatId) {
+            showSaved();
+            msgLine.textContent = "Найден chat_id: " + data.chatId + " — записан в .env.";
+            chatField.value = data.chatId;
+          } else {
+            msgLine.textContent = data.message || "chat_id не найден.";
+          }
+          await refreshStatus();
+        } catch (e) {
+          msgLine.textContent = e.message || "Сеть недоступна";
+        } finally {
+          probeBtn.disabled = false;
+          probeBtn.textContent = "Проверить сообщения";
+        }
+      });
+
+      refreshStatus();
+    </script>
+  </body>
+</html>
