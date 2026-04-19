@@ -70,7 +70,17 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [verifiedWelcome, setVerifiedWelcome] = useState(false);
+  const [showPaymentReturnBanner, setShowPaymentReturnBanner] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("payment") === "success") {
+      setShowPaymentReturnBanner(true);
+      window.history.replaceState({}, "", "/dashboard");
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !user) return;
@@ -253,6 +263,31 @@ export default function DashboardPage() {
 
   return (
     <div style={pageStyle}>
+      {showPaymentReturnBanner ? (
+        <div
+          style={{
+            marginBottom: "12px",
+            padding: "14px 16px",
+            borderRadius: "14px",
+            background: profile && isPaidActive(profile) ? "#ecfdf5" : "#f0fdf4",
+            border: `1px solid ${profile && isPaidActive(profile) ? "#bbf7d0" : "#86efac"}`,
+            color: "#166534",
+            fontSize: "15px",
+            lineHeight: 1.45,
+            fontWeight: 600,
+          }}
+        >
+          {profile && isPaidActive(profile) ? (
+            <>Оплата прошла. Подписка активна — полный доступ ко всем разделам включён.</>
+          ) : (
+            <>
+              Возврат после оплаты. Если статус ещё «Ограничен», подождите несколько секунд и обновите
+              страницу — банк подтверждает платёж на сервер.
+            </>
+          )}
+        </div>
+      ) : null}
+
       {trialNearSoft && trialLeft !== null ? (
         <div
           style={{

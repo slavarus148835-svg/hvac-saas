@@ -7,6 +7,7 @@ import {
   sendTelegramNotification,
 } from "@/lib/server/sendTelegramNotification";
 
+/** Подпись webhook только из process.env (тот же пароль, что для Init). */
 const PASSWORD = process.env.TBANK_PASSWORD || "";
 const MONTHLY_AMOUNT_KOPECKS = 1190 * 100;
 
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     const adminDb = getAdminDb();
     if (!adminDb) {
       console.error(
-        "Webhook: FIREBASE_SERVICE_ACCOUNT_JSON is not set — cannot update Firestore from server."
+        "[payment] callback failed FIREBASE_SERVICE_ACCOUNT_JSON is not set — cannot update Firestore"
       );
       return NextResponse.json(
         {
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Record<string, unknown>;
 
     if (!PASSWORD) {
+      console.error("[payment] callback failed TBANK_PASSWORD not set");
       return NextResponse.json(
         { error: "Не найден TBANK_PASSWORD в environment variables" },
         { status: 500 }
@@ -76,6 +78,7 @@ export async function POST(req: Request) {
     const expectedToken = generateWebhookToken(body);
 
     if (!incomingToken || incomingToken !== expectedToken) {
+      console.error("[payment] callback failed invalid webhook signature");
       return NextResponse.json(
         { error: "Неверная подпись webhook" },
         { status: 400 }
@@ -84,6 +87,7 @@ export async function POST(req: Request) {
 
     const orderId = String(body.OrderId || "");
     const paymentStatus = String(body.Status || "");
+    console.log("[payment] callback received", { orderId, status: paymentStatus });
 
     if (!orderId) {
       return NextResponse.json(
@@ -122,7 +126,7 @@ export async function POST(req: Request) {
       | undefined;
 
     if (!intent || intent.orderId !== orderId) {
-      console.error("Webhook: lastPaymentIntent mismatch", { orderId, userId, intent });
+      console.error("[payment] callback failed lastPaymentIntent mismatch", { orderId, userId });
       return NextResponse.json(
         { error: "Черновик оплаты не найден или orderId не совпадает" },
         { status: 400 }
@@ -138,7 +142,7 @@ export async function POST(req: Request) {
     };
 
     if (paymentOrder.months !== 1 || paymentOrder.amount !== MONTHLY_AMOUNT_KOPECKS) {
-      console.error("Webhook: invalid payment intent payload", {
+      console.error("[payment] callback failed invalid payment intent payload", {
         userId,
         orderId,
         months: paymentOrder.months,
@@ -163,6 +167,7 @@ export async function POST(req: Request) {
     );
 
     if (paymentStatus !== "CONFIRMED") {
+      console.log("[payment] callback success (no access change; status not CONFIRMED)");
       return NextResponse.json({ ok: true });
     }
 
@@ -191,6 +196,13 @@ export async function POST(req: Request) {
       { merge: true }
     );
 
+    console.log("[payment] access granted", {
+      userId,
+      orderId,
+      paidUntil: newPaidUntil,
+      plan: paymentOrder.plan,
+    });
+
     const amountRub = paymentOrder.amount / 100;
     const periodLabel =
       paymentOrder.months === 1 ? "1 месяц" : `${paymentOrder.months} мес.`;
@@ -204,25 +216,27 @@ export async function POST(req: Request) {
       date: dateStr,
     });
 
-    console.log("[telegram] payment notify start");
+    console.log("[payment] telegram notify start");
     void sendTelegramNotification(payHtml)
       .then((r) => {
         if (r.ok) {
-          console.log("[telegram] payment notify success");
+          console.log("[payment] telegram notify ok");
         } else {
-          console.error("[telegram] payment notify failed", {
+          console.error("[payment] telegram notify failed", {
             skipped: r.skipped,
             error: r.error,
             httpStatus: r.httpStatus,
           });
         }
       })
-      .catch((err) => console.error("[telegram] payment notify failed", err));
+      .catch((err) => console.error("[payment] telegram notify failed", err));
 
+    console.log("[payment] callback success");
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Внутренняя ошибка webhook";
+    console.error("[payment] callback failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

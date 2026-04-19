@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getServerPublicOrigin } from "@/lib/siteUrl";
 
+/** Только process.env — боевой терминал и пароль из Vercel / .env (без хардкода). */
 const TERMINAL_KEY = process.env.TBANK_TERMINAL_KEY || "";
 const PASSWORD = process.env.TBANK_PASSWORD || "";
 const TAXATION = process.env.TBANK_TAXATION || "usn_income";
+
+/** Боевой Init T‑Банка (Tinkoff Acquiring). */
+const TBANK_INIT_URL = "https://securepay.tinkoff.ru/v2/Init";
 
 function generateToken(payload: Record<string, string | number>) {
   const values: Record<string, string> = {};
@@ -50,7 +54,13 @@ export async function POST(req: Request) {
       orderId?: string;
     };
 
+    console.log("[payment] create start", {
+      userId: userId ? String(userId) : undefined,
+      orderId: orderId ? String(orderId) : undefined,
+    });
+
     if (!TERMINAL_KEY || !PASSWORD) {
+      console.error("[payment] create failed missing TBANK_TERMINAL_KEY or TBANK_PASSWORD");
       return NextResponse.json(
         {
           error: "Не найдены TBANK_TERMINAL_KEY или TBANK_PASSWORD в environment variables",
@@ -67,11 +77,21 @@ export async function POST(req: Request) {
     }
 
     if (!orderId || !isValidOrderIdForUser(String(orderId), String(userId))) {
+      console.error("[payment] create failed invalid orderId");
       return NextResponse.json(
         {
           error:
             "Некорректный orderId. Ожидается формат userId__timestamp (черновик оплаты записывается в users/{uid} на клиенте).",
         },
+        { status: 400 }
+      );
+    }
+
+    const emailTrim = typeof email === "string" ? email.trim() : "";
+    if (!emailTrim) {
+      console.error("[payment] create failed missing email");
+      return NextResponse.json(
+        { error: "Укажите email в профиле или войдите с аккаунтом с привязанной почтой" },
         { status: 400 }
       );
     }
@@ -92,6 +112,7 @@ export async function POST(req: Request) {
 
     const publicOrigin = getServerPublicOrigin();
     if (!publicOrigin) {
+      console.error("[payment] create failed missing NEXT_PUBLIC_APP_URL / public origin");
       return NextResponse.json(
         {
           error:
@@ -114,13 +135,13 @@ export async function POST(req: Request) {
       OrderId: orderIdStr,
       Description: description,
       NotificationURL: webhookUrl,
-      SuccessURL: `${publicOrigin}/dashboard`,
-      FailURL: `${publicOrigin}/billing`,
+      SuccessURL: `${publicOrigin}/dashboard?payment=success`,
+      FailURL: `${publicOrigin}/billing?payment=failed`,
     };
 
     const Token = generateToken(payload);
 
-    const response = await fetch("https://securepay.tinkoff.ru/v2/Init", {
+    const response = await fetch(TBANK_INIT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -129,7 +150,7 @@ export async function POST(req: Request) {
         ...payload,
         Token,
         Receipt: {
-          Email: email || "test@example.com",
+          Email: emailTrim,
           Taxation: TAXATION,
           Items: [
             {
@@ -148,6 +169,10 @@ export async function POST(req: Request) {
     const data = await response.json();
 
     if (!data.Success) {
+      console.error("[payment] create failed tbank response", {
+        message: data.Message,
+        details: data.Details,
+      });
       return NextResponse.json(
         {
           error: data.Message || "Ошибка T-Банка",
@@ -158,12 +183,15 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log("[payment] create success", { orderId: orderIdStr, paymentId: data.PaymentId });
+
     return NextResponse.json({
       url: data.PaymentURL,
       orderId: orderIdStr,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Внутренняя ошибка сервера";
+    console.error("[payment] create failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -35,11 +35,16 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [expiredFromQuery, setExpiredFromQuery] = useState(false);
+  const [paymentFailedFromBank, setPaymentFailedFromBank] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     setExpiredFromQuery(p.get("reason") === "expired_trial");
+    if (p.get("payment") === "failed") {
+      setPaymentFailedFromBank(true);
+      window.history.replaceState({}, "", "/billing");
+    }
   }, []);
 
   useEffect(() => {
@@ -117,6 +122,13 @@ export default function BillingPage() {
     const effectiveUid = currentUser.uid;
     const orderId = `${effectiveUid}__${Date.now()}`;
 
+    const payEmail = (email || currentUser.email || "").trim();
+    if (!payEmail) {
+      alert("Укажите email в профиле — он нужен для чека и оплаты.");
+      router.push("/profile");
+      return;
+    }
+
     try {
       setPaying(true);
 
@@ -146,7 +158,7 @@ export default function BillingPage() {
           plan: "standard",
           userId: effectiveUid,
           orderId,
-          email: email || currentUser.email || "test@example.com",
+          email: (email || currentUser.email || "").trim(),
         }),
       });
 
@@ -188,6 +200,12 @@ export default function BillingPage() {
 
   return (
     <div style={pageStyle}>
+      {paymentFailedFromBank ? (
+        <div style={noticeBannerFail}>
+          Оплата не завершена или отменена. Можно оформить доступ снова — спишется только успешный платёж.
+        </div>
+      ) : null}
+
       {expiredFromQuery && userData && isTrialExpired(userData) && !paid ? (
         <div style={noticeBanner}>
           Срок доступа к разделам завершён. Ниже можно снова открыть инструменты.
@@ -348,6 +366,16 @@ const noticeBanner: React.CSSProperties = {
   background: "#fffbeb",
   border: "1px solid #fde68a",
   color: "#92400e",
+  fontSize: "15px",
+  lineHeight: 1.45,
+};
+const noticeBannerFail: React.CSSProperties = {
+  marginBottom: "14px",
+  padding: "14px 16px",
+  borderRadius: "14px",
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  color: "#991b1b",
   fontSize: "15px",
   lineHeight: 1.45,
 };
