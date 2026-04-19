@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+// auto-deploy marker: verify push → GitHub Actions → Vercel production (2026-04-19)
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   redirects: async () => [

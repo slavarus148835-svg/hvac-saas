@@ -1,0 +1,46 @@
+# Production deploy on push to main (GitHub Actions + Vercel CLI).
+# Requires repository secret: VERCEL_TOKEN (classic token from https://vercel.com/account/tokens).
+# See: https://vercel.com/guides/how-can-i-use-github-actions-with-vercel
+
+name: Vercel Production Deployment
+
+env:
+  VERCEL_ORG_ID: team_YKiH9ARWkL77x8i6O6Rk2xBA
+  VERCEL_PROJECT_ID: prj_be1zwaYEzy6uaIeedWFWMkLcMdLZ
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: vercel-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
