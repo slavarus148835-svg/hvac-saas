@@ -57,6 +57,8 @@ export async function POST(req: Request) {
     console.log("[payment] create start", {
       userId: userId ? String(userId) : undefined,
       orderId: orderId ? String(orderId) : undefined,
+      amount: amount ? Number(amount) : undefined,
+      months: months ? Number(months) : undefined,
     });
 
     if (!TERMINAL_KEY || !PASSWORD) {
@@ -183,7 +185,12 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log("[payment] create success", { orderId: orderIdStr, paymentId: data.PaymentId });
+    console.log("[payment] create success", {
+      orderId: orderIdStr,
+      paymentId: data.PaymentId,
+      amount: amountNumber,
+      paymentUrl: data.PaymentURL ? "present" : "missing",
+    });
 
     return NextResponse.json({
       url: data.PaymentURL,

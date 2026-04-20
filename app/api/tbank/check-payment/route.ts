@@ -59,58 +59,140 @@ function buildFallbackPaymentTelegramHtml(email: string, uid: string, amountRub:
 }
 
 export async function POST(req: Request) {
-  console.log("[payment] checking status");
+  console.log("[payment] checking status start");
+
+  const fail = (
+    httpStatus: number,
+    reason:
+      | "missing_payment_id"
+      | "unauthorized_user"
+      | "missing_tb_env"
+      | "no_firebase_admin"
+      | "invalid_json"
+      | "order_id_mismatch"
+      | "last_payment_intent_missing"
+      | "amount_mismatch"
+      | "status_not_confirmed"
+      | "firestore_update_failed"
+      | "getstate_failed"
+      | "invalid_order_id"
+      | "user_not_found",
+    message: string,
+    extra?: Record<string, unknown>
+  ) => {
+    console.log("[payment] failed", { reason, ...extra });
+    return NextResponse.json(
+      {
+        confirmed: false,
+        pending: reason === "status_not_confirmed",
+        reason,
+        error: message,
+        ...extra,
+      },
+      { status: httpStatus }
+    );
+  };
 
   const auth = await requireBearerUid(req);
   if (!auth.ok) {
-    console.log("[payment] failed auth");
-    return NextResponse.json({ error: "Unauthorized" }, { status: auth.status });
+    return fail(auth.status, "unauthorized_user", "Unauthorized");
   }
   const { uid: bearerUid, email: bearerEmail } = auth.data;
 
   if (!TERMINAL_KEY || !PASSWORD) {
-    console.log("[payment] failed missing TBANK env");
-    return NextResponse.json(
-      { error: "Не заданы TBANK_TERMINAL_KEY или TBANK_PASSWORD" },
-      { status: 500 }
+    return fail(
+      500,
+      "missing_tb_env",
+      "Не заданы TBANK_TERMINAL_KEY или TBANK_PASSWORD"
     );
   }
 
   const adminDb = getAdminDb();
   if (!adminDb) {
-    console.log("[payment] failed no Firestore admin");
-    return NextResponse.json(
-      { error: "Сервер не настроен (FIREBASE_SERVICE_ACCOUNT_JSON)" },
-      { status: 500 }
+    return fail(
+      500,
+      "no_firebase_admin",
+      "Сервер не настроен (FIREBASE_SERVICE_ACCOUNT_JSON)"
     );
   }
 
-  let body: { paymentId?: string; orderId?: string };
+  let body: { paymentId?: string; orderId?: string | null };
   try {
-    body = (await req.json()) as { paymentId?: string; orderId?: string };
+    body = (await req.json()) as { paymentId?: string; orderId?: string | null };
   } catch {
-    console.log("[payment] failed bad json");
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return fail(400, "invalid_json", "Invalid JSON");
   }
 
-  const paymentIdRaw = body.paymentId != null ? String(body.paymentId).trim() : "";
-  const orderIdRaw = body.orderId != null ? String(body.orderId).trim() : "";
+  let paymentIdRaw = body.paymentId != null ? String(body.paymentId).trim() : "";
+  let orderIdRaw = body.orderId != null ? String(body.orderId).trim() : "";
 
-  if (!paymentIdRaw || !orderIdRaw) {
-    console.log("[payment] failed missing paymentId or orderId");
-    return NextResponse.json(
-      { error: "Нужны paymentId и orderId" },
-      { status: 400 }
+  const userRef = adminDb.collection("users").doc(bearerUid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    return fail(404, "user_not_found", "Пользователь не найден");
+  }
+  const userData = userSnap.data() || {};
+  const intent = userData.lastPaymentIntent as
+    | {
+        orderId?: string;
+        paymentId?: string;
+        plan?: string;
+        months?: number;
+        amount?: number;
+        email?: string;
+      }
+    | undefined;
+
+  const intentOrderId = intent?.orderId ? String(intent.orderId) : "";
+  const intentPaymentId = intent?.paymentId ? String(intent.paymentId) : "";
+
+  if (!orderIdRaw && intentOrderId) {
+    orderIdRaw = intentOrderId;
+  }
+  if (!paymentIdRaw && intentPaymentId) {
+    paymentIdRaw = intentPaymentId;
+  }
+
+  console.log("[payment] checking status payload", {
+    paymentId: paymentIdRaw || null,
+    orderIdFromRequest: body.orderId ?? null,
+    orderIdEffective: orderIdRaw || null,
+    uidFromBearer: bearerUid,
+    lastPaymentIntent: intent
+      ? {
+          orderId: intentOrderId || null,
+          paymentId: intentPaymentId || null,
+          amount: intent.amount ?? null,
+          months: intent.months ?? null,
+        }
+      : null,
+    lastPaymentIntentOrderId: intentOrderId || null,
+  });
+
+  if (!orderIdRaw) {
+    return fail(
+      400,
+      "last_payment_intent_missing",
+      "Не найден orderId в запросе и в lastPaymentIntent"
+    );
+  }
+  if (!paymentIdRaw) {
+    return fail(
+      400,
+      "missing_payment_id",
+      "Не найден paymentId в запросе и в lastPaymentIntent"
     );
   }
 
   const userIdFromOrder = parseUserIdFromOrderId(orderIdRaw);
-  if (!userIdFromOrder || userIdFromOrder !== bearerUid) {
-    console.log("[payment] failed orderId uid mismatch");
-    return NextResponse.json(
-      { error: "orderId не соответствует текущему пользователю" },
-      { status: 403 }
-    );
+  if (!userIdFromOrder) {
+    return fail(400, "invalid_order_id", "Некорректный orderId");
+  }
+  if (userIdFromOrder !== bearerUid) {
+    return fail(403, "order_id_mismatch", "orderId не соответствует текущему пользователю", {
+      orderUid: userIdFromOrder,
+      bearerUid,
+    });
   }
 
   const getStatePayload = {
@@ -132,121 +214,135 @@ export async function POST(req: Request) {
   const gs = (await gsRes.json()) as Record<string, unknown>;
 
   if (!gs.Success) {
-    console.log("[payment] failed", { message: gs.Message, details: gs.Details });
-    return NextResponse.json(
-      {
-        confirmed: false,
-        pending: false,
-        error: String(gs.Message || "GetState error"),
-        details: gs.Details ?? null,
-      },
-      { status: 200 }
-    );
+    return fail(400, "getstate_failed", String(gs.Message || "GetState error"), {
+      details: gs.Details ?? null,
+    });
   }
 
   const status = String(gs.Status || "");
   const orderIdFromBank = String(gs.OrderId || "");
   const amountFromBank = Number(gs.Amount ?? 0);
+  console.log("[payment] GetState response", {
+    status,
+    amount: amountFromBank,
+    expectedAmount: MONTHLY_AMOUNT_KOPECKS,
+    orderIdFromBank: orderIdFromBank || null,
+  });
 
   if (orderIdFromBank && orderIdFromBank !== orderIdRaw) {
-    console.log("[payment] failed order mismatch", { orderIdFromBank, orderIdRaw });
-    return NextResponse.json(
-      { confirmed: false, pending: false, error: "OrderId не совпадает с ответом банка" },
-      { status: 400 }
+    return fail(
+      400,
+      "order_id_mismatch",
+      "OrderId не совпадает с ответом банка",
+      {
+        orderIdFromBank,
+        orderIdExpected: orderIdRaw,
+      }
     );
   }
 
   if (amountFromBank !== MONTHLY_AMOUNT_KOPECKS) {
-    console.log("[payment] failed amount mismatch", amountFromBank);
-    return NextResponse.json(
-      { confirmed: false, pending: false, error: "Неверная сумма платежа" },
-      { status: 400 }
-    );
-  }
-
-  if (status !== "CONFIRMED") {
-    console.log("[payment] pending", status);
-    return NextResponse.json({
-      confirmed: false,
-      pending: true,
-      paymentStatus: status,
+    return fail(400, "amount_mismatch", "Неверная сумма платежа", {
+      amountFromBank,
+      expectedAmount: MONTHLY_AMOUNT_KOPECKS,
     });
   }
 
-  const userRef = adminDb.collection("users").doc(bearerUid);
-  const userSnap = await userRef.get();
-  if (!userSnap.exists) {
-    console.log("[payment] failed user not found");
-    return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+  if (status !== "CONFIRMED") {
+    return fail(200, "status_not_confirmed", "Платёж ещё не подтверждён банком", {
+      paymentStatus: status,
+      pending: true,
+    });
   }
-
-  const userData = userSnap.data() || {};
-  const intent = userData.lastPaymentIntent as
-    | {
-        orderId?: string;
-        plan?: string;
-        months?: number;
-        amount?: number;
-        email?: string;
-      }
-    | undefined;
 
   const lastConfirmed = userData.lastPaymentConfirmed as { orderId?: string } | undefined;
   if (lastConfirmed?.orderId === orderIdRaw) {
-    console.log("[payment] confirmed");
+    console.log("[payment] confirmed", { alreadyProcessed: true });
     return NextResponse.json({ confirmed: true, alreadyProcessed: true });
   }
 
   const intentOk = intent?.orderId === orderIdRaw;
   if (!intentOk) {
-    console.log("[payment] failed intent mismatch (fallback allows recovery only with matching order in GetState)");
-    return NextResponse.json(
+    return fail(
+      400,
+      "last_payment_intent_missing",
+      "Черновик оплаты не найден или orderId не совпадает",
       {
-        confirmed: false,
-        pending: false,
-        error: "Черновик оплаты не найден — начните оплату снова со страницы биллинга",
-      },
-      { status: 400 }
+        lastPaymentIntentOrderId: intentOrderId || null,
+        orderIdExpected: orderIdRaw,
+      }
     );
   }
 
   const months = Number(intent.months || 0);
   const amount = Number(intent.amount || 0);
   if (months !== 1 || amount !== MONTHLY_AMOUNT_KOPECKS) {
-    console.log("[payment] failed invalid intent amounts");
-    return NextResponse.json({ error: "Некорректный черновик оплаты" }, { status: 400 });
+    return fail(400, "amount_mismatch", "Некорректный lastPaymentIntent", {
+      amountFromIntent: amount,
+      monthsFromIntent: months,
+      expectedAmount: MONTHLY_AMOUNT_KOPECKS,
+    });
   }
 
   const emailOut = String(intent.email || userData.email || bearerEmail || "").trim();
   const currentPaidUntil = Number(userData.paidUntil || 0);
   const newPaidUntil = addMonthsToPaidUntil(currentPaidUntil, months);
 
-  await userRef.set(
-    {
-      plan: "standard",
-      blocked: false,
-      paidUntil: newPaidUntil,
-      lastPaymentIntent: FieldValue.delete(),
-      lastPaymentConfirmed: {
-        orderId: orderIdRaw,
+  console.log("[payment] firestore grant start", {
+    uid: bearerUid,
+    orderId: orderIdRaw,
+    paidUntil: newPaidUntil,
+  });
+  try {
+    await userRef.set(
+      {
         plan: "standard",
-        months,
-        amount,
+        blocked: false,
         paidUntil: newPaidUntil,
-        confirmedAt: new Date().toISOString(),
-        source: "getstate",
+        lastPaymentIntent: FieldValue.delete(),
+        lastPaymentConfirmed: {
+          orderId: orderIdRaw,
+          plan: "standard",
+          months,
+          amount,
+          paidUntil: newPaidUntil,
+          confirmedAt: new Date().toISOString(),
+          source: "getstate",
+        },
+        updatedAt: new Date().toISOString(),
       },
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+      { merge: true }
+    );
+    console.log("[payment] firestore grant success");
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    return fail(500, "firestore_update_failed", "Не удалось выдать доступ в Firestore", {
+      firestoreError: err,
+    });
+  }
 
   const amountRub = amount / 100;
   const tgHtml = buildFallbackPaymentTelegramHtml(emailOut, bearerUid, amountRub);
-  void sendTelegramNotification(tgHtml).catch((err) =>
-    console.error("[payment] telegram notify failed", err)
-  );
+  console.log("[payment] telegram notify start");
+  let telegramFailed = false;
+  try {
+    const tgRes = await sendTelegramNotification(tgHtml);
+    if (tgRes.ok) {
+      console.log("[payment] telegram notify success");
+    } else {
+      telegramFailed = true;
+      console.error("[payment] telegram notify failed", tgRes);
+    }
+  } catch (err) {
+    telegramFailed = true;
+    console.error("[payment] telegram notify failed", err);
+  }
 
   console.log("[payment] confirmed");
-  return NextResponse.json({ confirmed: true, paidUntil: newPaidUntil });
+  return NextResponse.json({
+    confirmed: true,
+    paidUntil: newPaidUntil,
+    reason: "confirmed",
+    telegram: telegramFailed ? "telegram_failed" : "telegram_ok",
+  });
 }

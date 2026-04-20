@@ -131,6 +131,7 @@ export default function BillingPage() {
 
     try {
       setPaying(true);
+      console.log("[payment] client create intent start", { uid: effectiveUid, orderId });
 
       await setDoc(
         doc(db, "users", effectiveUid),
@@ -165,6 +166,23 @@ export default function BillingPage() {
       const data = await res.json();
 
       if (data.url) {
+        // Сохраняем paymentId/orderId в Firestore на случай потери sessionStorage после банка.
+        if (data.paymentId && data.orderId) {
+          await setDoc(
+            doc(db, "users", effectiveUid),
+            {
+              lastPaymentIntent: {
+                orderId: String(data.orderId),
+                paymentId: String(data.paymentId),
+                status: "bank_redirect_ready",
+                updatedAt: new Date().toISOString(),
+              },
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+
         if (data.paymentId && data.orderId) {
           try {
             sessionStorage.setItem(
@@ -178,6 +196,10 @@ export default function BillingPage() {
             /* sessionStorage недоступен */
           }
         }
+        console.log("[payment] client redirect to bank", {
+          paymentId: data.paymentId ? String(data.paymentId) : null,
+          orderId: data.orderId ? String(data.orderId) : null,
+        });
         window.location.href = data.url;
       } else {
         alert(`${data.error || "Ошибка запроса"}${data.details ? "\n\nDetails:\n" + data.details : ""}`);

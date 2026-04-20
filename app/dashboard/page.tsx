@@ -134,32 +134,24 @@ export default function DashboardPage() {
         return;
       }
 
-      if (!raw) {
-        if (!cancelled) {
-          setPaymentVerifyMessage(
-            "Если вы только что оплатили, откройте оплату с раздела «Срок в сервисе» или обновите страницу через минуту."
-          );
+      let paymentId = "";
+      let orderId = "";
+      if (raw) {
+        try {
+          const o = JSON.parse(raw) as { paymentId?: string; orderId?: string };
+          paymentId = String(o.paymentId || "");
+          orderId = String(o.orderId || "");
+        } catch {
+          if (!cancelled) setPaymentVerifyMessage("Некорректные данные сессии оплаты.");
+          return;
         }
-        return;
       }
 
-      let paymentId: string;
-      let orderId: string;
-      try {
-        const o = JSON.parse(raw) as { paymentId?: string; orderId?: string };
-        paymentId = String(o.paymentId || "");
-        orderId = String(o.orderId || "");
-      } catch {
-        if (!cancelled) setPaymentVerifyMessage("Некорректные данные сессии оплаты.");
-        return;
-      }
-
-      if (!paymentId || !orderId) {
-        if (!cancelled) {
-          setPaymentVerifyMessage("Нет данных платежа — начните оплату снова со страницы биллинга.");
-        }
-        return;
-      }
+      console.log("[payment] dashboard verify start", {
+        hasSessionCheckout: Boolean(raw),
+        paymentId: paymentId || null,
+        orderId: orderId || null,
+      });
 
       for (let attempt = 0; attempt < 3; attempt++) {
         if (cancelled) return;
@@ -172,6 +164,12 @@ export default function DashboardPage() {
 
         try {
           const idToken = await user.getIdToken();
+          console.log("[payment] dashboard check-payment request", {
+            attempt: attempt + 1,
+            hasBearer: Boolean(idToken),
+            paymentId: paymentId || null,
+            orderId: orderId || null,
+          });
           const res = await fetch("/api/tbank/check-payment", {
             method: "POST",
             headers: {
@@ -183,10 +181,19 @@ export default function DashboardPage() {
           const data = (await res.json()) as {
             confirmed?: boolean;
             pending?: boolean;
+            reason?: string;
             error?: string;
             alreadyProcessed?: boolean;
           };
           if (cancelled) return;
+
+          console.log("[payment] dashboard check-payment response", {
+            status: res.status,
+            confirmed: Boolean(data.confirmed),
+            pending: Boolean(data.pending),
+            reason: data.reason || null,
+            error: data.error || null,
+          });
 
           if (!res.ok) {
             setPaymentVerifyMessage(data.error || `Ошибка ${res.status}`);
