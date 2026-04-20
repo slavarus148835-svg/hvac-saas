@@ -190,8 +190,21 @@ function normalizePhone(value: string) {
   return (value || "").replace(/[^\d]/g, "");
 }
 
+function normalizeWhatsAppPhone(value: string) {
+  const digits = normalizePhone(value);
+  if (digits.length === 11 && digits.startsWith("8")) {
+    return `7${digits.slice(1)}`;
+  }
+  return digits;
+}
+
 function normalizeUsername(value: string) {
   return (value || "").replace(/^@/, "").trim();
+}
+
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
 }
 
 function minOneMeter(value: number) {
@@ -1027,7 +1040,7 @@ function CalculatorPage() {
 
   function sendToWhatsApp() {
     const raw = clientContact.trim();
-    const phone = normalizePhone(raw);
+    const phone = normalizeWhatsAppPhone(raw);
 
     if (!phone) {
       alert("Для WhatsApp укажите номер телефона клиента в поле «Телефон / username»");
@@ -1044,9 +1057,10 @@ function CalculatorPage() {
       );
       url = `https://wa.me/${phone}?text=${shortBody}`;
     }
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    if (!w) {
-      alert("Не удалось открыть WhatsApp — разрешите всплывающие окна для этого сайта.");
+    if (isMobileDevice()) {
+      window.location.href = url;
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -1060,31 +1074,34 @@ function CalculatorPage() {
 
     const body = shortenForMessenger(finalClientText);
     const encoded = encodeURIComponent(body);
-    const phone = normalizePhone(raw);
+    const phone = normalizeWhatsAppPhone(raw);
     const username = normalizeUsername(raw);
     const safeUser = username.replace(/[^a-zA-Z0-9_]/g, "");
+    const mobile = isMobileDevice();
     const looksUsername =
       raw.trim().startsWith("@") || (safeUser.length >= 3 && /[a-zA-Z_]/.test(safeUser));
 
     if (looksUsername && safeUser.length >= 3) {
-      const url = `https://t.me/${safeUser}?text=${encoded}`;
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (!w) {
-        alert("Не удалось открыть Telegram — разрешите всплывающие окна.");
+      const appUrl = `tg://resolve?domain=${safeUser}&text=${encoded}`;
+      const webUrl = `https://t.me/${safeUser}?text=${encoded}`;
+      if (mobile) {
+        window.location.href = appUrl;
+      } else {
+        window.open(webUrl, "_blank", "noopener,noreferrer");
       }
       return;
     }
 
     if (phone.length >= 10) {
-      const url = `https://t.me/+${phone}?text=${encoded}`;
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (!w) {
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
-        const share = `https://t.me/share/url?url=${encodeURIComponent(
-          origin || " "
-      )}&text=${encoded}`;
-        window.open(share, "_blank", "noopener,noreferrer");
+      // Для номера без username Telegram не всегда позволяет адресно открыть чат,
+      // поэтому на мобильных открываем compose в приложении с текстом.
+      const appUrl = `tg://msg?text=${encoded}`;
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const webFallback = `https://t.me/share/url?url=${encodeURIComponent(origin || " ")}&text=${encoded}`;
+      if (mobile) {
+        window.location.href = appUrl;
+      } else {
+        window.open(webFallback, "_blank", "noopener,noreferrer");
       }
       return;
     }
