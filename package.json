@@ -13,6 +13,7 @@
     "agent": "node cursor-agent.js",
     "telegram": "node telegram-bot.js",
     "executor": "node executor.js",
+    "cleanup:duplicate-users": "node scripts/cleanup-duplicate-users.mjs",
     "deploy:firestore-rules": "node scripts/deploy-firestore-rules.mjs",
     "verify:email-flow": "node scripts/verify-email-code-flow.mjs",
     "test:smtp": "node scripts/test-smtp.mjs",

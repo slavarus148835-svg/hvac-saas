@@ -165,6 +165,19 @@ export default function BillingPage() {
       const data = await res.json();
 
       if (data.url) {
+        if (data.paymentId && data.orderId) {
+          try {
+            sessionStorage.setItem(
+              "hvac_tbank_checkout",
+              JSON.stringify({
+                paymentId: String(data.paymentId),
+                orderId: String(data.orderId),
+              })
+            );
+          } catch {
+            /* sessionStorage недоступен */
+          }
+        }
         window.location.href = data.url;
       } else {
         alert(`${data.error || "Ошибка запроса"}${data.details ? "\n\nDetails:\n" + data.details : ""}`);

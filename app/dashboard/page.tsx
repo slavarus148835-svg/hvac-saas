@@ -71,16 +71,166 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [verifiedWelcome, setVerifiedWelcome] = useState(false);
   const [showPaymentReturnBanner, setShowPaymentReturnBanner] = useState(false);
+  const [paymentVerifyMessage, setPaymentVerifyMessage] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     if (p.get("payment") === "success") {
+      const urlPid = p.get("PaymentId") || p.get("paymentId");
+      const urlOid = p.get("OrderId") || p.get("orderId");
+      if (urlPid && urlOid) {
+        try {
+          sessionStorage.setItem(
+            "hvac_tbank_checkout",
+            JSON.stringify({
+              paymentId: String(urlPid),
+              orderId: String(urlOid),
+            })
+          );
+        } catch {
+          /* */
+        }
+      } else if (urlPid) {
+        try {
+          const raw = sessionStorage.getItem("hvac_tbank_checkout");
+          if (raw) {
+            const o = JSON.parse(raw) as { orderId?: string };
+            if (o.orderId) {
+              sessionStorage.setItem(
+                "hvac_tbank_checkout",
+                JSON.stringify({
+                  paymentId: String(urlPid),
+                  orderId: String(o.orderId),
+                })
+              );
+            }
+          }
+        } catch {
+          /* */
+        }
+      }
       setShowPaymentReturnBanner(true);
       window.history.replaceState({}, "", "/dashboard");
     }
   }, []);
+
+  useEffect(() => {
+    if (!showPaymentReturnBanner || !user) return;
+
+    let cancelled = false;
+
+    const verify = async () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem("hvac_tbank_checkout");
+      } catch {
+        if (!cancelled) {
+          setPaymentVerifyMessage(
+            "Не удалось прочитать данные оплаты. Обновите страницу или откройте раздел «Срок в сервисе»."
+          );
+        }
+        return;
+      }
+
+      if (!raw) {
+        if (!cancelled) {
+          setPaymentVerifyMessage(
+            "Если вы только что оплатили, откройте оплату с раздела «Срок в сервисе» или обновите страницу через минуту."
+          );
+        }
+        return;
+      }
+
+      let paymentId: string;
+      let orderId: string;
+      try {
+        const o = JSON.parse(raw) as { paymentId?: string; orderId?: string };
+        paymentId = String(o.paymentId || "");
+        orderId = String(o.orderId || "");
+      } catch {
+        if (!cancelled) setPaymentVerifyMessage("Некорректные данные сессии оплаты.");
+        return;
+      }
+
+      if (!paymentId || !orderId) {
+        if (!cancelled) {
+          setPaymentVerifyMessage("Нет данных платежа — начните оплату снова со страницы биллинга.");
+        }
+        return;
+      }
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return;
+        if (attempt > 0) {
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+        if (cancelled) return;
+
+        setPaymentVerifyMessage("Платёж обрабатывается…");
+
+        try {
+          const idToken = await user.getIdToken();
+          const res = await fetch("/api/tbank/check-payment", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ paymentId, orderId }),
+          });
+          const data = (await res.json()) as {
+            confirmed?: boolean;
+            pending?: boolean;
+            error?: string;
+            alreadyProcessed?: boolean;
+          };
+          if (cancelled) return;
+
+          if (!res.ok) {
+            setPaymentVerifyMessage(data.error || `Ошибка ${res.status}`);
+            return;
+          }
+
+          if (data.confirmed) {
+            setPaymentVerifyMessage("Оплата успешно завершена. Доступ открыт.");
+            try {
+              sessionStorage.removeItem("hvac_tbank_checkout");
+            } catch {
+              /* */
+            }
+            const userRef = doc(db, "users", user.uid);
+            const snap = await getDocFromServer(userRef);
+            if (snap.exists()) {
+              setProfile(snap.data() as ProfileData);
+            }
+            return;
+          }
+
+          if (data.pending && attempt < 2) {
+            continue;
+          }
+
+          setPaymentVerifyMessage(
+            data.error ||
+              "Платёж пока не подтверждён банком. Обновите страницу позже или проверьте статус в биллинге."
+          );
+          return;
+        } catch {
+          if (!cancelled) {
+            setPaymentVerifyMessage("Ошибка проверки оплаты. Обновите страницу.");
+          }
+          return;
+        }
+      }
+    };
+
+    void verify();
+    return () => {
+      cancelled = true;
+    };
+  }, [showPaymentReturnBanner, user]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !user) return;
@@ -269,21 +419,40 @@ export default function DashboardPage() {
             marginBottom: "12px",
             padding: "14px 16px",
             borderRadius: "14px",
-            background: profile && isPaidActive(profile) ? "#ecfdf5" : "#f0fdf4",
-            border: `1px solid ${profile && isPaidActive(profile) ? "#bbf7d0" : "#86efac"}`,
-            color: "#166534",
+            background:
+              paymentVerifyMessage?.includes("успешно") || (profile && isPaidActive(profile))
+                ? "#ecfdf5"
+                : paymentVerifyMessage?.includes("Ошибка") ||
+                    paymentVerifyMessage?.includes("Нет данных") ||
+                    paymentVerifyMessage?.includes("Некорректные")
+                  ? "#fef2f2"
+                  : "#f0fdf4",
+            border: `1px solid ${
+              paymentVerifyMessage?.includes("успешно") || (profile && isPaidActive(profile))
+                ? "#bbf7d0"
+                : paymentVerifyMessage?.includes("Ошибка") ||
+                    paymentVerifyMessage?.includes("Нет данных") ||
+                    paymentVerifyMessage?.includes("Некорректные")
+                  ? "#fecaca"
+                  : "#86efac"
+            }`,
+            color:
+              paymentVerifyMessage?.includes("Ошибка") ||
+              paymentVerifyMessage?.includes("Нет данных") ||
+              paymentVerifyMessage?.includes("Некорректные")
+                ? "#991b1b"
+                : "#166534",
             fontSize: "15px",
             lineHeight: 1.45,
             fontWeight: 600,
           }}
         >
-          {profile && isPaidActive(profile) ? (
+          {paymentVerifyMessage ? (
+            paymentVerifyMessage
+          ) : profile && isPaidActive(profile) ? (
             <>Оплата прошла. Подписка активна — полный доступ ко всем разделам включён.</>
           ) : (
-            <>
-              Возврат после оплаты. Если статус ещё «Ограничен», подождите несколько секунд и обновите
-              страницу — банк подтверждает платёж на сервер.
-            </>
+            <>Проверяем оплату…</>
           )}
         </div>
       ) : null}

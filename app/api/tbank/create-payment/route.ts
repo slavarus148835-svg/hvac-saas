@@ -188,6 +188,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       url: data.PaymentURL,
       orderId: orderIdStr,
+      paymentId: data.PaymentId != null ? String(data.PaymentId) : undefined,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Внутренняя ошибка сервера";
