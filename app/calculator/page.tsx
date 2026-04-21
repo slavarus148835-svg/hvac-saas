@@ -102,7 +102,6 @@ type HistoryCalcDoc = {
   extraHolesArm?: string;
   carryToolFloors?: string;
   carryBlockCount?: string;
-  extraCosts?: string;
   manualDismantlingCost?: string;
 
   strobaType?: "none" | "brick" | "concrete";
@@ -284,7 +283,6 @@ function CalculatorPage() {
   const [extraHolesArm, setExtraHolesArm] = useState("0");
   const [carryToolFloors, setCarryToolFloors] = useState("0");
   const [carryBlockCount, setCarryBlockCount] = useState("0");
-  const [extraCosts, setExtraCosts] = useState("0");
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
 
   const [strobaType, setStrobaType] = useState<"none" | "brick" | "concrete">(
@@ -444,7 +442,6 @@ function CalculatorPage() {
             setExtraHolesArm(data.extraHolesArm || "0");
             setCarryToolFloors(data.carryToolFloors || "0");
             setCarryBlockCount(data.carryBlockCount || "0");
-            setExtraCosts(data.extraCosts || "0");
             setManualDismantlingCost(data.manualDismantlingCost || "0");
 
             setStrobaType(data.strobaType || "none");
@@ -599,7 +596,6 @@ function CalculatorPage() {
     const carryBlockCountNum = Number(
       sanitizeNonNegativeIntString(carryBlockCount, MAX_BLOCKS) || 0
     );
-    const extraCostsNum = Number(sanitizeNonNegativeMoneyString(extraCosts, MAX_MONEY) || 0);
     const manualDismantlingCostNum = Number(
       sanitizeNonNegativeMoneyString(manualDismantlingCost, MAX_MONEY) || 0
     );
@@ -789,14 +785,6 @@ function CalculatorPage() {
       });
     }
 
-    if (extraCostsNum > 0) {
-      items.push({
-        title: "Нестандартные работы и накладные расходы",
-        amount: extraCostsNum,
-        note: "Ручная сумма, задаётся отдельно",
-      });
-    }
-
     if (manualDismantlingCostNum > 0) {
       items.push({
         title: "Демонтаж (ручной ввод)",
@@ -885,7 +873,6 @@ function CalculatorPage() {
     extraHolesArm,
     carryToolFloors,
     carryBlockCount,
-    extraCosts,
     manualDismantlingCost,
     strobaType,
     strobaMeters,
@@ -945,7 +932,6 @@ function CalculatorPage() {
           extraHolesArm,
           carryToolFloors,
           carryBlockCount,
-          extraCosts,
           manualDismantlingCost,
 
           strobaType,
@@ -1013,7 +999,6 @@ function CalculatorPage() {
     extraHolesArm,
     carryToolFloors,
     carryBlockCount,
-    extraCosts,
     manualDismantlingCost,
     strobaType,
     strobaMeters,
@@ -1612,24 +1597,6 @@ function CalculatorPage() {
             />
           </Label>
         <FieldMessage error={fieldErrors.carryBlockCount} warning={fieldWarnings.carryBlockCount} />
-
-        <Label text="Нестандартные работы и накладные расходы, ₽" note="Фиксированная сумма вручную">
-            <input
-            value={extraCosts}
-            onChange={(e) =>
-              onMoneyFieldChange(
-                "extraCosts",
-                e.target.value,
-                MAX_MONEY,
-                WARN_MONEY,
-                setExtraCosts
-              )
-            }
-              style={inputStyle}
-              inputMode="numeric"
-            />
-          </Label>
-        <FieldMessage error={fieldErrors.extraCosts} warning={fieldWarnings.extraCosts} />
 
         <Label text="Демонтаж, ₽" note="Фиксированная сумма вручную">
             <input
