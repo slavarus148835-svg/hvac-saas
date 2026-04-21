@@ -22,6 +22,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth/send-email-code|api/auth/verify-email-code|api/auth/registration-status|api/auth/telegram).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth/send-email-code|api/auth/verify-email-code|api/auth/registration-status|api/auth/telegram|api/auth/complete-lead|api/cron/lead-recovery|api/cron/telegram-daily-report|api/cron/telegram-weekly-report|api/cron/trial-recovery|api/admin/test-telegram-report|api/debug/telegram|api/debug/set-webhook|api/debug/telegram-send-test|api/telegram/webhook).*)",
   ],
 };
