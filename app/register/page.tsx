@@ -17,6 +17,22 @@ import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 
+const TEMP_OVERLOAD_MESSAGE = "Сервис временно перегружен. Повтори попытку через несколько секунд.";
+
+function isHtmlPayload(contentType: string, body: string) {
+  const ctype = String(contentType || "").toLowerCase();
+  const trimmed = String(body || "").trim().toLowerCase();
+  return (
+    ctype.includes("text/html") ||
+    trimmed.startsWith("<!doctype html") ||
+    trimmed.startsWith("<html")
+  );
+}
+
+async function waitMs(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,6 +80,7 @@ export default function RegisterPage() {
   }, [router]);
 
   const loadRegistrationStatus = async (idToken: string) => {
+    console.log("[register] api request start: /api/auth/registration-status");
     const res = await fetch("/api/auth/registration-status", {
       method: "GET",
       headers: {
@@ -72,6 +89,12 @@ export default function RegisterPage() {
       cache: "no-store",
     });
     const body = await res.text();
+    const contentType = res.headers.get("content-type") || "";
+    console.log("[register] api response content-type:", contentType);
+    if (isHtmlPayload(contentType, body)) {
+      console.warn("[register] unexpected HTML response from API");
+      return { status: res.status, body: "", json: {}, ok: false, html: true as const };
+    }
     console.log("[registration-status] loaded", res.status, body.slice(0, 1000));
     let json: Record<string, unknown> = {};
     try {
@@ -111,11 +134,17 @@ export default function RegisterPage() {
         };
       });
     }
-    return { status: res.status, body, json, ok: res.ok };
+    if (res.ok) {
+      console.log("[register] api success");
+    } else {
+      console.log("[register] api failed", res.status);
+    }
+    return { status: res.status, body, json, ok: res.ok, html: false as const };
   };
 
-  const sendEmailCode = async (idToken: string) => {
+  const sendEmailCode = async (idToken: string, allowRetry = true) => {
     console.log("[register] send code start");
+    console.log("[register] api request start: /api/auth/send-email-code");
     setStatusText("Отправка кода на почту…");
     const res = await fetch("/api/auth/send-email-code", {
       method: "POST",
@@ -126,16 +155,30 @@ export default function RegisterPage() {
       body: JSON.stringify({}),
     });
     const body = await res.text();
+    const contentType = res.headers.get("content-type") || "";
+    console.log("[register] api response content-type:", contentType);
+    if (isHtmlPayload(contentType, body)) {
+      console.warn("[register] unexpected HTML response from API");
+      if (allowRetry) {
+        console.log("[register] retry request");
+        await waitMs(2500);
+        return sendEmailCode(idToken, false);
+      }
+      setDiag((prev) => ({ ...prev, code: "ошибка" }));
+      return { ok: false as const, message: TEMP_OVERLOAD_MESSAGE };
+    }
     console.log("[register] send code response status", res.status);
     console.log("[register] send code response body", body.slice(0, 2000));
     if (res.ok) {
       console.log("[register] send code success");
+      console.log("[register] api success");
       recordVerificationEmailSentAtNow();
       setDiag((prev) => ({ ...prev, code: "отправлено" }));
       setStatusText("Код отправлен");
       return { ok: true as const };
     }
     console.log("[register] send code fail");
+    console.log("[register] api failed", res.status);
     let errorText = "Не удалось отправить код подтверждения.";
     try {
       const parsed = JSON.parse(body) as {

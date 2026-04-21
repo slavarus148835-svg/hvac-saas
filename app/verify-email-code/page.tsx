@@ -18,6 +18,22 @@ import { doc, getDocFromServer } from "firebase/firestore";
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
 
+const TEMP_OVERLOAD_MESSAGE = "Сервис временно недоступен. Попробуйте ещё раз через 30–60 секунд.";
+
+function isHtmlPayload(contentType: string, body: string) {
+  const ctype = String(contentType || "").toLowerCase();
+  const trimmed = String(body || "").trim().toLowerCase();
+  return (
+    ctype.includes("text/html") ||
+    trimmed.startsWith("<!doctype html") ||
+    trimmed.startsWith("<html")
+  );
+}
+
+async function waitMs(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function VerifyEmailCodePage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
@@ -103,12 +119,19 @@ export default function VerifyEmailCodePage() {
   }, []);
 
   const loadRegistrationStatus = async (idToken: string) => {
+    console.log("[register] api request start: /api/auth/registration-status");
     const res = await fetch("/api/auth/registration-status", {
       method: "GET",
       headers: { Authorization: `Bearer ${idToken}` },
       cache: "no-store",
     });
     const body = await res.text();
+    const contentType = res.headers.get("content-type") || "";
+    console.log("[register] api response content-type:", contentType);
+    if (isHtmlPayload(contentType, body)) {
+      console.warn("[register] unexpected HTML response from API");
+      return;
+    }
     console.log("[registration-status] loaded", res.status, body.slice(0, 1000));
     let j: Record<string, unknown> = {};
     try {
@@ -116,7 +139,11 @@ export default function VerifyEmailCodePage() {
     } catch {
       /* ignore */
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.log("[register] api failed", res.status);
+      return;
+    }
+    console.log("[register] api success");
     const stage = String(j.registrationStage || "");
     const sentAt = Boolean(j.emailCodeSentAt);
     const hasCode = Boolean(j.hasActiveCode);
@@ -198,15 +225,39 @@ export default function VerifyEmailCodePage() {
     setStatus({ kind: "idle", text: "" });
     try {
       const idToken = await user.getIdToken(true);
-      const res = await fetch("/api/auth/verify-email-code", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ code }),
-      });
-      const raw = await res.text();
+      const verifyWithRetry = async (allowRetry: boolean) => {
+        console.log("[register] api request start: /api/auth/verify-email-code");
+        const res = await fetch("/api/auth/verify-email-code", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ code }),
+        });
+        const raw = await res.text();
+        const contentType = res.headers.get("content-type") || "";
+        console.log("[register] api response content-type:", contentType);
+        if (isHtmlPayload(contentType, raw)) {
+          console.warn("[register] unexpected HTML response from API");
+          if (allowRetry) {
+            console.log("[register] retry request");
+            await waitMs(2500);
+            return verifyWithRetry(false);
+          }
+          return { html: true as const, res, raw };
+        }
+        return { html: false as const, res, raw };
+      };
+
+      const verifyResult = await verifyWithRetry(true);
+      if (verifyResult.html) {
+        setStatusLabel("небольшая задержка сервера");
+        setStatus({ kind: "err", text: TEMP_OVERLOAD_MESSAGE });
+        console.log("[register] api failed");
+        return;
+      }
+      const { res, raw } = verifyResult;
       let j: { ok?: boolean; error?: string } = {};
       try {
         j = JSON.parse(raw) as { ok?: boolean; error?: string };
@@ -214,6 +265,7 @@ export default function VerifyEmailCodePage() {
         /* ignore */
       }
       if (!res.ok || !j.ok) {
+        console.log("[register] api failed", res.status);
         console.log("[verify-email-code] verify fail", res.status, raw.slice(0, 500));
         const map: Record<string, string> = {
           wrong_code: "Неверный код",
@@ -231,6 +283,7 @@ export default function VerifyEmailCodePage() {
         return;
       }
       const idTokenAfterVerify = await user.getIdToken(true);
+      console.log("[register] api success");
       console.log("[verify-email-code] verify success");
       sessionStorage.setItem(SESSION_EMAIL_JUST_VERIFIED_KEY, "1");
       setStatusLabel("код подтвержден");
@@ -258,18 +311,43 @@ export default function VerifyEmailCodePage() {
     try {
       const idToken = await user.getIdToken(true);
       console.log("[verify-email-code] resend code start");
-      const res = await fetch("/api/auth/send-email-code", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
-      const raw = await res.text();
+      const sendWithRetry = async (allowRetry: boolean) => {
+        console.log("[register] api request start: /api/auth/send-email-code");
+        const res = await fetch("/api/auth/send-email-code", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+        const raw = await res.text();
+        const contentType = res.headers.get("content-type") || "";
+        console.log("[register] api response content-type:", contentType);
+        if (isHtmlPayload(contentType, raw)) {
+          console.warn("[register] unexpected HTML response from API");
+          if (allowRetry) {
+            console.log("[register] retry request");
+            await waitMs(2500);
+            return sendWithRetry(false);
+          }
+          return { html: true as const, res, raw };
+        }
+        return { html: false as const, res, raw };
+      };
+
+      const sendResult = await sendWithRetry(true);
+      if (sendResult.html) {
+        setStatus({ kind: "err", text: TEMP_OVERLOAD_MESSAGE });
+        setStatusLabel("небольшая задержка сервера");
+        console.log("[register] api failed");
+        return;
+      }
+      const { res, raw } = sendResult;
       console.log("[verify-email-code] send code response status", res.status);
       console.log("[verify-email-code] send code response body", raw.slice(0, 2000));
       if (res.status === 429) {
+        console.log("[register] api failed", res.status);
         try {
           const j = JSON.parse(raw) as {
             error?: string;
@@ -294,6 +372,7 @@ export default function VerifyEmailCodePage() {
         return;
       }
       if (!res.ok) {
+        console.log("[register] api failed", res.status);
         let parsed: { error?: string; detail?: string; retryAfterSec?: number } = {};
         try {
           parsed = JSON.parse(raw) as typeof parsed;
@@ -309,6 +388,7 @@ export default function VerifyEmailCodePage() {
         console.log("[verify-email-code] resend code fail", res.status);
         return;
       }
+      console.log("[register] api success");
       console.log("[verify-email-code] resend code success");
       recordVerificationEmailSentAtNow();
       setCooldownLeft(EMAIL_VERIFICATION_RESEND_COOLDOWN_SEC);
