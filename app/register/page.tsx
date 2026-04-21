@@ -8,6 +8,7 @@ import { auth, db } from "@/lib/firebase";
 import { generateSessionId, getOrCreateDeviceId, setLocalSessionId } from "@/lib/deviceSession";
 import {
   VERIFY_EMAIL_CODE_PATH,
+  getClientPublicAppBaseUrl,
   needsEmailCodeVerification,
   firebaseAuthErrorMessage,
   recordVerificationEmailSentAtNow,
@@ -57,6 +58,39 @@ export default function RegisterPage() {
   const router = useRouter();
   const registeringRef = useRef(false);
   const holdOnPageRef = useRef(false);
+  const [telegramLoginError, setTelegramLoginError] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("telegram_error")) {
+      setTelegramLoginError(
+        "Не удалось войти через Telegram. Попробуйте ещё раз или используйте email."
+      );
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    const root = document.getElementById("telegram-login-widget");
+    if (!root) return;
+    root.innerHTML = "";
+    const bot = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "hvac_cash_bot").trim();
+    const authUrl = `${getClientPublicAppBaseUrl()}/api/auth/telegram?next=${encodeURIComponent(
+      "/dashboard"
+    )}`;
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
+    script.setAttribute("data-telegram-login", bot);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-auth-url", authUrl);
+    script.setAttribute("data-request-access", "write");
+    root.appendChild(script);
+    return () => {
+      root.innerHTML = "";
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -393,6 +427,16 @@ export default function RegisterPage() {
       <div style={cardStyle}>
         <h1 style={titleStyle}>Регистрация</h1>
 
+        <div style={telegramBlockStyle}>
+          <div style={telegramTitleStyle}>Быстрый вход через Telegram</div>
+          <div id="telegram-login-widget" style={telegramWidgetHostStyle} />
+          <p style={dividerTextStyle}>или войдите по email</p>
+        </div>
+
+        {telegramLoginError ? (
+          <div style={{ ...errorBannerStyle, marginBottom: 12 }}>{telegramLoginError}</div>
+        ) : null}
+
         <input
           type="email"
           name="email"
@@ -483,6 +527,35 @@ const titleStyle: React.CSSProperties = {
   marginTop: 0,
   marginBottom: "16px",
   fontSize: "28px",
+};
+
+const telegramBlockStyle: React.CSSProperties = {
+  marginBottom: "18px",
+  paddingBottom: "16px",
+  borderBottom: "1px solid #eef0f3",
+};
+
+const telegramTitleStyle: React.CSSProperties = {
+  fontSize: "15px",
+  fontWeight: 700,
+  color: "#111827",
+  marginBottom: "10px",
+  textAlign: "center",
+};
+
+const telegramWidgetHostStyle: React.CSSProperties = {
+  minHeight: "44px",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+};
+
+const dividerTextStyle: React.CSSProperties = {
+  marginTop: "14px",
+  marginBottom: 0,
+  textAlign: "center",
+  fontSize: "14px",
+  color: "#6b7280",
 };
 
 const inputStyle: React.CSSProperties = {

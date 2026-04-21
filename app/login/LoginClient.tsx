@@ -4,7 +4,12 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { onAuthStateChanged, reload, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  reload,
+  signInWithCustomToken,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { doc, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { activateUserSessionClient } from "@/lib/activateUserSessionClient";
@@ -37,20 +42,56 @@ export default function LoginClient() {
 
   useEffect(() => {
     let cancelled = false;
-    const unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
-      const currentUser = await resolveAuthUser(userFromObserver);
-      if (cancelled || !currentUser) return;
-      const snap = await getDocFromServer(doc(db, "users", currentUser.uid));
-      const profile = snap.exists() ? snap.data() : null;
-      if (needsEmailCodeVerification(currentUser, profile)) {
-        router.replace(`${VERIFY_EMAIL_PATH}?reason=access_blocked`);
-        return;
+    let unsubscribe: (() => void) | undefined;
+
+    void (async () => {
+      if (typeof window !== "undefined") {
+        const hash = window.location.hash || "";
+        const m = /^#tg_token=(.+)$/.exec(hash);
+        if (m?.[1]) {
+          const token = decodeURIComponent(m[1]);
+          const bare = window.location.pathname + window.location.search;
+          window.history.replaceState(null, "", bare);
+          try {
+            const cred = await signInWithCustomToken(auth, token);
+            if (cancelled) return;
+            await reload(cred.user);
+            const u = auth.currentUser ?? cred.user;
+            await syncUserAuthMirrorToFirestore(u);
+            await activateUserSessionClient(u.uid);
+            const snap = await getDocFromServer(doc(db, "users", u.uid));
+            const profile = snap.exists() ? snap.data() : null;
+            if (needsEmailCodeVerification(u, profile)) {
+              router.replace(`${VERIFY_EMAIL_PATH}?reason=access_blocked`);
+              return;
+            }
+            router.replace(getSafePostLoginPath(searchParams.get("next")));
+            return;
+          } catch (error: unknown) {
+            console.error("[login] telegram custom token sign-in failed", error);
+            alert(
+              "Не удалось войти через Telegram. Попробуйте ещё раз или используйте email."
+            );
+          }
+        }
       }
-      router.replace(getSafePostLoginPath(searchParams.get("next")));
-    });
+
+      unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
+        const currentUser = await resolveAuthUser(userFromObserver);
+        if (cancelled || !currentUser) return;
+        const snap = await getDocFromServer(doc(db, "users", currentUser.uid));
+        const profile = snap.exists() ? snap.data() : null;
+        if (needsEmailCodeVerification(currentUser, profile)) {
+          router.replace(`${VERIFY_EMAIL_PATH}?reason=access_blocked`);
+          return;
+        }
+        router.replace(getSafePostLoginPath(searchParams.get("next")));
+      });
+    })();
+
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, [router, searchParams]);
 

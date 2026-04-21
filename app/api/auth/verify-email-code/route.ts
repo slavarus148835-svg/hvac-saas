@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { getAuth } from "firebase-admin/auth";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@/lib/server/emailCodeConstants";
 import { getEmailCodePepper, hashEmailCode } from "@/lib/server/emailCodeCrypto";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
+import { finalizePostVerificationUserDoc } from "@/lib/server/finalizePostVerificationUserDoc";
 
 export async function POST(req: Request) {
   const auth = await requireBearerUid(req);
@@ -119,21 +119,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: outcome.code }, { status });
   }
 
-  try {
-    await getAuth(app).updateUser(uid, { emailVerified: true });
-  } catch (e) {
-    console.error("[api/auth/verify-email-code] updateUser emailVerified failed", e);
-  }
-
-  await userRef.set(
-    {
-      registrationStage: "verified",
-      emailCodeSendError: null,
-      lastRegistrationError: null,
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+  await finalizePostVerificationUserDoc({ db, app, uid });
 
   return NextResponse.json({ ok: true, email: email || "" });
 }

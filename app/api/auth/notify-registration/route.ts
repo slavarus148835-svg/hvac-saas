@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
-import {
-  buildRegistrationNotificationHtml,
-  sendTelegramNotification,
-} from "@/lib/server/sendTelegramNotification";
+import { runRegistrationTelegramNotifyIfNeeded } from "@/lib/server/runRegistrationTelegramNotify";
 
 /**
  * Уведомление в Telegram после успешного создания аккаунта (server-side).
@@ -34,66 +31,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: true, reason: "already_notified" });
   }
 
-  const email =
-    String(user.email || auth.data.email || "").trim() ||
-    String(auth.data.email || "").trim();
-  const name = typeof user.name === "string" ? user.name : "";
-  const phone = typeof user.phone === "string" ? user.phone : "";
+  await runRegistrationTelegramNotifyIfNeeded(db, uid, auth.data.email);
 
-  const date = new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
-  const html = buildRegistrationNotificationHtml({
-    email: email || "—",
-    uid,
-    name,
-    phone,
-    date,
-  });
-
-  console.log("[telegram] registration notify start");
-  const result = await sendTelegramNotification(html);
-
-  const nowIso = new Date().toISOString();
-
-  if (result.ok) {
-    console.log("[telegram] registration notify success");
-    await userRef.set(
-      {
-        registrationStage: "telegram_sent",
-        telegramNotifiedAt: nowIso,
-        telegramNotifyError: null,
-        lastRegistrationError: null,
-        updatedAt: nowIso,
-      },
-      { merge: true }
-    );
+  const after = await userRef.get();
+  const u2 = after.data() ?? {};
+  if (u2.telegramNotifiedAt) {
     return NextResponse.json({ ok: true });
   }
 
-  console.error("[telegram] registration notify failed", {
-    skipped: result.skipped,
-    error: result.error,
-    httpStatus: result.httpStatus,
-  });
-
-  await userRef.set(
-    {
-      registrationStage: "telegram_failed",
-      telegramNotifyError:
-        result.reason === "missing_env"
-          ? "telegram_env_missing"
-          : result.error || result.telegramDescription || "telegram_send_failed",
-      telegramNotifiedAt: null,
-      updatedAt: nowIso,
-    },
-    { merge: true }
-  );
-
+  const err = String(u2.telegramNotifyError || "telegram_send_failed");
   return NextResponse.json(
     {
       ok: false,
-      error: result.error || result.telegramDescription || "telegram_send_failed",
-      skipped: result.skipped,
+      error: err,
     },
-    { status: result.skipped ? 503 : 500 }
+    { status: err === "telegram_env_missing" ? 503 : 500 }
   );
 }
