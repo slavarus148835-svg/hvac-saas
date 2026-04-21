@@ -29,6 +29,7 @@ export function createGmailVerificationTransporter() {
       user: getGmailSmtpUser(),
       pass: getGmailSmtpPass(),
     },
+    connectionTimeout: 10000,
   });
 }
 
