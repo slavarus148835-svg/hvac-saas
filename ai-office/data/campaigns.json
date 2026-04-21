@@ -16,5 +16,47 @@
     "segment": "hotel",
     "at": "2026-04-18T16:12:55.112Z",
     "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T14:00:56.461Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T14:01:49.006Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T14:15:30.486Z",
+    "leads": 0
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T14:23:37.162Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T14:29:00.384Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T15:00:16.113Z",
+    "leads": 3
+  },
+  {
+    "city": "krasnodar",
+    "segment": "business_center",
+    "at": "2026-04-21T15:09:28.030Z",
+    "leads": 3
   }
 ]

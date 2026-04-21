@@ -13,6 +13,7 @@ import {
   isGmailVerificationSmtpConfigured,
   sendVerificationCodeEmail,
 } from "@/lib/server/gmailNodemailer";
+import { upsertLeadEmailStarted } from "@/lib/server/leadsFirestore";
 
 /** Явно Node: на Vercel доступны все process.env для SMTP. */
 export const runtime = "nodejs";
@@ -88,6 +89,12 @@ export async function POST(req: Request) {
     },
     { merge: true }
   );
+
+  try {
+    await upsertLeadEmailStarted(db, uid, email);
+  } catch (e) {
+    console.warn("[send-email-code] lead upsert (email started) failed", e);
+  }
 
   const ref = db.collection(EMAIL_VERIFICATION_CODES_COLLECTION).doc(uid);
   const snap = await ref.get();

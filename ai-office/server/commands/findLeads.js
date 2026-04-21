@@ -21,7 +21,7 @@ module.exports = async function findLeadsCmd(parts, ctx) {
     const s = (await storage.getLeadByPlaceId(l.placeId)) || (await storage.getLeadById(l.id)) || l;
     storedPreview.push(s);
   }
-  logger.info(`find_leads: сохранено ${res.leads.length} demo=${Boolean(res.demo)}`);
+  logger.info(`find_leads: сохранено ${res.leads.length} demo=${Boolean(res.demo)} mode=${res.mode || "api"}`);
   await storage.appendJson("logs.json", {
     type: "find_leads",
     city,
@@ -29,9 +29,12 @@ module.exports = async function findLeadsCmd(parts, ctx) {
     count: res.leads.length,
     demo: Boolean(res.demo),
   });
-  const head = res.demo ? "Google Places: demo mode\n\n" : "Google Places: live mode\n\n";
+  let head = "Mode: yandex\nGoogle Places: disabled\n\n";
+  if (res.mode === "google_places" || res.mode === "api") head = "Mode: google_places\nGoogle Places: enabled\n\n";
+  else if (res.mode === "serpapi") head = "Mode: serpapi\nGoogle Places: disabled\n\n";
+  else if (res.mode === "demo") head = "Mode: demo\nGoogle Places: disabled\n\n";
   const preview = storedPreview.map((l) => `• ${l.id} — ${l.name}`).join("\n");
-  const tail = res.demo ? "\n\nРеальные лиды: задайте GOOGLE_PLACES_API_KEY (через launch или .env)." : "";
+  const tail = res.mode === "demo" ? "\n\nРежим demo: веб-поиск не дал результатов." : "";
   return (
     head +
     [

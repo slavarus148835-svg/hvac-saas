@@ -8,6 +8,10 @@ import {
   verifyTelegramLoginPayload,
 } from "@/lib/server/telegramLogin";
 import { provisionOrUpdateTelegramUser } from "@/lib/server/provisionTelegramUser";
+import {
+  markLeadCompletedForTelegramId,
+  upsertLeadTelegramStarted,
+} from "@/lib/server/leadsFirestore";
 
 export const runtime = "nodejs";
 
@@ -54,6 +58,12 @@ export async function GET(req: NextRequest) {
     return registerErrorRedirect(req, "missing_id");
   }
 
+  try {
+    await upsertLeadTelegramStarted(db, telegramId);
+  } catch (e) {
+    console.warn("[api/auth/telegram] lead upsert (telegram started) failed", e);
+  }
+
   const telegramUsername = payload.username?.trim() || null;
   const firstName = payload.first_name?.trim() || null;
   const lastName = payload.last_name?.trim() || null;
@@ -84,6 +94,12 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("[api/auth/telegram] createCustomToken failed", e);
     return registerErrorRedirect(req, "token_failed");
+  }
+
+  try {
+    await markLeadCompletedForTelegramId(db, telegramId);
+  } catch (e) {
+    console.warn("[api/auth/telegram] mark lead completed failed", e);
   }
 
   const origin = new URL(req.url).origin;

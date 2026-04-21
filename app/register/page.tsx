@@ -58,15 +58,14 @@ export default function RegisterPage() {
   const router = useRouter();
   const registeringRef = useRef(false);
   const holdOnPageRef = useRef(false);
-  const [telegramLoginError, setTelegramLoginError] = useState("");
+  const [telegramLoginError, setTelegramLoginError] = useState(false);
+  const [emailSendFailed, setEmailSendFailed] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     if (p.get("telegram_error")) {
-      setTelegramLoginError(
-        "Не удалось войти через Telegram. Попробуйте ещё раз или используйте email."
-      );
+      setTelegramLoginError(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -243,9 +242,11 @@ export default function RegisterPage() {
       if (result.ok) {
         holdOnPageRef.current = false;
         setShowResend(false);
+        setEmailSendFailed(false);
         setStatusText("Переход на подтверждение…");
         router.push(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
       } else {
+        setEmailSendFailed(true);
         setUserMessage(result.message);
       }
     } catch (e) {
@@ -261,6 +262,7 @@ export default function RegisterPage() {
     setStatusText("Создание аккаунта…");
     setUserMessage("");
     setShowResend(false);
+    setEmailSendFailed(false);
     setDiag({
       account: "не создан",
       code: "не отправлено",
@@ -323,6 +325,7 @@ export default function RegisterPage() {
           deviceId,
           lastLoginAt: now,
           lastLoginUserAgent: ua,
+          hasPaid: false,
         },
         { merge: true }
       );
@@ -399,6 +402,7 @@ export default function RegisterPage() {
       if (!codeResult.ok) {
         holdOnPageRef.current = true;
         setShowResend(true);
+        setEmailSendFailed(true);
         setUserMessage(
           `${codeResult.message} Отправьте код повторно или проверьте настройки почты на сервере.`
         );
@@ -427,52 +431,85 @@ export default function RegisterPage() {
       <div style={cardStyle}>
         <h1 style={titleStyle}>Регистрация</h1>
 
-        <div style={telegramBlockStyle}>
+        <div id="telegram-login-section" style={telegramBlockStyle}>
           <div style={telegramTitleStyle}>Быстрый вход через Telegram</div>
           <div id="telegram-login-widget" style={telegramWidgetHostStyle} />
           <p style={dividerTextStyle}>или войдите по email</p>
         </div>
 
         {telegramLoginError ? (
-          <div style={{ ...errorBannerStyle, marginBottom: 12 }}>{telegramLoginError}</div>
+          <div style={{ ...altRecoveryCardStyle, marginBottom: 12 }}>
+            <div style={altRecoveryTitleStyle}>Не удалось войти через Telegram</div>
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById("email-register-block")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+              style={altRecoveryButtonStyle}
+            >
+              Получить код на email
+            </button>
+          </div>
         ) : null}
 
-        <input
-          type="email"
-          name="email"
-          autoComplete="email"
-          placeholder="Введите email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={isSubmitting}
-          style={isSubmitting ? { ...inputStyle, ...inputDisabledStyle } : inputStyle}
-        />
+        <div id="email-register-block">
+          <input
+            type="email"
+            name="email"
+            autoComplete="email"
+            placeholder="Введите email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={isSubmitting}
+            style={isSubmitting ? { ...inputStyle, ...inputDisabledStyle } : inputStyle}
+          />
 
-        <input
-          type="password"
-          name="password"
-          autoComplete="new-password"
-          placeholder="Введите пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={isSubmitting}
-          style={isSubmitting ? { ...inputStyle, ...inputDisabledStyle } : inputStyle}
-        />
+          <input
+            type="password"
+            name="password"
+            autoComplete="new-password"
+            placeholder="Введите пароль"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isSubmitting}
+            style={isSubmitting ? { ...inputStyle, ...inputDisabledStyle } : inputStyle}
+          />
 
-        <button
-          type="button"
-          onClick={() => void handleRegister()}
-          disabled={isSubmitting}
-          style={{
-            ...primaryButton,
-            opacity: isSubmitting ? 0.6 : 1,
-            cursor: isSubmitting ? "not-allowed" : "pointer",
-          }}
-        >
-          {isSubmitting ? "Создание аккаунта…" : "Создать аккаунт"}
-        </button>
+          <button
+            type="button"
+            onClick={() => void handleRegister()}
+            disabled={isSubmitting}
+            style={{
+              ...primaryButton,
+              opacity: isSubmitting ? 0.6 : 1,
+              cursor: isSubmitting ? "not-allowed" : "pointer",
+            }}
+          >
+            {isSubmitting ? "Создание аккаунта…" : "Создать аккаунт"}
+          </button>
+        </div>
 
         {statusText ? <p style={statusStyle}>{statusText}</p> : null}
+        {emailSendFailed ? (
+          <div style={{ ...altRecoveryCardStyle, marginTop: 12 }}>
+            <div style={altRecoveryTitleStyle}>Письмо не доставлено</div>
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById("telegram-login-section")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+              style={altRecoveryButtonStyle}
+            >
+              Войти через Telegram
+            </button>
+          </div>
+        ) : null}
         {userMessage ? (
           <div style={errorBannerStyle}>
             {userMessage}
@@ -620,6 +657,32 @@ const errorBannerStyle: React.CSSProperties = {
   color: "#991b1b",
   fontSize: "14px",
   lineHeight: 1.4,
+};
+
+const altRecoveryCardStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: "12px",
+  border: "1px solid #e5e7eb",
+  background: "#f9fafb",
+};
+
+const altRecoveryTitleStyle: React.CSSProperties = {
+  fontSize: "15px",
+  fontWeight: 700,
+  color: "#111827",
+  marginBottom: "10px",
+};
+
+const altRecoveryButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  border: "1px solid #111827",
+  background: "#111827",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 const diagCardStyle: React.CSSProperties = {

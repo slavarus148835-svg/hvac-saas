@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import {
   telegramGetWebhookInfo,
   telegramSetWebhook,
@@ -12,12 +11,18 @@ const EXPECTED_WEBHOOK_URL =
 
 /** GET: setWebhook + getWebhookInfo + явная диагностика шага 2. */
 export async function GET(req: Request) {
-  const denied = requireCronSecret(req);
-  if (denied) return denied;
+  const url = new URL(req.url);
+  const querySecret = url.searchParams.get("secret");
+  const authHeader = req.headers.get("authorization");
+  if (
+    querySecret !== process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
-  const { searchParams } = new URL(req.url);
-  const url = String(searchParams.get("url") || EXPECTED_WEBHOOK_URL).trim();
-  const setWebhookResult = await telegramSetWebhook(url);
+  const webhookTarget = String(url.searchParams.get("url") || EXPECTED_WEBHOOK_URL).trim();
+  const setWebhookResult = await telegramSetWebhook(webhookTarget);
   const getWebhookInfoResult = (await telegramGetWebhookInfo()) as {
     url?: string;
     last_error_message?: string;
@@ -38,7 +43,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({
-    webhookUrl: url,
+    webhookUrl: webhookTarget,
     expectedUrl: EXPECTED_WEBHOOK_URL,
     setWebhookResult,
     getWebhookInfoResult,

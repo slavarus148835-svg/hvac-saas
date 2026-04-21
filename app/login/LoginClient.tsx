@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { User } from "firebase/auth";
 import {
   onAuthStateChanged,
   reload,
@@ -18,6 +19,7 @@ import {
   needsEmailCodeVerification,
   firebaseAuthErrorMessage,
   syncUserAuthMirrorToFirestore,
+  getClientPublicAppBaseUrl,
 } from "@/lib/emailVerification";
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
@@ -34,11 +36,67 @@ const inputStyle: CSSProperties = {
   color: "#111827",
 };
 
+async function notifyLeadCompleted(user: User) {
+  try {
+    const idToken = await user.getIdToken(true);
+    await fetch("/api/auth/complete-lead", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+  } catch (e) {
+    console.warn("[login] complete-lead failed", e);
+  }
+}
+
 export default function LoginClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [telegramClientError, setTelegramClientError] = useState(false);
+  const [showAltEntry, setShowAltEntry] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const root = document.getElementById("login-telegram-login-widget");
+    if (!root) return;
+    root.innerHTML = "";
+    const bot = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "hvac_cash_bot").trim();
+    const nextSafe = getSafePostLoginPath(searchParams.get("next"));
+    const authUrl = `${getClientPublicAppBaseUrl()}/api/auth/telegram?next=${encodeURIComponent(
+      nextSafe
+    )}`;
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.async = true;
+    script.setAttribute("data-telegram-login", bot);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-auth-url", authUrl);
+    script.setAttribute("data-request-access", "write");
+    root.appendChild(script);
+    return () => {
+      root.innerHTML = "";
+    };
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      if (cancelled) return;
+      if (auth.currentUser) return;
+      setShowAltEntry(true);
+    }, 10_000);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        window.clearTimeout(t);
+        setShowAltEntry(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+      unsub();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +117,7 @@ export default function LoginClient() {
             const u = auth.currentUser ?? cred.user;
             await syncUserAuthMirrorToFirestore(u);
             await activateUserSessionClient(u.uid);
+            await notifyLeadCompleted(u);
             const snap = await getDocFromServer(doc(db, "users", u.uid));
             const profile = snap.exists() ? snap.data() : null;
             if (needsEmailCodeVerification(u, profile)) {
@@ -69,9 +128,8 @@ export default function LoginClient() {
             return;
           } catch (error: unknown) {
             console.error("[login] telegram custom token sign-in failed", error);
-            alert(
-              "Не удалось войти через Telegram. Попробуйте ещё раз или используйте email."
-            );
+            setTelegramClientError(true);
+            setShowAltEntry(true);
           }
         }
       }
@@ -102,6 +160,7 @@ export default function LoginClient() {
       const user = auth.currentUser ?? cred.user;
       await syncUserAuthMirrorToFirestore(user);
       await activateUserSessionClient(user.uid);
+      await notifyLeadCompleted(user);
       const snap = await getDocFromServer(doc(db, "users", user.uid));
       const profile = snap.exists() ? snap.data() : null;
       if (needsEmailCodeVerification(user, profile)) {
@@ -120,7 +179,21 @@ export default function LoginClient() {
       <div style={card}>
         <h1 style={title}>Вход</h1>
 
-        <div style={fields}>
+        <div id="telegram-login-section" style={telegramBlockStyle}>
+          <div style={telegramTitleStyle}>Вход через Telegram</div>
+          <div id="login-telegram-login-widget" style={telegramWidgetHostStyle} />
+        </div>
+
+        {telegramClientError ? (
+          <div style={{ ...altRecoveryCardStyle, marginBottom: 14 }}>
+            <div style={altRecoveryTitleStyle}>Не удалось войти через Telegram</div>
+            <Link href="/register#email-register-block" style={altRecoveryLinkStyle}>
+              Получить код на email
+            </Link>
+          </div>
+        ) : null}
+
+        <div id="email-login-block" style={fields}>
           <input
             type="email"
             name="email"
@@ -141,6 +214,27 @@ export default function LoginClient() {
             style={inputStyle}
           />
         </div>
+
+        {showAltEntry ? (
+          <div style={{ ...altRecoveryCardStyle, marginBottom: 14 }}>
+            <div style={altRecoveryHintStyle}>Другой способ входа</div>
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById("telegram-login-section")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+              style={altSecondaryBtn}
+            >
+              Войти через Telegram
+            </button>
+            <Link href="/register#email-register-block" style={{ ...altSecondaryBtn, marginTop: 8 }}>
+              Получить код на email
+            </Link>
+          </div>
+        ) : null}
 
         <div style={linksRow}>
           <Link href="/register" style={linkPrimary}>
@@ -190,6 +284,27 @@ const title: CSSProperties = {
   fontSize: 26,
   textAlign: "center",
   letterSpacing: "-0.02em",
+};
+
+const telegramBlockStyle: CSSProperties = {
+  marginBottom: "18px",
+  paddingBottom: "16px",
+  borderBottom: "1px solid #eef0f3",
+};
+
+const telegramTitleStyle: CSSProperties = {
+  fontSize: "15px",
+  fontWeight: 700,
+  color: "#111827",
+  marginBottom: "10px",
+  textAlign: "center",
+};
+
+const telegramWidgetHostStyle: CSSProperties = {
+  minHeight: "44px",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
 };
 
 const fields: CSSProperties = {
@@ -248,4 +363,57 @@ const homeSecondary: CSSProperties = {
   fontWeight: 600,
   textDecoration: "none",
   boxSizing: "border-box",
+};
+
+const altRecoveryCardStyle: CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: "12px",
+  border: "1px solid #e5e7eb",
+  background: "#f9fafb",
+};
+
+const altRecoveryTitleStyle: CSSProperties = {
+  fontSize: "15px",
+  fontWeight: 700,
+  color: "#111827",
+  marginBottom: "10px",
+};
+
+const altRecoveryHintStyle: CSSProperties = {
+  fontSize: "14px",
+  fontWeight: 600,
+  color: "#374151",
+  marginBottom: "10px",
+};
+
+const altRecoveryLinkStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  textAlign: "center",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  border: "1px solid #111827",
+  background: "#111827",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: 700,
+  textDecoration: "none",
+  boxSizing: "border-box",
+};
+
+const altSecondaryBtn: CSSProperties = {
+  display: "block",
+  width: "100%",
+  textAlign: "center",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  fontSize: "14px",
+  fontWeight: 600,
+  textDecoration: "none",
+  boxSizing: "border-box",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };

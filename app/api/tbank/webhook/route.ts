@@ -182,6 +182,8 @@ export async function POST(req: Request) {
         plan: paymentOrder.plan,
         blocked: false,
         paidUntil: newPaidUntil,
+        hasPaid: true,
+        paidAt: Date.now(),
         lastPaymentIntent: FieldValue.delete(),
         lastPaymentConfirmed: {
           orderId,

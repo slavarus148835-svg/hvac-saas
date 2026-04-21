@@ -43,5 +43,106 @@
     "type": "compose",
     "leadId": "lead_mo4jd3tl_eb5b0b",
     "at": "2026-04-18T16:30:42.939Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "scraper",
+    "at": "2026-04-21T14:00:56.458Z"
+  },
+  {
+    "type": "compose",
+    "leadId": "lead_mo4jd3tl_eb5b0b",
+    "at": "2026-04-21T14:00:56.521Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "scraper",
+    "at": "2026-04-21T14:01:49.003Z"
+  },
+  {
+    "type": "find_leads",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "count": 0,
+    "demo": false,
+    "at": "2026-04-21T14:15:30.013Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 0,
+    "composed": 0,
+    "demo": false,
+    "mode": "scraper",
+    "at": "2026-04-21T14:15:30.483Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "scraper",
+    "at": "2026-04-21T14:23:37.160Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "serpapi",
+    "at": "2026-04-21T14:29:00.381Z"
+  },
+  {
+    "type": "find_leads",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "count": 3,
+    "demo": true,
+    "at": "2026-04-21T14:29:00.490Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "demo",
+    "at": "2026-04-21T15:00:16.111Z"
+  },
+  {
+    "type": "compose",
+    "leadId": "lead_mo4jd3tl_eb5b0b",
+    "at": "2026-04-21T15:00:16.179Z"
+  },
+  {
+    "type": "pipeline",
+    "city": "krasnodar",
+    "segment": "business_center",
+    "found": 3,
+    "composed": 3,
+    "demo": true,
+    "mode": "scraper",
+    "at": "2026-04-21T15:09:28.028Z"
+  },
+  {
+    "type": "compose",
+    "leadId": "lead_mo4jd3tl_eb5b0b",
+    "at": "2026-04-21T15:09:57.848Z"
   }
 ]

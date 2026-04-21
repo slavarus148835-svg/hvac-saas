@@ -57,7 +57,7 @@ module.exports = async function pipelineCmd(parts, ctx) {
   const batchPlaceIds = new Set(refreshed.map((x) => x.placeId).filter(Boolean));
   const mergedView = allInStorage.filter((x) => batchPlaceIds.has(x.placeId));
   logger.info(
-    `pipeline: готово found=${src.leads.length} composed=${toCompose.length} demo=${Boolean(src.demo)}`
+    `pipeline: готово found=${src.leads.length} composed=${toCompose.length} demo=${Boolean(src.demo)} mode=${src.mode || "api"}`
   );
   await storage.appendJson("logs.json", {
     type: "pipeline",
@@ -66,6 +66,7 @@ module.exports = async function pipelineCmd(parts, ctx) {
     found: src.leads.length,
     composed: toCompose.length,
     demo: Boolean(src.demo),
+    mode: src.mode || (src.demo ? "demo" : "google_places"),
   });
   await storage.appendJson("campaigns.json", {
     city,
@@ -78,5 +79,6 @@ module.exports = async function pipelineCmd(parts, ctx) {
     segment,
     leads: mergedView.length ? mergedView : qualified,
     demo: Boolean(src.demo),
+    mode: src.mode || (src.demo ? "demo" : "google_places"),
   });
 };

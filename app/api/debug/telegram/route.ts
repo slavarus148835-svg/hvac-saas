@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
-import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import { telegramGetMe } from "@/lib/server/telegramBotApiDebug";
 
 export const runtime = "nodejs";
 
 /** GET: getMe + явная диагностика шага 1 (токен). */
 export async function GET(req: Request) {
-  const denied = requireCronSecret(req);
-  if (denied) return denied;
+  const url = new URL(req.url);
+  const querySecret = url.searchParams.get("secret");
+  const authHeader = req.headers.get("authorization");
+  if (
+    querySecret !== process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const telegram = (await telegramGetMe()) as { ok?: boolean; error_code?: number; description?: string };
   console.log("TELEGRAM GETME RESULT", JSON.stringify(telegram));

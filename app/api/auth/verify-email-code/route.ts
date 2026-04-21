@@ -9,6 +9,7 @@ import {
 import { getEmailCodePepper, hashEmailCode } from "@/lib/server/emailCodeCrypto";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
 import { finalizePostVerificationUserDoc } from "@/lib/server/finalizePostVerificationUserDoc";
+import { markLeadCompletedForUid } from "@/lib/server/leadsFirestore";
 
 export async function POST(req: Request) {
   const auth = await requireBearerUid(req);
@@ -120,6 +121,12 @@ export async function POST(req: Request) {
   }
 
   await finalizePostVerificationUserDoc({ db, app, uid });
+
+  try {
+    await markLeadCompletedForUid(db, uid);
+  } catch (e) {
+    console.warn("[verify-email-code] mark lead completed failed", e);
+  }
 
   return NextResponse.json({ ok: true, email: email || "" });
 }

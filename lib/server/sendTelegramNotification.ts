@@ -116,6 +116,56 @@ export async function sendTelegramPlainTextAsHtml(text: string): Promise<Telegra
   return sendTelegramNotification(plainTextToHtmlMessage(text));
 }
 
+/**
+ * Сообщение пользователю в личку (chat_id = Telegram user id). Работает, если пользователь уже /start боту.
+ */
+export async function sendTelegramTextToUser(
+  telegramUserId: string,
+  text: string
+): Promise<TelegramSendResult> {
+  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (!botToken) {
+    return { ok: false, skipped: true, reason: "missing_env" };
+  }
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: telegramUserId,
+        text,
+      }),
+      cache: "no-store",
+    });
+    const rawText = await response.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+    } catch {
+      return {
+        ok: false,
+        httpStatus: response.status,
+        error: "invalid_telegram_response",
+        telegramDescription: rawText.slice(0, 500),
+      };
+    }
+    if (!response.ok || !data?.ok) {
+      const description = typeof data.description === "string" ? data.description : undefined;
+      return {
+        ok: false,
+        httpStatus: response.status,
+        error: description || `http_${response.status}`,
+        telegramDescription: description,
+      };
+    }
+    return { ok: true, httpStatus: response.status, data };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "telegram_error";
+    return { ok: false, error: msg };
+  }
+}
+
 export function buildRegistrationNotificationHtml(params: {
   email: string;
   uid: string;

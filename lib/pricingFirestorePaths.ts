@@ -6,4 +6,6 @@ export const PRICING_FS = {
   users: "users",
   priceLists: "priceLists",
   modelsSubcollection: "models",
+  /** Анти-потери: только Admin SDK (см. firestore.rules). */
+  leads: "leads",
 } as const;

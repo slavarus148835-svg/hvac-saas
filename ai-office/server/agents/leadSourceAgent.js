@@ -1,5 +1,8 @@
 const crypto = require("crypto");
 const places = require("../services/places");
+const serpApiService = require("../services/serpApiService");
+const yandexSearchService = require("../services/yandexSearchService");
+const dgisService = require("../services/dgisService");
 const config = require("../config");
 const logger = require("../services/logger");
 
@@ -70,6 +73,7 @@ const SEGMENT_QUERIES = {
 };
 
 const SEGMENTS = Object.keys(SEGMENT_QUERIES);
+const SERP_SEGMENTS = new Set(["business_center", "clinic", "hotel", "uk"]);
 
 function isValidSegment(segment) {
   return Boolean(SEGMENT_QUERIES[String(segment || "").trim().toLowerCase()]);
@@ -90,6 +94,37 @@ function buildQueries(city, segment) {
 
 function makeLeadId() {
   return `lead_${Date.now().toString(36)}_${crypto.randomBytes(3).toString("hex")}`;
+}
+
+function normalizeLeadFields(raw, city, segment, source) {
+  return {
+    id: raw.id || makeLeadId(),
+    name: String(raw.name || "").trim(),
+    segment,
+    city: cityTitle(city),
+    address: String(raw.address || "").trim(),
+    phone: String(raw.phone || "").trim(),
+    website: String(raw.website || "").trim(),
+    email: String(raw.email || "").trim(),
+    contactFromWebsite: Boolean(raw.contactFromWebsite),
+    placeId: String(raw.placeId || `${source}_${crypto.randomBytes(6).toString("hex")}`),
+    source,
+    score: 0,
+    priority: "C",
+    status: "new",
+    qualificationReason: "",
+    offerSummary: "",
+    firstMessage: "",
+    followUpMessage: "",
+    shortMessage: "",
+    longMessage: "",
+    proposalText: "",
+    callScript: "",
+    painPoints: [],
+    reasonsToContact: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function demoLeads(city, segment) {
@@ -134,7 +169,7 @@ function demoLeads(city, segment) {
     phone: b.phone,
     website: b.website,
     placeId: `demo_place_${segment}_${i}`,
-    source: "demo_fallback",
+    source: "demo",
     score: 0,
     priority: "C",
     status: "new",
@@ -173,11 +208,49 @@ async function findLeads(city, segment) {
   if (!SEGMENT_QUERIES[seg]) {
     return { ok: false, error: "unknown_segment", leads: [] };
   }
+
   if (!config.googlePlacesApiKey) {
-    logger.info("Leads: demo (нет GOOGLE_PLACES_API_KEY)");
-    return { ok: true, leads: demoLeads(city, seg), demo: true };
+    if (SERP_SEGMENTS.has(seg) && config.serpApiKey) {
+      console.log("[AI OFFICE] Using SerpAPI mode");
+      const scraped = await serpApiService.searchLeads(city, seg, { limit: 15 });
+      if (scraped.ok && Array.isArray(scraped.leads)) {
+        const leads = scraped.leads
+          .map((x) => normalizeLeadFields(x, city, seg, "serpapi"))
+          .filter((x) => x.name);
+        return { ok: true, leads, demo: false, mode: "serpapi" };
+      }
+      logger.warn("SerpAPI: empty/error", scraped.error || "empty");
+    }
+
+    console.log("[AI OFFICE] Using Yandex mode");
+    const yx = await yandexSearchService.searchLeads(city, seg, { limit: 15 });
+    if (yx.ok && Array.isArray(yx.leads) && yx.leads.length) {
+      let leads = yx.leads.map((x) => normalizeLeadFields(x, city, seg, "yandex_search")).filter((x) => x.name);
+      leads = await dgisService.enrichLeads(leads, cityTitle(city));
+      const seen = new Set();
+      const deduped = [];
+      for (const l of leads) {
+        const phoneKey = String(l.phone || "").replace(/\D/g, "");
+        const siteKey = String(l.website || "").toLowerCase();
+        const nameKey = String(l.name || "").toLowerCase();
+        const key = `${phoneKey}|${siteKey}|${nameKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(l);
+      }
+      const sorted = deduped
+        .filter((l) => l.name)
+        .sort((a, b) => Number(Boolean(b.phone)) - Number(Boolean(a.phone)))
+        .slice(0, 20);
+      return { ok: true, leads: sorted, demo: false, mode: "yandex" };
+    }
+
+    console.log("[AI OFFICE] Fallback demo mode");
+    logger.info("Leads: demo fallback (нет ключей / yandex пусто)");
+    return { ok: true, leads: demoLeads(city, seg), demo: true, mode: "demo" };
   }
 
+  console.log("[AI OFFICE] Using Google Places mode");
   const queries = buildQueries(city, seg);
   const uniqueMap = new Map();
 
@@ -233,7 +306,7 @@ async function findLeads(city, segment) {
   if (!out.length) logger.warn("Places: после запросов лидов 0");
   else logger.info("Places: найдено лидов", out.length);
 
-  return { ok: true, leads: out, demo: false };
+  return { ok: true, leads: out, demo: false, mode: "google_places" };
 }
 
 module.exports = {

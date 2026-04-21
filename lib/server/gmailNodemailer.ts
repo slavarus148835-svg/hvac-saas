@@ -51,3 +51,28 @@ export async function sendVerificationCodeEmail(params: { to: string; code: stri
     throw new Error("Ошибка отправки email");
   }
 }
+
+/** Простое письмо (напоминание о незавершённом входе), только если SMTP настроен. */
+export async function sendPlainGmailEmail(params: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!isGmailVerificationSmtpConfigured()) {
+    return { ok: false, reason: "smtp_not_configured" };
+  }
+  const transporter = createGmailVerificationTransporter();
+  const user = getGmailSmtpUser();
+  try {
+    await transporter.sendMail({
+      from: `Калькулятор кондиционеров <${user}>`,
+      to: params.to,
+      subject: params.subject,
+      text: params.text,
+    });
+    return { ok: true };
+  } catch (error) {
+    console.error("[gmail] recovery email failed", error);
+    return { ok: false, reason: "send_failed" };
+  }
+}

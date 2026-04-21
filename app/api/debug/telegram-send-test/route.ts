@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
 
 export const runtime = "nodejs";
@@ -8,8 +7,15 @@ const TEST_TEXT = "TEST MESSAGE FROM DEBUG ENDPOINT";
 
 /** GET: sendMessage в ADMIN чат + явная диагностика шага 3. */
 export async function GET(req: Request) {
-  const denied = requireCronSecret(req);
-  if (denied) return denied;
+  const url = new URL(req.url);
+  const querySecret = url.searchParams.get("secret");
+  const authHeader = req.headers.get("authorization");
+  if (
+    querySecret !== process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const adminChat = String(process.env.ADMIN_TELEGRAM_CHAT_ID ?? "").trim();
   if (!adminChat) {

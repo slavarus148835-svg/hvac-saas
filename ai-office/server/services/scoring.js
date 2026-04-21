@@ -55,6 +55,14 @@ function computeRuleScore(lead) {
     score += 15;
     breakdown.push("сайт +15");
   }
+  if (lead.contactFromWebsite) {
+    score += 20;
+    breakdown.push("телефон на сайте +20");
+  }
+  if (lead.email) {
+    score += 5;
+    breakdown.push("email +5");
+  }
   if (segmentHvacFit(lead.segment)) {
     score += 20;
     breakdown.push("сегмент HVAC +20");
@@ -70,6 +78,10 @@ function computeRuleScore(lead) {
   if (corporateHint(lead)) {
     score += 10;
     breakdown.push("сеть/корп +10");
+  }
+  if (!hasPhone(lead) && !hasWebsite(lead) && !lead.email) {
+    score -= 10;
+    breakdown.push("только поисковый след -10");
   }
   return { score: Math.min(100, score), breakdown };
 }
