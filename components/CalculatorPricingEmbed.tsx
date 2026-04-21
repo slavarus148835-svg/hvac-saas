@@ -45,21 +45,24 @@ function alertFirestoreModelWriteError(context: string, e: unknown): void {
 }
 
 type PriceForm = {
-  standard_7_9: string;
+  standard_7: string;
+  standard_9: string;
   standard_12: string;
   standard_18: string;
   standard_24: string;
   standard_30: string;
   standard_36: string;
 
-  existing_7_9: string;
+  existing_7: string;
+  existing_9: string;
   existing_12: string;
   existing_18: string;
   existing_24: string;
   existing_30: string;
   existing_36: string;
 
-  route_7_9: string;
+  route_7: string;
+  route_9: string;
   route_12: string;
   route_18: string;
   route_24: string;
@@ -90,21 +93,24 @@ type PriceForm = {
 };
 
 const defaultForm: PriceForm = {
-  standard_7_9: "5900",
+  standard_7: "5900",
+  standard_9: "5900",
   standard_12: "6900",
   standard_18: "7900",
   standard_24: "9500",
   standard_30: "10500",
   standard_36: "11500",
 
-  existing_7_9: "6900",
+  existing_7: "6900",
+  existing_9: "6900",
   existing_12: "7900",
   existing_18: "8900",
   existing_24: "10500",
   existing_30: "11500",
   existing_36: "12500",
 
-  route_7_9: "2000",
+  route_7: "2000",
+  route_9: "2000",
   route_12: "2200",
   route_18: "2200",
   route_24: "2700",
@@ -139,8 +145,27 @@ function mergePriceFormFromFirestore(
 ): PriceForm {
   const base = { ...defaultForm };
   if (!data || typeof data !== "object") return base;
+  const normalized = { ...data };
+  if (normalized.standard_7 == null && normalized.standard_7_9 != null) {
+    normalized.standard_7 = normalized.standard_7_9;
+  }
+  if (normalized.standard_9 == null && normalized.standard_7_9 != null) {
+    normalized.standard_9 = normalized.standard_7_9;
+  }
+  if (normalized.existing_7 == null && normalized.existing_7_9 != null) {
+    normalized.existing_7 = normalized.existing_7_9;
+  }
+  if (normalized.existing_9 == null && normalized.existing_7_9 != null) {
+    normalized.existing_9 = normalized.existing_7_9;
+  }
+  if (normalized.route_7 == null && normalized.route_7_9 != null) {
+    normalized.route_7 = normalized.route_7_9;
+  }
+  if (normalized.route_9 == null && normalized.route_7_9 != null) {
+    normalized.route_9 = normalized.route_7_9;
+  }
   (Object.keys(defaultForm) as (keyof PriceForm)[]).forEach((key) => {
-    const raw = data[key as string];
+    const raw = normalized[key as string];
     if (raw == null) return;
     if (typeof raw === "number" && Number.isFinite(raw)) {
       base[key] = String(Math.max(0, Math.floor(raw)));
@@ -792,10 +817,16 @@ export default function CalculatorPricingEmbed() {
         subtitle="Базовая стоимость стандартного монтажа на вашу трассу"
       >
         <PriceField
-          label="Мощность 7–9"
+          label="Мощность 7"
           note="Цена за 1 монтаж"
-          value={form.standard_7_9}
-          onChange={(v) => updateField("standard_7_9", v)}
+          value={form.standard_7}
+          onChange={(v) => updateField("standard_7", v)}
+        />
+        <PriceField
+          label="Мощность 9"
+          note="Цена за 1 монтаж"
+          value={form.standard_9}
+          onChange={(v) => updateField("standard_9", v)}
         />
         <PriceField
           label="Мощность 12"
@@ -834,10 +865,16 @@ export default function CalculatorPricingEmbed() {
         subtitle="Базовая стоимость монтажа на уже готовую трассу"
       >
         <PriceField
-          label="Мощность 7–9"
+          label="Мощность 7"
           note="Цена за 1 монтаж"
-          value={form.existing_7_9}
-          onChange={(v) => updateField("existing_7_9", v)}
+          value={form.existing_7}
+          onChange={(v) => updateField("existing_7", v)}
+        />
+        <PriceField
+          label="Мощность 9"
+          note="Цена за 1 монтаж"
+          value={form.existing_9}
+          onChange={(v) => updateField("existing_9", v)}
         />
         <PriceField
           label="Мощность 12"
@@ -876,10 +913,17 @@ export default function CalculatorPricingEmbed() {
         subtitle="Цена 1 метра трассы по мощности кондиционера"
       >
         <PriceField
-          label="Трасса 7–9"
+          label="Трасса 7"
           note="Цена за 1 метр"
-          value={form.route_7_9}
-          onChange={(v) => updateField("route_7_9", v)}
+          value={form.route_7}
+          onChange={(v) => updateField("route_7", v)}
+          suffix="₽/м"
+        />
+        <PriceField
+          label="Трасса 9"
+          note="Цена за 1 метр"
+          value={form.route_9}
+          onChange={(v) => updateField("route_9", v)}
           suffix="₽/м"
         />
         <PriceField

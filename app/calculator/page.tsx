@@ -10,6 +10,7 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -27,21 +28,24 @@ import { mergeNumericPriceDocument } from "@/lib/mergeNumericPriceDocument";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
 type PriceList = {
-  standard_7_9: number;
+  standard_7: number;
+  standard_9: number;
   standard_12: number;
   standard_18: number;
   standard_24: number;
   standard_30: number;
   standard_36: number;
 
-  existing_7_9: number;
+  existing_7: number;
+  existing_9: number;
   existing_12: number;
   existing_18: number;
   existing_24: number;
   existing_30: number;
   existing_36: number;
 
-  route_7_9: number;
+  route_7: number;
+  route_9: number;
   route_12: number;
   route_18: number;
   route_24: number;
@@ -119,25 +123,30 @@ type HistoryCalcDoc = {
   /** Быстрые строки только в этом расчёте (не из прайса). */
   quickCalculationExtras?: QuickCalculationExtra[];
   giftRouteMeters?: number;
+  selectedAcModelIds?: string[];
+  /** legacy */
   selectedAcModelId?: string;
 };
 
 const defaultPrices: PriceList = {
-  standard_7_9: 5900,
+  standard_7: 5900,
+  standard_9: 5900,
   standard_12: 6900,
   standard_18: 7900,
   standard_24: 9500,
   standard_30: 10500,
   standard_36: 11500,
 
-  existing_7_9: 6900,
+  existing_7: 6900,
+  existing_9: 6900,
   existing_12: 7900,
   existing_18: 8900,
   existing_24: 10500,
   existing_30: 11500,
   existing_36: 12500,
 
-  route_7_9: 2000,
+  route_7: 2000,
+  route_9: 2000,
   route_12: 2200,
   route_18: 2200,
   route_24: 2700,
@@ -216,7 +225,19 @@ function chargedFloorsFromSecond(value: number) {
 }
 
 function capacityKey(value: string) {
-  return value === "7-9" ? "7_9" : value;
+  if (value === "7-9") return "7";
+  return value;
+}
+
+function normalizePriceDocForSplitCapacity(data: Record<string, unknown>) {
+  const out: Record<string, unknown> = { ...data };
+  if (out.standard_7 == null && out.standard_7_9 != null) out.standard_7 = out.standard_7_9;
+  if (out.standard_9 == null && out.standard_7_9 != null) out.standard_9 = out.standard_7_9;
+  if (out.existing_7 == null && out.existing_7_9 != null) out.existing_7 = out.existing_7_9;
+  if (out.existing_9 == null && out.existing_7_9 != null) out.existing_9 = out.existing_7_9;
+  if (out.route_7 == null && out.route_7_9 != null) out.route_7 = out.route_7_9;
+  if (out.route_9 == null && out.route_7_9 != null) out.route_9 = out.route_7_9;
+  return out;
 }
 
 function buildClosingText(name: string) {
@@ -284,7 +305,11 @@ function CalculatorPage() {
   const [percentDiscount, setPercentDiscount] = useState("0");
   const [giftRouteMeters, setGiftRouteMeters] = useState(1);
   const [acModels, setAcModels] = useState<{ id: string; name: string; price: number }[]>([]);
-  const [selectedAcModelId, setSelectedAcModelId] = useState("");
+  const [selectedAcModelPick, setSelectedAcModelPick] = useState("");
+  const [selectedAcModelIds, setSelectedAcModelIds] = useState<string[]>([]);
+  const [newAcModelName, setNewAcModelName] = useState("");
+  const [newAcModelPrice, setNewAcModelPrice] = useState("");
+  const [modelBusy, setModelBusy] = useState(false);
 
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
@@ -373,7 +398,7 @@ function CalculatorPage() {
           const priceSnap = await getDocFromServer(doc(db, PRICING_FS.priceLists, uid));
           if (priceSnap.exists()) {
             const pdata = priceSnap.data() as Record<string, unknown>;
-            setPrices(mergeNumericPriceDocument(pdata, defaultPrices));
+            setPrices(mergeNumericPriceDocument(normalizePriceDocForSplitCapacity(pdata), defaultPrices));
             const parsed = parseCustomServicesFromPriceDoc(pdata.customServices);
             setPricelistCustomServices(parsed);
             const initialMap: SelectedExtraServiceMap = {};
@@ -407,7 +432,11 @@ function CalculatorPage() {
             autoSavedDocIdRef.current = historyId;
             openedFromHistoryRef.current = true;
 
-            setCapacity(data.capacity || "12");
+            if (data.capacity === "7-9") {
+              setCapacity("7");
+            } else {
+              setCapacity(data.capacity || "12");
+            }
             setMountType(data.mountType || "standard");
             setRouteMeters(data.routeMeters || "0");
             setBaseWallType(data.baseWallType || "normal");
@@ -434,7 +463,13 @@ function CalculatorPage() {
             setPercentDiscount(data.percentDiscount || "0");
                 const hg = Number(data.giftRouteMeters);
                 if (Number.isFinite(hg) && hg >= 0) setGiftRouteMeters(Math.floor(hg));
-                setSelectedAcModelId(data.selectedAcModelId || "");
+                const fromList = Array.isArray(data.selectedAcModelIds)
+                  ? data.selectedAcModelIds
+                      .filter((x) => typeof x === "string")
+                      .map((x) => String(x))
+                  : [];
+                const fromLegacy = data.selectedAcModelId ? [String(data.selectedAcModelId)] : [];
+                setSelectedAcModelIds(Array.from(new Set([...fromList, ...fromLegacy])));
             setClientName(data.clientName || "");
             setClientContact(data.clientContact || "");
             setEditableTailText(
@@ -623,8 +658,8 @@ function CalculatorPage() {
       note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
     });
 
-    if (selectedAcModelId) {
-      const m = acModels.find((x) => x.id === selectedAcModelId);
+    for (const modelId of selectedAcModelIds) {
+      const m = acModels.find((x) => x.id === modelId);
       if (m && m.name && Number(m.price) > 0) {
         items.push({
           title: `Кондиционер: ${m.name}`,
@@ -869,7 +904,7 @@ function CalculatorPage() {
     selectedExtraServices,
     giftRouteMeters,
     acModels,
-    selectedAcModelId,
+    selectedAcModelIds,
   ]);
 
   const finalClientText = `${result.autoClientText}\n${editableTailText}`.trim();
@@ -930,7 +965,8 @@ function CalculatorPage() {
           selectedExtraServices,
           quickCalculationExtras,
           giftRouteMeters,
-          selectedAcModelId,
+          selectedAcModelIds,
+          selectedAcModelId: selectedAcModelIds[0] || "",
         };
 
         let createdNewHistoryDoc = false;
@@ -994,7 +1030,7 @@ function CalculatorPage() {
     selectedExtraServices,
     quickCalculationExtras,
     giftRouteMeters,
-    selectedAcModelId,
+    selectedAcModelIds,
   ]);
 
   const MAX_SHARE_URL_CHARS = 3800;
@@ -1109,6 +1145,67 @@ function CalculatorPage() {
     alert("Для Telegram укажите username вида @name или номер телефона (цифры, с кодом страны)");
   }
 
+  function addSelectedModelToCalculation() {
+    if (!selectedAcModelPick) return;
+    if (selectedAcModelIds.includes(selectedAcModelPick)) return;
+    setSelectedAcModelIds((prev) => [...prev, selectedAcModelPick]);
+    setSelectedAcModelPick("");
+  }
+
+  function removeSelectedModelFromCalculation(id: string) {
+    setSelectedAcModelIds((prev) => prev.filter((x) => x !== id));
+  }
+
+  async function addModelQuicklyFromCalculator() {
+    const owner = auth.currentUser;
+    if (!owner?.uid) {
+      alert("Войдите в аккаунт заново.");
+      return;
+    }
+    const name = newAcModelName.trim();
+    if (!name) {
+      setError("newAcModelName", "Введите название модели");
+      return;
+    }
+    clearError("newAcModelName");
+    const price = Number(sanitizeNonNegativeMoneyString(newAcModelPrice, MAX_MONEY) || 0);
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("newAcModelPrice", "Введите цену цифрами больше 0");
+      return;
+    }
+    clearError("newAcModelPrice");
+
+    setModelBusy(true);
+    try {
+      await setDoc(
+        doc(db, PRICING_FS.users, owner.uid),
+        {
+          uid: owner.uid,
+          email: owner.email || "",
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      const colRef = collection(db, PRICING_FS.users, owner.uid, PRICING_FS.modelsSubcollection);
+      const ref = await addDoc(colRef, {
+        name,
+        price,
+        createdAt: new Date().toISOString(),
+      });
+      const row = { id: ref.id, name, price };
+      setAcModels((prev) => [...prev, row].sort((a, b) => a.name.localeCompare(b.name, "ru")));
+      setSelectedAcModelIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]));
+      setNewAcModelName("");
+      setNewAcModelPrice("");
+      showToast("Модель добавлена в прайс и расчёт");
+    } catch (e) {
+      console.error("[calculator] add model quick failed", e);
+      alert("Не удалось добавить модель. Попробуйте ещё раз.");
+    } finally {
+      setModelBusy(false);
+    }
+  }
+
   function handleQuickAddToCalculation() {
     if (!quickServiceName.trim()) {
       setError("quickServiceName", "Введите название услуги");
@@ -1163,7 +1260,7 @@ function CalculatorPage() {
         {[
           `мощность=${capacity}`,
           `монтаж=${mountType}`,
-          `модель_id=${selectedAcModelId || "—"}`,
+          `модель_ids=${selectedAcModelIds.length ? selectedAcModelIds.join(",") : "—"}`,
           `трасса_м=${routeMeters}`,
           `подарок_м=${giftRouteMeters}`,
           `стена=${baseWallType}`,
@@ -1193,6 +1290,44 @@ function CalculatorPage() {
         </button>
       </div>
 
+      <div style={cardStyle}>
+        <h2 style={sectionTitle}>Быстро добавить модель кондиционера</h2>
+        <p style={{ ...smallTextStyle, marginTop: 0, marginBottom: 10 }}>
+          Модель сразу сохраняется в личный прайс и добавляется в текущий расчёт.
+        </p>
+        <div style={quickAddGridStyle}>
+          <input
+            value={newAcModelName}
+            onChange={(e) => {
+              setNewAcModelName(e.target.value);
+              clearError("newAcModelName");
+            }}
+            placeholder="Модель кондиционера"
+            style={inputStyle}
+          />
+          <FieldMessage error={fieldErrors.newAcModelName} warning={fieldWarnings.newAcModelName} />
+          <input
+            value={newAcModelPrice}
+            onChange={(e) => {
+              setNewAcModelPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY));
+              clearError("newAcModelPrice");
+            }}
+            placeholder="Цена"
+            style={inputStyle}
+            inputMode="numeric"
+          />
+          <FieldMessage error={fieldErrors.newAcModelPrice} warning={fieldWarnings.newAcModelPrice} />
+          <button
+            type="button"
+            onClick={() => void addModelQuicklyFromCalculator()}
+            disabled={modelBusy}
+            style={{ ...primaryButtonStyle, opacity: modelBusy ? 0.6 : 1 }}
+          >
+            {modelBusy ? "Добавление…" : "Добавить модель"}
+          </button>
+        </div>
+      </div>
+
         <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
@@ -1202,7 +1337,8 @@ function CalculatorPage() {
               onChange={(e) => setCapacity(e.target.value)}
               style={inputStyle}
             >
-              <option value="7-9">7–9</option>
+              <option value="7">7</option>
+              <option value="9">9</option>
               <option value="12">12</option>
               <option value="18">18</option>
               <option value="24">24</option>
@@ -1212,20 +1348,60 @@ function CalculatorPage() {
           </Label>
 
         {acModels.length > 0 ? (
-          <Label text="Модель кондиционера" note="Из личного прайса; без выбора — без строки «Кондиционер» в расчёте">
-            <select
-              value={selectedAcModelId}
-              onChange={(e) => setSelectedAcModelId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Не выбрано</option>
-              {acModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — {fmt(m.price)}
-                </option>
-              ))}
-            </select>
-          </Label>
+          <div style={selectedModelsBlockStyle}>
+            <Label text="Модели кондиционеров" note="Можно добавить несколько моделей в текущую смету">
+              <div style={modelPickerRowStyle}>
+                <select
+                  value={selectedAcModelPick}
+                  onChange={(e) => setSelectedAcModelPick(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0 }}
+                >
+                  <option value="">Выберите модель</option>
+                  {acModels.map((m) => (
+                    <option
+                      key={m.id}
+                      value={m.id}
+                      disabled={selectedAcModelIds.includes(m.id)}
+                    >
+                      {m.name} — {fmt(m.price)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={addSelectedModelToCalculation}
+                  disabled={!selectedAcModelPick}
+                  style={{ ...secondaryButtonStyle, minWidth: 140, opacity: selectedAcModelPick ? 1 : 0.6 }}
+                >
+                  Добавить в смету
+                </button>
+              </div>
+            </Label>
+
+            {selectedAcModelIds.length > 0 ? (
+              <div style={selectedModelsListStyle}>
+                {selectedAcModelIds.map((id) => {
+                  const model = acModels.find((m) => m.id === id);
+                  if (!model) return null;
+                  return (
+                    <div key={id} style={selectedModelRowStyle}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={selectedModelNameStyle}>{model.name}</div>
+                        <div style={smallTextStyle}>{fmt(model.price)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSelectedModelFromCalculation(id)}
+                        style={{ ...deleteButtonStyle, width: "auto", minWidth: 110 }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
           <Label text="Тип монтажа" note="На нашу трассу или на чужую трассу">
@@ -2053,6 +2229,40 @@ const quickAddGridStyle: React.CSSProperties = {
   flexDirection: "column",
   gap: "10px",
   alignItems: "stretch",
+};
+
+const selectedModelsBlockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  marginBottom: "8px",
+};
+
+const modelPickerRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+};
+
+const selectedModelsListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px",
+};
+
+const selectedModelRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+  justifyContent: "space-between",
+  border: "1px solid #e5e7eb",
+  borderRadius: "12px",
+  padding: "10px",
+  background: "#fff",
+};
+
+const selectedModelNameStyle: React.CSSProperties = {
+  fontWeight: 700,
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };
 
 const checkboxRowStyle: React.CSSProperties = {
