@@ -10,10 +10,9 @@ import {
 import { generateSixDigitCode, getEmailCodePepper, hashEmailCode } from "@/lib/server/emailCodeCrypto";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
 import {
-  getConfiguredMailProvider,
-  getMailProviderBlocker,
-  sendTransactionalEmail,
-} from "@/lib/server/sendMail";
+  isGmailVerificationSmtpConfigured,
+  sendVerificationCodeEmail,
+} from "@/lib/server/gmailNodemailer";
 
 /** Явно Node: на Vercel доступны все process.env для SMTP. */
 export const runtime = "nodejs";
@@ -60,24 +59,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "no_email" }, { status: 400 });
   }
 
-  const blocker = getMailProviderBlocker();
-  if (blocker) {
-    const err = blocker.code;
-    console.log("[send-email-code] no mail transport:", err);
+  if (!isGmailVerificationSmtpConfigured()) {
+    const detail =
+      "Задайте GMAIL_SMTP_PASS или SMTP_PASS (пароль приложения Gmail) на сервере";
+    console.log("[send-email-code] no gmail smtp pass:", detail);
     await userRef.set(
       {
         registrationStage: "code_send_failed",
-        emailCodeSendError: err,
-        lastRegistrationError: err,
+        emailCodeSendError: "smtp_env_incomplete",
+        lastRegistrationError: detail,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
     );
-    console.log("[send-email-code] response status: 503", err);
-    return NextResponse.json({ error: err }, { status: 503 });
+    console.log("[send-email-code] response status: 503 smtp_env_incomplete");
+    return NextResponse.json(
+      { ok: false, error: "smtp_env_incomplete", detail },
+      { status: 503 }
+    );
   }
-
-  const mailProvider = getConfiguredMailProvider();
 
   await userRef.set(
     {
@@ -130,72 +130,37 @@ export async function POST(req: Request) {
     lastSentAt: Timestamp.fromMillis(now),
   });
 
-  const subject = "Подтверждение регистрации";
-  const text = `Ваш код подтверждения: ${plain}\nКод действует 10 минут.`;
-
-  console.log(`[send-email-code] provider=${mailProvider}`);
+  console.log("[send-email-code] provider=gmail_smtp (nodemailer)");
   console.log("[send-email-code] provider request start");
 
-  const sent = await sendTransactionalEmail({ to: email, subject, text });
-
-  if (!sent.ok) {
-    if (sent.error === "smtp_env_incomplete") {
-      await userRef.set(
-        {
-          registrationStage: "code_send_failed",
-          emailCodeSendError: "smtp_env_incomplete",
-          lastRegistrationError: sent.detail ?? sent.error,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-      console.error("[send-email-code] smtp_env_incomplete", sent.detail);
-      console.log("[send-email-code] response status: 503 smtp_env_incomplete");
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "smtp_env_incomplete",
-          detail: sent.detail,
-          provider: mailProvider,
-        },
-        { status: 503 }
-      );
-    }
-
-    const detail = [sent.error, sent.detail].filter(Boolean).join(" | ").slice(0, 500);
-    const apiError =
-      mailProvider === "resend" ? "resend_provider_failed" : "smtp_provider_failed";
-    console.error("[send-email-code] mail send failed", {
-      provider: mailProvider,
-      apiError,
-      smtpCode: sent.smtpCode,
-      message: sent.smtpMessage ?? detail,
-    });
+  try {
+    await sendVerificationCodeEmail({ to: email, code: plain });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[send-email-code] mail send failed", { message });
     await userRef.set(
       {
         registrationStage: "code_send_failed",
-        emailCodeSendError: apiError,
-        lastRegistrationError: sent.error,
+        emailCodeSendError: "smtp_provider_failed",
+        lastRegistrationError: message,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
     );
-    console.log("[send-email-code] response status: 502", apiError);
+    console.log("[send-email-code] response status: 502 smtp_provider_failed");
     return NextResponse.json(
       {
         ok: false,
-        error: apiError,
-        provider: mailProvider,
-        smtpCode: sent.smtpCode,
-        smtpMessage: sent.smtpMessage ?? undefined,
-        detail: sent.detail ?? detail,
+        error: "smtp_provider_failed",
+        provider: "gmail_smtp",
+        detail: message,
       },
       { status: 502 }
     );
   }
 
   console.log("[send-email-code] provider success");
-  console.log(`[send-email-code] transport=${sent.provider}`);
+  console.log("[send-email-code] transport=gmail_smtp");
 
   await userRef.set(
     {
