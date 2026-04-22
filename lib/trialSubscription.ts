@@ -119,6 +119,15 @@ export function getTrialEndMs(user: UserTrialFields | null | undefined): number 
   return 0;
 }
 
+/** Явный helper-алиас для единой точки вычисления конца триала. */
+export function getTrialEndMsFromUser(user: UserTrialFields | null | undefined): number {
+  return getTrialEndMs(user);
+}
+
+function hasSafeTrialTimeline(user: UserTrialFields | null | undefined): boolean {
+  return getTrialEndMsFromUser(user) > 0;
+}
+
 export function isPaidActive(user: UserTrialFields | null | undefined): boolean {
   if (!user) return false;
   const paidMs = firestoreTimeToMs(user.paidUntil);
@@ -131,6 +140,7 @@ export function isTrialPending(user: UserTrialFields | null | undefined): boolea
   if (!user) return false;
   if (isPaidActive(user)) return false;
   if (user.plan !== "trial") return false;
+  if (!hasSafeTrialTimeline(user)) return false;
   if (isTrialExpired(user)) return false;
   const started = trialStartedMs(user);
   return started === 0;
@@ -231,6 +241,18 @@ export function hasSubscriptionFeatureAccess(
     }
     return false;
   }
+  if (user.plan === "trial" && !hasSafeTrialTimeline(user)) {
+    // Защита для старых/битых профилей: без trialEndsAt/trialStartedAt/createdAt timeline нельзя безопасно дать доступ.
+    console.warn("[trial-access] unsafe trial timeline, access denied", {
+      feature,
+      plan: user.plan,
+      trialStartedAt: user.trialStartedAt ?? null,
+      trialEndsAt: user.trialEndsAt ?? null,
+      trialDays: user.trialDays ?? null,
+      createdAt: user.createdAt ?? null,
+    });
+    return false;
+  }
   let allowed = false;
   if (isPaidActive(user)) allowed = true;
   else if (isTrialExpired(user)) allowed = false;
@@ -261,6 +283,15 @@ export type TrialAccessSnapshot = {
   accessDecision: boolean;
 };
 
+export type TrialAccessScenarioResult = {
+  scenario: "trial_active" | "trial_expired" | "paid_active";
+  accessDecision: boolean;
+  isTrialExpired: boolean;
+  isTrialPending: boolean;
+  isTrialRunning: boolean;
+  trialEndEffectiveMs: number;
+};
+
 export function getTrialAccessSnapshot(
   user: UserTrialFields | null | undefined
 ): TrialAccessSnapshot {
@@ -283,6 +314,56 @@ export function getTrialAccessSnapshot(
     isTrialRunning: running,
     accessDecision,
   };
+}
+
+/**
+ * Проверочные сценарии для быстрой валидации access-check:
+ * - active trial
+ * - expired trial
+ * - paid subscription active
+ */
+export function getTrialAccessScenarioResults(nowMs = Date.now()): TrialAccessScenarioResult[] {
+  const day = MS_PER_DAY;
+  const trialActive: UserTrialFields = {
+    plan: "trial",
+    trialStartedAt: nowMs - day,
+    trialEndsAt: nowMs + 3 * day,
+    trialDays: TRIAL_DAYS,
+    blocked: false,
+  };
+  const trialExpired: UserTrialFields = {
+    plan: "trial",
+    trialStartedAt: nowMs - 20 * day,
+    trialEndsAt: nowMs - day,
+    trialDays: TRIAL_DAYS,
+    blocked: false,
+  };
+  const paidActive: UserTrialFields = {
+    plan: "standard",
+    paidUntil: nowMs + 10 * day,
+    blocked: false,
+  };
+
+  const make = (
+    scenario: TrialAccessScenarioResult["scenario"],
+    user: UserTrialFields
+  ): TrialAccessScenarioResult => {
+    const snap = getTrialAccessSnapshot(user);
+    return {
+      scenario,
+      accessDecision: snap.accessDecision,
+      isTrialExpired: snap.isTrialExpired,
+      isTrialPending: snap.isTrialPending,
+      isTrialRunning: snap.isTrialRunning,
+      trialEndEffectiveMs: snap.trialEndEffectiveMs,
+    };
+  };
+
+  return [
+    make("trial_active", trialActive),
+    make("trial_expired", trialExpired),
+    make("paid_active", paidActive),
+  ];
 }
 
 export function logTrialAccessDebug(
