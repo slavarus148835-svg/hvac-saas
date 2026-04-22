@@ -107,6 +107,7 @@ export async function POST(req: Request) {
 
     if (!normalized.startsWith("/stat")) {
       if (sessionIdFromStart) {
+        console.log("[telegram/webhook] login start payload", { sessionId: sessionIdFromStart });
         const from = msg.from;
         const telegramUserId = String(from?.id ?? "").replace(/\D/g, "");
         if (!telegramUserId) {
@@ -148,7 +149,9 @@ export async function POST(req: Request) {
           const text =
             confirmed.reason === "expired"
               ? "Сессия входа истекла. Вернитесь на сайт и начните вход заново."
-              : "Сессия входа не найдена или уже использована. Вернитесь на сайт и начните заново.";
+              : confirmed.reason === "not_found"
+                ? "Сессия входа не найдена. Вернитесь на сайт и начните заново."
+                : "Вход уже подтверждён. Вернитесь на сайт, вход должен завершиться автоматически.";
           await sendTelegramMessage(String(chatId), text);
           return NextResponse.json({ ok: true });
         }

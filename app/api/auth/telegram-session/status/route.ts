@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import {
-  consumeConfirmedTelegramLoginSession,
   getTelegramLoginSession,
 } from "@/lib/server/telegramLoginSession";
 
@@ -20,6 +19,7 @@ export async function GET(req: Request) {
     }
 
     const sessionId = String(new URL(req.url).searchParams.get("sessionId") || "").trim();
+    console.log("[api/auth/telegram-session/status] poll", { sessionId });
     if (!sessionId) {
       return NextResponse.json(
         { status: "error", canCompleteLogin: false, error: "missing_session_id" },
@@ -42,21 +42,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: "pending", canCompleteLogin: false });
     }
 
-    const consumed = await consumeConfirmedTelegramLoginSession(db, sessionId);
-    if (!consumed.ok) {
-      if (consumed.reason === "pending") {
-        return NextResponse.json({ status: "pending", canCompleteLogin: false });
-      }
-      if (consumed.reason === "expired") {
-        return NextResponse.json({ status: "expired", canCompleteLogin: false });
-      }
-      if (consumed.reason === "used") {
-        return NextResponse.json({ status: "confirmed", canCompleteLogin: false });
-      }
+    if (!session.resolvedUid) {
       return NextResponse.json({ status: "error", canCompleteLogin: false });
     }
 
-    const customToken = await getAuth(app).createCustomToken(consumed.resolvedUid);
+    const customToken = await getAuth(app).createCustomToken(session.resolvedUid);
     return NextResponse.json({
       status: "confirmed",
       canCompleteLogin: true,

@@ -22,6 +22,8 @@ import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 
 const TEMP_OVERLOAD_MESSAGE = "Сервис временно перегружен. Повтори попытку через несколько секунд.";
+const TG_SESSION_STORAGE_KEY = "tg_login_session_id";
+const TG_SESSION_EXPIRES_STORAGE_KEY = "tg_login_session_expires_ms";
 
 function isHtmlPayload(contentType: string, body: string) {
   const ctype = String(contentType || "").toLowerCase();
@@ -110,8 +112,16 @@ export default function RegisterPage() {
       if (!popup) {
         window.location.href = data.botUrl;
       }
+      console.log("[register] telegram session created", { sessionId: data.sessionId });
       setTgSessionId(data.sessionId);
-      setTgExpiresAtMs(Date.parse(data.expiresAt));
+      const expiresMs = Date.parse(data.expiresAt);
+      setTgExpiresAtMs(expiresMs);
+      try {
+        localStorage.setItem(TG_SESSION_STORAGE_KEY, data.sessionId);
+        localStorage.setItem(TG_SESSION_EXPIRES_STORAGE_KEY, String(expiresMs));
+      } catch {
+        /* ignore */
+      }
       setTgStatusText("Ожидаем подтверждение в Telegram...");
     } catch (e) {
       console.error("[register] openTelegramBotLogin failed", e);
@@ -121,16 +131,38 @@ export default function RegisterPage() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (tgWaiting || tgSessionId) return;
+    const sid = String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
+    const exp = Number(localStorage.getItem(TG_SESSION_EXPIRES_STORAGE_KEY) || 0);
+    if (!sid || !exp || exp <= Date.now()) return;
+    setTgSessionId(sid);
+    setTgExpiresAtMs(exp);
+    setTgWaiting(true);
+    setTgStatusText("Ожидаем подтверждение в Telegram...");
+  }, [tgWaiting, tgSessionId]);
+
+  useEffect(() => {
     if (!tgWaiting || !tgSessionId) return;
     let stopped = false;
-    const poll = async () => {
+    const interval = window.setInterval(() => {
+      void pollOnce();
+    }, 1500);
+    const pollOnce = async () => {
       if (stopped) return;
       if (tgExpiresAtMs > 0 && Date.now() >= tgExpiresAtMs) {
+        try {
+          localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+          localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
         setTgWaiting(false);
         setTgStatusText("Время ожидания истекло. Попробуйте снова.");
         return;
       }
       try {
+        console.log("[register] telegram session poll", { sessionId: tgSessionId });
         const res = await fetch(
           `/api/auth/telegram-session/status?sessionId=${encodeURIComponent(tgSessionId)}`,
           { cache: "no-store" }
@@ -141,6 +173,12 @@ export default function RegisterPage() {
           customToken?: string;
         };
         if (data.status === "expired") {
+          try {
+            localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+            localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
           setTgWaiting(false);
           setTgStatusText("Время ожидания истекло. Попробуйте снова.");
           return;
@@ -148,19 +186,28 @@ export default function RegisterPage() {
         if (data.status === "confirmed" && data.canCompleteLogin && data.customToken) {
           setTgStatusText("Подтверждено. Выполняем вход...");
           await signInWithCustomToken(auth, data.customToken);
+          await fetch("/api/auth/telegram-session/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: tgSessionId }),
+          }).catch(() => null);
+          try {
+            localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+            localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
           setTgWaiting(false);
           return;
         }
       } catch (e) {
         console.error("[register] telegram session poll failed", e);
       }
-      window.setTimeout(() => {
-        void poll();
-      }, 2500);
     };
-    void poll();
+    void pollOnce();
     return () => {
       stopped = true;
+      window.clearInterval(interval);
     };
   }, [tgWaiting, tgSessionId, tgExpiresAtMs]);
 

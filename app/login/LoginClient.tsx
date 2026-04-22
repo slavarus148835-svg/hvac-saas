@@ -23,6 +23,9 @@ import {
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 
+const TG_SESSION_STORAGE_KEY = "tg_login_session_id";
+const TG_SESSION_EXPIRES_STORAGE_KEY = "tg_login_session_expires_ms";
+
 const inputStyle: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
@@ -96,8 +99,16 @@ export default function LoginClient() {
       if (!popup) {
         window.location.href = data.botUrl;
       }
+      console.log("[login] telegram session created", { sessionId: data.sessionId });
       setTgSessionId(data.sessionId);
-      setTgExpiresAtMs(Date.parse(data.expiresAt));
+      const expiresMs = Date.parse(data.expiresAt);
+      setTgExpiresAtMs(expiresMs);
+      try {
+        localStorage.setItem(TG_SESSION_STORAGE_KEY, data.sessionId);
+        localStorage.setItem(TG_SESSION_EXPIRES_STORAGE_KEY, String(expiresMs));
+      } catch {
+        /* ignore */
+      }
       setTgStatusText("Ожидаем подтверждение в Telegram...");
     } catch (e) {
       console.error("[login] openTelegramBotLogin failed", e);
@@ -151,16 +162,39 @@ export default function LoginClient() {
   }, [router, searchParams]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (tgWaiting || tgSessionId) return;
+    const sid = String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
+    const exp = Number(localStorage.getItem(TG_SESSION_EXPIRES_STORAGE_KEY) || 0);
+    if (!sid || !exp || exp <= Date.now()) return;
+    setTgSessionId(sid);
+    setTgExpiresAtMs(exp);
+    setTgWaiting(true);
+    setTgStatusText("Ожидаем подтверждение в Telegram...");
+  }, [tgWaiting, tgSessionId]);
+
+  useEffect(() => {
     if (!tgWaiting || !tgSessionId) return;
     let stopped = false;
-    const poll = async () => {
+    const interval = window.setInterval(() => {
+      void pollOnce();
+    }, 1500);
+
+    const pollOnce = async () => {
       if (stopped) return;
       if (tgExpiresAtMs > 0 && Date.now() >= tgExpiresAtMs) {
+        try {
+          localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+          localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
         setTgWaiting(false);
         setTgStatusText("Время ожидания истекло. Попробуйте снова.");
         return;
       }
       try {
+        console.log("[login] telegram session poll", { sessionId: tgSessionId });
         const res = await fetch(
           `/api/auth/telegram-session/status?sessionId=${encodeURIComponent(tgSessionId)}`,
           { cache: "no-store" }
@@ -171,6 +205,12 @@ export default function LoginClient() {
           customToken?: string;
         };
         if (data.status === "expired") {
+          try {
+            localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+            localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
           setTgWaiting(false);
           setTgStatusText("Время ожидания истекло. Попробуйте снова.");
           return;
@@ -178,20 +218,29 @@ export default function LoginClient() {
         if (data.status === "confirmed" && data.canCompleteLogin && data.customToken) {
           setTgStatusText("Подтверждено. Выполняем вход...");
           const cred = await signInWithCustomToken(auth, data.customToken);
+          await fetch("/api/auth/telegram-session/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: tgSessionId }),
+          }).catch(() => null);
           await finishSignedInUser(cred.user);
+          try {
+            localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+            localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
           setTgWaiting(false);
           return;
         }
       } catch (e) {
         console.error("[login] telegram session poll failed", e);
       }
-      window.setTimeout(() => {
-        void poll();
-      }, 2500);
     };
-    void poll();
+    void pollOnce();
     return () => {
       stopped = true;
+      window.clearInterval(interval);
     };
   }, [tgSessionId, tgWaiting, tgExpiresAtMs, router, searchParams]);
 

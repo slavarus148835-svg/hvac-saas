@@ -91,6 +91,7 @@ export async function createTelegramLoginSession(
     createdByIpHash: opts?.createdByIpHash,
   };
   await db.collection(PRICING_FS.telegramLoginSessions).doc(sessionId).set(doc, { merge: false });
+  console.log("[telegram-session/create] created", { sessionId, expiresAtMs, createdByIpHash: opts?.createdByIpHash });
   return doc;
 }
 
@@ -131,6 +132,16 @@ export async function confirmTelegramLoginSession(
   const snap = await ref.get();
   if (!snap.exists) return { ok: false, reason: "not_found" };
   const data = snap.data() as TelegramLoginSessionDoc;
+  if (data.status === "confirmed") {
+    // Idempotent confirm: same uid/user can repeat /start without failing.
+    if (
+      String(data.resolvedUid || "") === String(params.resolvedUid || "") &&
+      String(data.telegramUserId || "") === String(params.telegramUserId || "")
+    ) {
+      return { ok: true };
+    }
+    return { ok: false, reason: "already_used" };
+  }
   if (data.status !== "pending") return { ok: false, reason: "already_used" };
   if (Number(data.expiresAtMs || 0) <= Date.now()) {
     await ref.set({ status: "expired", updatedAt: nowIso() }, { merge: true });
@@ -150,13 +161,18 @@ export async function confirmTelegramLoginSession(
     } satisfies Partial<TelegramLoginSessionDoc>,
     { merge: true }
   );
+  console.log("[telegram-session/confirm] confirmed", {
+    sessionId: id,
+    telegramUserId: params.telegramUserId,
+    resolvedUid: params.resolvedUid,
+  });
   return { ok: true };
 }
 
-export async function consumeConfirmedTelegramLoginSession(
+export async function markTelegramLoginSessionUsed(
   db: Firestore,
   sessionId: string
-): Promise<{ ok: true; resolvedUid: string } | { ok: false; reason: "not_found" | "expired" | "pending" | "used" | "broken" }> {
+): Promise<{ ok: true } | { ok: false; reason: "not_found" | "expired" | "pending" | "used" }> {
   const ref = db.collection(PRICING_FS.telegramLoginSessions).doc(String(sessionId || "").trim());
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -171,7 +187,6 @@ export async function consumeConfirmedTelegramLoginSession(
     }
     if (data.status === "expired") return { ok: false as const, reason: "expired" as const };
     if (data.consumedAt) return { ok: false as const, reason: "used" as const };
-    if (!data.resolvedUid) return { ok: false as const, reason: "broken" as const };
     const t = nowIso();
     tx.set(
       ref,
@@ -183,7 +198,10 @@ export async function consumeConfirmedTelegramLoginSession(
       },
       { merge: true }
     );
-    return { ok: true as const, resolvedUid: data.resolvedUid };
+    return { ok: true as const };
   });
+  if (result.ok) {
+    console.log("[telegram-session/used] marked", { sessionId: String(sessionId || "").trim() });
+  }
   return result;
 }

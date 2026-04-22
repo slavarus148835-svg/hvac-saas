@@ -29,6 +29,7 @@ export async function POST(req: Request) {
     const created = await createTelegramLoginSession(db, {
       createdByIpHash: rate.createdByIpHash,
     });
+    console.log("[api/auth/telegram-session/create] session", { sessionId: created.sessionId });
     const botUrl = `https://t.me/${botUsername()}?start=${encodeURIComponent(
       `login_${created.sessionId}`
     )}`;
