@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithCustomToken,
+} from "firebase/auth";
 import { doc, setDoc, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { generateSessionId, getOrCreateDeviceId, setLocalSessionId } from "@/lib/deviceSession";
 import {
   VERIFY_EMAIL_CODE_PATH,
-  getClientPublicAppBaseUrl,
   needsEmailCodeVerification,
   firebaseAuthErrorMessage,
   recordVerificationEmailSentAtNow,
@@ -58,38 +61,11 @@ export default function RegisterPage() {
   const router = useRouter();
   const registeringRef = useRef(false);
   const holdOnPageRef = useRef(false);
-  const [telegramLoginError, setTelegramLoginError] = useState(false);
   const [emailSendFailed, setEmailSendFailed] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const p = new URLSearchParams(window.location.search);
-    if (p.get("telegram_error")) {
-      setTelegramLoginError(true);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
-
-  useEffect(() => {
-    const root = document.getElementById("telegram-login-widget");
-    if (!root) return;
-    root.innerHTML = "";
-    const bot = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "hvac_cash_bot").trim();
-    const authUrl = `${getClientPublicAppBaseUrl()}/api/auth/telegram?next=${encodeURIComponent(
-      "/dashboard"
-    )}`;
-    const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.async = true;
-    script.setAttribute("data-telegram-login", bot);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-auth-url", authUrl);
-    script.setAttribute("data-request-access", "write");
-    root.appendChild(script);
-    return () => {
-      root.innerHTML = "";
-    };
-  }, []);
+  const [tgSessionId, setTgSessionId] = useState("");
+  const [tgExpiresAtMs, setTgExpiresAtMs] = useState(0);
+  const [tgWaiting, setTgWaiting] = useState(false);
+  const [tgStatusText, setTgStatusText] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +87,82 @@ export default function RegisterPage() {
       unsubscribe();
     };
   }, [router]);
+
+  const openTelegramBotLogin = async () => {
+    try {
+      setTgWaiting(true);
+      setTgStatusText("Открываем Telegram...");
+      const res = await fetch("/api/auth/telegram-session/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        sessionId?: string;
+        botUrl?: string;
+        expiresAt?: string;
+      };
+      if (!res.ok || !data.sessionId || !data.botUrl || !data.expiresAt) {
+        setTgWaiting(false);
+        setTgStatusText("Не удалось создать сессию входа через Telegram.");
+        return;
+      }
+      const popup = window.open(data.botUrl, "_blank", "noopener,noreferrer");
+      if (!popup) {
+        window.location.href = data.botUrl;
+      }
+      setTgSessionId(data.sessionId);
+      setTgExpiresAtMs(Date.parse(data.expiresAt));
+      setTgStatusText("Ожидаем подтверждение в Telegram...");
+    } catch (e) {
+      console.error("[register] openTelegramBotLogin failed", e);
+      setTgWaiting(false);
+      setTgStatusText("Не удалось открыть Telegram. Попробуйте снова.");
+    }
+  };
+
+  useEffect(() => {
+    if (!tgWaiting || !tgSessionId) return;
+    let stopped = false;
+    const poll = async () => {
+      if (stopped) return;
+      if (tgExpiresAtMs > 0 && Date.now() >= tgExpiresAtMs) {
+        setTgWaiting(false);
+        setTgStatusText("Время ожидания истекло. Попробуйте снова.");
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/auth/telegram-session/status?sessionId=${encodeURIComponent(tgSessionId)}`,
+          { cache: "no-store" }
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          status?: "pending" | "confirmed" | "expired" | "error";
+          canCompleteLogin?: boolean;
+          customToken?: string;
+        };
+        if (data.status === "expired") {
+          setTgWaiting(false);
+          setTgStatusText("Время ожидания истекло. Попробуйте снова.");
+          return;
+        }
+        if (data.status === "confirmed" && data.canCompleteLogin && data.customToken) {
+          setTgStatusText("Подтверждено. Выполняем вход...");
+          await signInWithCustomToken(auth, data.customToken);
+          setTgWaiting(false);
+          return;
+        }
+      } catch (e) {
+        console.error("[register] telegram session poll failed", e);
+      }
+      window.setTimeout(() => {
+        void poll();
+      }, 2500);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+    };
+  }, [tgWaiting, tgSessionId, tgExpiresAtMs]);
 
   const loadRegistrationStatus = async (idToken: string) => {
     console.log("[register] api request start: /api/auth/registration-status");
@@ -432,28 +484,29 @@ export default function RegisterPage() {
         <h1 style={titleStyle}>Регистрация</h1>
 
         <div id="telegram-login-section" style={telegramBlockStyle}>
-          <div style={telegramTitleStyle}>Быстрый вход через Telegram</div>
-          <div id="telegram-login-widget" style={telegramWidgetHostStyle} />
+          <div style={telegramTitleStyle}>Вход через Telegram</div>
+          <div style={telegramStepsStyle}>
+            1. Нажмите кнопку ниже
+            <br />
+            2. В Telegram нажмите Start
+            <br />
+            3. Вернитесь на сайт - вход завершится автоматически
+          </div>
+          <button
+            type="button"
+            onClick={() => void openTelegramBotLogin()}
+            disabled={tgWaiting}
+            style={{
+              ...primaryButton,
+              opacity: tgWaiting ? 0.7 : 1,
+              cursor: tgWaiting ? "not-allowed" : "pointer",
+            }}
+          >
+            Войти через Telegram
+          </button>
+          {tgStatusText ? <div style={telegramStatusStyle}>{tgStatusText}</div> : null}
           <p style={dividerTextStyle}>или войдите по email</p>
         </div>
-
-        {telegramLoginError ? (
-          <div style={{ ...altRecoveryCardStyle, marginBottom: 12 }}>
-            <div style={altRecoveryTitleStyle}>Не удалось войти через Telegram</div>
-            <button
-              type="button"
-              onClick={() =>
-                document.getElementById("email-register-block")?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                })
-              }
-              style={altRecoveryButtonStyle}
-            >
-              Получить код на email
-            </button>
-          </div>
-        ) : null}
 
         <div id="email-register-block">
           <input
@@ -580,11 +633,18 @@ const telegramTitleStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
-const telegramWidgetHostStyle: React.CSSProperties = {
-  minHeight: "44px",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
+const telegramStepsStyle: React.CSSProperties = {
+  fontSize: "14px",
+  lineHeight: 1.45,
+  color: "#374151",
+  marginBottom: "12px",
+};
+
+const telegramStatusStyle: React.CSSProperties = {
+  marginTop: "10px",
+  marginBottom: "8px",
+  fontSize: "13px",
+  color: "#1f2937",
 };
 
 const dividerTextStyle: React.CSSProperties = {

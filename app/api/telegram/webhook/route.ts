@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import { getStats } from "@/lib/server/getStats";
+import { provisionTelegramLoginUser } from "@/lib/server/provisionTelegramLoginUser";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
+import { confirmTelegramLoginSession } from "@/lib/server/telegramLoginSession";
 import { telegramGetWebhookInfo } from "@/lib/server/telegramBotApiDebug";
 
 export const runtime = "nodejs";
@@ -9,6 +12,12 @@ type TelegramChat = { id?: number };
 type TelegramMessage = {
   text?: string;
   chat?: TelegramChat;
+  from?: {
+    id?: number;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
   [key: string]: unknown;
 };
 type TelegramUpdate = { message?: TelegramMessage };
@@ -27,6 +36,15 @@ function safeJsonStringify(value: unknown, maxLen = MESSAGE_JSON_MAX): string {
       detail: e instanceof Error ? e.message : String(e),
     });
   }
+}
+
+function parseStartSessionId(textRaw: string): string | null {
+  const parts = String(textRaw || "").trim().split(/\s+/);
+  if (!parts[0] || parts[0].toLowerCase() !== "/start") return null;
+  const payload = String(parts[1] || "").trim();
+  if (!payload.startsWith("login_")) return null;
+  const sid = payload.slice("login_".length).trim();
+  return sid || null;
 }
 
 export async function POST(req: Request) {
@@ -70,6 +88,7 @@ export async function POST(req: Request) {
 
     const textRaw = String(msg.text ?? "");
     const normalized = textRaw.trim().toLowerCase();
+    const sessionIdFromStart = parseStartSessionId(textRaw);
 
     console.log("CHAT ID:", String(chatId));
     console.log("ADMIN ID:", process.env.ADMIN_TELEGRAM_CHAT_ID ?? "(unset)");
@@ -87,6 +106,63 @@ export async function POST(req: Request) {
     }
 
     if (!normalized.startsWith("/stat")) {
+      if (sessionIdFromStart) {
+        const from = msg.from;
+        const telegramUserId = String(from?.id ?? "").replace(/\D/g, "");
+        if (!telegramUserId) {
+          await sendTelegramMessage(
+            String(chatId),
+            "Не удалось подтвердить вход: не найден Telegram user id."
+          );
+          return NextResponse.json({ ok: true });
+        }
+        const app = getAdminApp();
+        const db = getAdminDb();
+        if (!app || !db) {
+          await sendTelegramMessage(
+            String(chatId),
+            "Сервер временно недоступен. Попробуйте снова через минуту."
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        const provision = await provisionTelegramLoginUser({
+          db,
+          app,
+          telegramUserId,
+          telegramUsername: from?.username ?? null,
+          telegramFirstName: from?.first_name ?? null,
+          telegramLastName: from?.last_name ?? null,
+        });
+
+        const confirmed = await confirmTelegramLoginSession(db, {
+          sessionId: sessionIdFromStart,
+          telegramUserId,
+          telegramUsername: from?.username ?? null,
+          telegramFirstName: from?.first_name ?? null,
+          telegramLastName: from?.last_name ?? null,
+          resolvedUid: provision.uid,
+        });
+
+        if (!confirmed.ok) {
+          const text =
+            confirmed.reason === "expired"
+              ? "Сессия входа истекла. Вернитесь на сайт и начните вход заново."
+              : "Сессия входа не найдена или уже использована. Вернитесь на сайт и начните заново.";
+          await sendTelegramMessage(String(chatId), text);
+          return NextResponse.json({ ok: true });
+        }
+
+        await sendTelegramMessage(String(chatId), "Вход подтверждён. Вернитесь на сайт.");
+        return NextResponse.json({ ok: true });
+      }
+
+      if (normalized === "/start") {
+        await sendTelegramMessage(
+          String(chatId),
+          "Бот подключён. Теперь вы можете подтверждать вход через Telegram."
+        );
+      }
       return NextResponse.json({ ok: true });
     }
 

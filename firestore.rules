@@ -63,5 +63,10 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow read, write: if false;
     }
+
+    /// Telegram bot login sessions — только сервер.
+    match /telegram_login_sessions/{sessionId} {
+      allow read, write: if false;
+    }
   }
 }
