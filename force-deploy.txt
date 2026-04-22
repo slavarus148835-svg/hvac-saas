@@ -1,1 +1,1 @@
-trigger real deploy — includes ab0d110 debug secret auth in history
+force deploy after query secret fix
