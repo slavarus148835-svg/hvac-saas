@@ -67,7 +67,7 @@ export default function PublicOfferPage() {
             <br />
             ОГРН: 323265100027350
             <br />
-            Действует на основании ОГРН
+            Действует на основании ОГРН 323265100027350
           </p>
           <p style={p}>
             Расчётный счёт: 40802810400004399213
@@ -90,19 +90,20 @@ export default function PublicOfferPage() {
   );
 }
 
-const page: React.CSSProperties = {
+const page: CSSProperties = {
   minHeight: "100vh",
   background: "#f4f6f8",
   fontFamily: "system-ui, sans-serif",
+  boxSizing: "border-box",
 };
 
 const header: CSSProperties = {
-  padding: "16px 20px",
+  padding: "16px clamp(12px, 4vw, 20px)",
   borderBottom: "1px solid #e5e7eb",
   background: "#fff",
 };
 
-const logoLink: React.CSSProperties = {
+const logoLink: CSSProperties = {
   fontWeight: 800,
   fontSize: "18px",
   color: "#111827",
@@ -112,14 +113,17 @@ const logoLink: React.CSSProperties = {
 const main: CSSProperties = {
   maxWidth: "720px",
   margin: "0 auto",
-  padding: "24px 16px 48px",
+  padding: "24px clamp(12px, 4vw, 20px) 48px",
+  boxSizing: "border-box",
 };
 
 const article: CSSProperties = {
   background: "#fff",
   borderRadius: "20px",
-  padding: "24px 22px",
+  padding: "clamp(16px, 4vw, 24px) clamp(14px, 4vw, 22px)",
   boxShadow: "0 6px 24px rgba(0,0,0,0.06)",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 
 const h1: CSSProperties = {
@@ -140,6 +144,7 @@ const p: CSSProperties = {
   fontSize: "15px",
   lineHeight: 1.55,
   color: "#374151",
+  overflowWrap: "anywhere",
 };
 
 const link: CSSProperties = {

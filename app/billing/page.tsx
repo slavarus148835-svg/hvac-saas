@@ -336,34 +336,32 @@ export default function BillingPage() {
       </div>
 
       {commerce ? (
-        <>
-          <div style={singleCard}>
-            <div style={planBadge}>Полный доступ</div>
-            <h2 style={planTitle}>HVAC SaaS</h2>
-            <p style={planSubtitle}>Калькулятор, прайс, история и кабинет.</p>
-            <ul style={featureList}>
-              <li>Личный кабинет и профиль</li>
-              <li>Калькулятор, история расчётов и прайс</li>
-              <li>Дополнительные услуги и автосохранение расчётов</li>
-            </ul>
-            <div style={{ ...priceRow, justifyContent: showPriceInCommerce ? "space-between" : "flex-end" }}>
-              {showPriceInCommerce ? (
-                <div>
-                  <div style={priceLabel}>Сумма за месяц</div>
-                  <div style={priceValue}>1190 ₽</div>
-                </div>
-              ) : null}
-              <button type="button" onClick={() => void pay()} disabled={paying} style={payButton}>
-                {paying
-                  ? "Переход…"
-                  : paid
-                    ? "Продлить доступ"
-                    : "Оформить доступ"}
-              </button>
-            </div>
+        <div style={singleCard}>
+          <div style={planBadge}>Полный доступ</div>
+          <h2 style={planTitle}>HVAC SaaS</h2>
+          <p style={planSubtitle}>Калькулятор, прайс, история и кабинет.</p>
+          <ul style={featureList}>
+            <li>Личный кабинет и профиль</li>
+            <li>Калькулятор, история расчётов и прайс</li>
+            <li>Дополнительные услуги и автосохранение расчётов</li>
+          </ul>
+          <div style={commercePriceRow}>
+            {showPriceInCommerce ? (
+              <div style={{ minWidth: 0, width: "100%" }}>
+                <div style={priceLabel}>Сумма за месяц</div>
+                <div style={priceValue}>1190 ₽</div>
+              </div>
+            ) : null}
+            <button type="button" onClick={() => void pay()} disabled={paying} style={payButton}>
+              {paying
+                ? "Переход…"
+                : paid
+                  ? "Продлить доступ"
+                  : "Оформить доступ"}
+            </button>
           </div>
 
-          <div style={trustCard}>
+          <div style={trustInset}>
             <h2 style={trustTitle}>Безопасная оплата</h2>
             <p style={trustText}>
               Оплата проходит через платёжную форму Т-Банка — это защищённый платёж, как в обычных
@@ -371,8 +369,6 @@ export default function BillingPage() {
             </p>
             <p style={trustText}>Доступ к сервису активируется автоматически после оплаты.</p>
             <p style={trustText}>
-              <strong>Исполнитель:</strong>
-              <br />
               ИП Танеев Николай Сергеевич
               <br />
               ИНН: 263109142309
@@ -382,7 +378,7 @@ export default function BillingPage() {
               Действует на основании ОГРН
             </p>
             <p style={trustText}>
-              <strong>Контакты:</strong>
+              Контакты:
               <br />
               Email:{" "}
               <a href="mailto:komfort.service.krasnodar@gmail.com" style={trustLink}>
@@ -397,7 +393,7 @@ export default function BillingPage() {
               .
             </p>
           </div>
-        </>
+        </div>
       ) : (
         <div style={softCard}>
           <h2 style={planTitle}>Пока без действий</h2>
@@ -428,9 +424,10 @@ const loadingStyle: React.CSSProperties = {
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: "#f4f6f8",
-  padding: "16px",
+  padding: "12px clamp(12px, 4vw, 20px) 32px",
   maxWidth: "640px",
   margin: "0 auto",
+  boxSizing: "border-box",
 };
 const noticeBanner: React.CSSProperties = {
   marginBottom: "14px",
@@ -487,18 +484,28 @@ const valueStyle: React.CSSProperties = {
 const singleCard: React.CSSProperties = {
   background: "#ffffff",
   borderRadius: "20px",
-  padding: "22px",
+  padding: "clamp(16px, 4vw, 22px)",
   boxShadow: "0 10px 28px rgba(0,0,0,0.05)",
   marginBottom: "16px",
   border: "2px solid #111827",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
-const trustCard: React.CSSProperties = {
-  background: "#f9fafb",
-  borderRadius: "20px",
-  padding: "20px 22px",
-  marginBottom: "16px",
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.04)",
+/** Ряд с ценой и кнопкой: на узком экране колонка, кнопка на всю ширину. */
+const commercePriceRow: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "stretch",
+  gap: "16px",
+  width: "100%",
+  boxSizing: "border-box",
+};
+const trustInset: React.CSSProperties = {
+  marginTop: "20px",
+  paddingTop: "20px",
+  borderTop: "1px solid #e5e7eb",
+  width: "100%",
+  boxSizing: "border-box",
 };
 const trustTitle: React.CSSProperties = {
   margin: "0 0 12px",
@@ -511,11 +518,13 @@ const trustText: React.CSSProperties = {
   fontSize: "14px",
   lineHeight: 1.55,
   color: "#374151",
+  overflowWrap: "anywhere",
 };
 const trustLink: React.CSSProperties = {
   color: "#0369a1",
   textDecoration: "underline",
   fontWeight: 600,
+  wordBreak: "break-word",
 };
 const softCard: React.CSSProperties = {
   background: "#ffffff",
@@ -562,6 +571,9 @@ const payButton: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: 700,
   cursor: "pointer",
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 const bottomButtons: React.CSSProperties = { display: "flex", gap: "10px" };
 const secondaryButtonStyle: React.CSSProperties = {

@@ -58,9 +58,12 @@ function AboutPage() {
           </a>
         </p>
 
-        <h2 style={sectionTitle}>Исполнитель</h2>
         <p style={paraStyle}>
           ИП Танеев Николай Сергеевич
+          <br />
+          ИНН: 263109142309
+          <br />
+          ОГРН: 323265100027350
           <br />
           Действует на основании ОГРН 323265100027350
         </p>
@@ -74,16 +77,19 @@ export default withAuthGuard(AboutPage);
 const pageStyle: CSSProperties = {
   minHeight: "100vh",
   background: "#f4f6f8",
-  padding: "16px",
+  padding: "12px clamp(12px, 4vw, 20px) 32px",
   maxWidth: "720px",
   margin: "0 auto",
+  boxSizing: "border-box",
 };
 
 const cardStyle: CSSProperties = {
   background: "#ffffff",
   borderRadius: "20px",
-  padding: "22px",
+  padding: "clamp(16px, 4vw, 24px)",
   boxShadow: "0 10px 28px rgba(0,0,0,0.06)",
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 
 const backButtonStyle: CSSProperties = {
@@ -116,6 +122,7 @@ const paraStyle: CSSProperties = {
   fontSize: "15px",
   lineHeight: 1.55,
   color: "#374151",
+  overflowWrap: "anywhere",
 };
 
 const linkStyle: CSSProperties = {
