@@ -729,6 +729,22 @@ export default function DashboardPage() {
           );
         })}
       </div>
+
+      <div style={gridStyle}>
+        <button
+          type="button"
+          onClick={() => router.push("/about")}
+          style={{
+            ...menuCardButton,
+            border: "1px solid #eef1f4",
+          }}
+        >
+          <div style={menuTopLine}>
+            <div style={menuTitle}>О сервисе</div>
+          </div>
+          <div style={menuText}>Автор сервиса, цели продукта и контакты</div>
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDocFromServer, setDoc } from "firebase/firestore";
@@ -335,31 +336,68 @@ export default function BillingPage() {
       </div>
 
       {commerce ? (
-        <div style={singleCard}>
-          <div style={planBadge}>Полный доступ</div>
-          <h2 style={planTitle}>HVAC SaaS</h2>
-          <p style={planSubtitle}>Калькулятор, прайс, история и кабинет.</p>
-          <ul style={featureList}>
-            <li>Личный кабинет и профиль</li>
-            <li>Калькулятор, история расчётов и прайс</li>
-            <li>Дополнительные услуги и автосохранение расчётов</li>
-          </ul>
-          <div style={{ ...priceRow, justifyContent: showPriceInCommerce ? "space-between" : "flex-end" }}>
-            {showPriceInCommerce ? (
-              <div>
-                <div style={priceLabel}>Сумма за месяц</div>
-                <div style={priceValue}>1190 ₽</div>
-              </div>
-            ) : null}
-            <button type="button" onClick={() => void pay()} disabled={paying} style={payButton}>
-              {paying
-                ? "Переход…"
-                : paid
-                  ? "Продлить доступ"
-                  : "Оформить доступ"}
-            </button>
+        <>
+          <div style={singleCard}>
+            <div style={planBadge}>Полный доступ</div>
+            <h2 style={planTitle}>HVAC SaaS</h2>
+            <p style={planSubtitle}>Калькулятор, прайс, история и кабинет.</p>
+            <ul style={featureList}>
+              <li>Личный кабинет и профиль</li>
+              <li>Калькулятор, история расчётов и прайс</li>
+              <li>Дополнительные услуги и автосохранение расчётов</li>
+            </ul>
+            <div style={{ ...priceRow, justifyContent: showPriceInCommerce ? "space-between" : "flex-end" }}>
+              {showPriceInCommerce ? (
+                <div>
+                  <div style={priceLabel}>Сумма за месяц</div>
+                  <div style={priceValue}>1190 ₽</div>
+                </div>
+              ) : null}
+              <button type="button" onClick={() => void pay()} disabled={paying} style={payButton}>
+                {paying
+                  ? "Переход…"
+                  : paid
+                    ? "Продлить доступ"
+                    : "Оформить доступ"}
+              </button>
+            </div>
           </div>
-        </div>
+
+          <div style={trustCard}>
+            <h2 style={trustTitle}>Безопасная оплата</h2>
+            <p style={trustText}>
+              Оплата проходит через платёжную форму Т-Банка — это защищённый платёж, как в обычных
+              интернет-магазинах.
+            </p>
+            <p style={trustText}>Доступ к сервису активируется автоматически после оплаты.</p>
+            <p style={trustText}>
+              <strong>Исполнитель:</strong>
+              <br />
+              ИП Танеев Николай Сергеевич
+              <br />
+              ИНН: 263109142309
+              <br />
+              ОГРН: 323265100027350
+              <br />
+              Действует на основании ОГРН
+            </p>
+            <p style={trustText}>
+              <strong>Контакты:</strong>
+              <br />
+              Email:{" "}
+              <a href="mailto:komfort.service.krasnodar@gmail.com" style={trustLink}>
+                komfort.service.krasnodar@gmail.com
+              </a>
+            </p>
+            <p style={trustText}>
+              Оплачивая доступ, вы соглашаетесь с условиями{" "}
+              <Link href="/offer" style={trustLink}>
+                публичной оферты
+              </Link>
+              .
+            </p>
+          </div>
+        </>
       ) : (
         <div style={softCard}>
           <h2 style={planTitle}>Пока без действий</h2>
@@ -453,6 +491,31 @@ const singleCard: React.CSSProperties = {
   boxShadow: "0 10px 28px rgba(0,0,0,0.05)",
   marginBottom: "16px",
   border: "2px solid #111827",
+};
+const trustCard: React.CSSProperties = {
+  background: "#f9fafb",
+  borderRadius: "20px",
+  padding: "20px 22px",
+  marginBottom: "16px",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 4px 14px rgba(0,0,0,0.04)",
+};
+const trustTitle: React.CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: "18px",
+  fontWeight: 800,
+  color: "#111827",
+};
+const trustText: React.CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: "14px",
+  lineHeight: 1.55,
+  color: "#374151",
+};
+const trustLink: React.CSSProperties = {
+  color: "#0369a1",
+  textDecoration: "underline",
+  fontWeight: 600,
 };
 const softCard: React.CSSProperties = {
   background: "#ffffff",
