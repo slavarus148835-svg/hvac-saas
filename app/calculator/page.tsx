@@ -1291,6 +1291,19 @@ function CalculatorPage() {
 
   return (
     <div style={pageStyle}>
+      <div style={calcTgBanner}>
+        <p style={calcTgBannerText}>
+          💡 Монтаж + ремонт: лайфхаки, разборы и обновления сервиса → в канале
+        </p>
+        <a
+          href="https://t.me/hvac_saas"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={calcTgBannerBtn}
+        >
+          Перейти в Telegram
+        </a>
+      </div>
       <div
         data-hvac-report-calc
         aria-hidden
@@ -2043,6 +2056,45 @@ const pageStyle: React.CSSProperties = {
   maxWidth: "980px",
   margin: "0 auto",
   overflowX: "hidden",
+};
+
+const calcTgBanner: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px 12px",
+  marginBottom: "14px",
+  padding: "10px 12px",
+  borderRadius: "14px",
+  background: "#eef2ff",
+  border: "1px solid #c7d2fe",
+  boxSizing: "border-box",
+};
+
+const calcTgBannerText: React.CSSProperties = {
+  margin: 0,
+  flex: "1 1 200px",
+  minWidth: 0,
+  fontSize: "14px",
+  lineHeight: 1.45,
+  color: "#312e81",
+  fontWeight: 600,
+};
+
+const calcTgBannerBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "0 0 auto",
+  padding: "8px 14px",
+  borderRadius: "12px",
+  background: "#4f46e5",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: 700,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const calcBreakdownLight: React.CSSProperties = {

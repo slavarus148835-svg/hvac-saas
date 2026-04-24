@@ -67,6 +67,20 @@ function AboutPage() {
           <br />
           Действует на основании ОГРН 323265100027350
         </p>
+
+        <div style={tgSoftBlock}>
+          <p style={tgSoftText}>
+            Следи за обновлениями и полезной информацией:{" "}
+            <a
+              href="https://t.me/hvac_saas"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={linkStyle}
+            >
+              https://t.me/hvac_saas
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -128,4 +142,19 @@ const paraStyle: CSSProperties = {
 const linkStyle: CSSProperties = {
   color: "#0369a1",
   textDecoration: "underline",
+};
+
+const tgSoftBlock: CSSProperties = {
+  marginTop: "8px",
+  padding: "14px 16px",
+  borderRadius: "14px",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+};
+
+const tgSoftText: CSSProperties = {
+  margin: 0,
+  fontSize: "14px",
+  lineHeight: 1.55,
+  color: "#475569",
 };

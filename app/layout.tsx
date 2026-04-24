@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ReportProblemFabGate } from "@/components/ReportProblemFabGate";
 import { SessionMonitor } from "@/components/SessionMonitor";
 import { ClientCopyProtection } from "@/components/ClientCopyProtection";
 import "./globals.css";
@@ -35,7 +34,6 @@ export default function RootLayout({
         {children}
         <SessionMonitor />
         <ClientCopyProtection />
-        <ReportProblemFabGate />
       </body>
     </html>
   );

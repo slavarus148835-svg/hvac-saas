@@ -420,6 +420,25 @@ export default function DashboardPage() {
 
   return (
     <div style={pageStyle}>
+      <div style={dashChannelCard}>
+        <div style={dashChannelTitle}>📌 Канал для монтажников</div>
+        <p style={dashChannelLead}>Я делюсь:</p>
+        <ul style={dashChannelList}>
+          <li>лайфхаками по работе</li>
+          <li>разбором ремонта и диагностики</li>
+          <li>обновлениями сервиса</li>
+          <li>отвечаю на вопросы</li>
+        </ul>
+        <a
+          href="https://t.me/hvac_saas"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={dashChannelBtn}
+        >
+          Открыть канал
+        </a>
+      </div>
+
       {showPaymentReturnBanner ? (
         <div
           style={{
@@ -749,7 +768,57 @@ export default function DashboardPage() {
   );
 }
 
-const pageStyle: React.CSSProperties = { minHeight: "100vh", background: "#f4f6f8", padding: "16px", maxWidth: "920px", margin: "0 auto" };
+const dashChannelCard: React.CSSProperties = {
+  marginBottom: "14px",
+  padding: "14px 16px",
+  borderRadius: "16px",
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  boxSizing: "border-box",
+};
+const dashChannelTitle: React.CSSProperties = {
+  fontSize: "16px",
+  fontWeight: 800,
+  color: "#14532d",
+  marginBottom: "8px",
+};
+const dashChannelLead: React.CSSProperties = {
+  margin: "0 0 6px",
+  fontSize: "14px",
+  fontWeight: 600,
+  color: "#166534",
+};
+const dashChannelList: React.CSSProperties = {
+  margin: "0 0 12px",
+  paddingLeft: "20px",
+  fontSize: "14px",
+  lineHeight: 1.5,
+  color: "#15803d",
+};
+const dashChannelBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  maxWidth: "280px",
+  padding: "10px 16px",
+  borderRadius: "12px",
+  background: "#15803d",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: 700,
+  textDecoration: "none",
+  boxSizing: "border-box",
+};
+
+const pageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: "#f4f6f8",
+  padding: "12px clamp(12px, 4vw, 16px)",
+  maxWidth: "920px",
+  margin: "0 auto",
+  boxSizing: "border-box",
+};
 const loadingStyle: React.CSSProperties = { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" };
 const topCard: React.CSSProperties = { background: "#ffffff", borderRadius: "20px", padding: "20px", boxShadow: "0 10px 28px rgba(0,0,0,0.06)", marginBottom: "16px" };
 const topHeader: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", marginBottom: "16px" };
