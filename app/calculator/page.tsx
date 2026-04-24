@@ -219,6 +219,45 @@ function minOneMeter(value: number) {
   return value > 0 ? Math.max(1, value) : 0;
 }
 
+/** Парсинг метража штробы: цифры и одна точка/запятая, верхняя граница max. */
+function parseStrobaMetersInput(raw: string, max: number): number {
+  const t = String(raw ?? "")
+    .trim()
+    .replace(",", ".")
+    .replace(/[^\d.]/g, "");
+  if (!t || t === ".") return 0;
+  const firstDot = t.indexOf(".");
+  const cleaned =
+    firstDot === -1 ? t : t.slice(0, firstDot + 1) + t.slice(firstDot + 1).replace(/\./g, "");
+  const n = parseFloat(cleaned);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, max);
+}
+
+function sanitizeDecimalMetersString(raw: string, max: number): string {
+  const t = String(raw ?? "")
+    .trim()
+    .replace(",", ".")
+    .replace(/[^\d.]/g, "");
+  if (!t) return "";
+  const firstDot = t.indexOf(".");
+  let cleaned =
+    firstDot === -1 ? t : t.slice(0, firstDot + 1) + t.slice(firstDot + 1).replace(/\./g, "");
+  const n = parseFloat(cleaned);
+  if (!Number.isFinite(n)) return cleaned === "." ? "0." : cleaned;
+  if (n > max) return String(max);
+  return cleaned;
+}
+
+/**
+ * Метры штробы в расчёт: 0 → 0; (0,1) → 1; ≥ 1 → фактические метры (без округления вверх до целого).
+ */
+function chargedStrobaMetersForBilling(meters: number): number {
+  if (meters <= 0) return 0;
+  if (meters < 1) return 1;
+  return meters;
+}
+
 function chargedFloorsFromSecond(value: number) {
   return value >= 2 ? value - 1 : 0;
 }
@@ -557,6 +596,33 @@ function CalculatorPage() {
     }
   }
 
+  function onStrobaMetersFieldChange(
+    key: string,
+    raw: string,
+    max: number,
+    warnAt: number,
+    setter: (value: string) => void
+  ) {
+    const hadInvalid = /[^\d.,\s]/.test(String(raw || "").replace(/\s/g, ""));
+    const next = sanitizeDecimalMetersString(raw, max);
+    setter(next);
+
+    if (String(raw || "").trim() !== "" && next === "" && String(raw || "").trim() !== ".") {
+      setError(key, "Введите число от 0, можно с десятичной точкой или запятой");
+    } else if (hadInvalid && next !== "") {
+      setError(key, "Допустимы только цифры, точка или запятая");
+    } else {
+      clearError(key);
+    }
+
+    const n = parseStrobaMetersInput(next || "0", max);
+    if (next !== "" && Number.isFinite(n) && n >= warnAt) {
+      setWarn(key, "Значение выглядит необычно большим — проверьте, что ввели верно");
+    } else {
+      clearWarn(key);
+    }
+  }
+
   function onMoneyFieldChange(
     key: string,
     raw: string,
@@ -599,9 +665,7 @@ function CalculatorPage() {
     const manualDismantlingCostNum = Number(
       sanitizeNonNegativeMoneyString(manualDismantlingCost, MAX_MONEY) || 0
     );
-    const strobaMetersNum = Number(
-      sanitizeNonNegativeIntString(strobaMeters, MAX_STROBA_METERS) || 0
-    );
+    const strobaMetersNum = parseStrobaMetersInput(strobaMeters, MAX_STROBA_METERS);
     const cable40MetersNum = Number(
       sanitizeNonNegativeIntString(cable40Meters, MAX_CABLE_METERS) || 0
     );
@@ -614,7 +678,7 @@ function CalculatorPage() {
     const routePaidMeters = Math.max(0, routeMetersNum - giftM);
 
     const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
-    const chargedStrobaMeters = minOneMeter(strobaMetersNum);
+    const chargedStrobaMeters = chargedStrobaMetersForBilling(strobaMetersNum);
     const chargedCable40Meters = minOneMeter(cable40MetersNum);
     const chargedCable16Meters = minOneMeter(cable16MetersNum);
 
@@ -701,7 +765,7 @@ function CalculatorPage() {
       items.push({
         title: `Штробление × ${chargedStrobaMeters} м`,
         amount: chargedStrobaMeters * strobaPricePerMeter,
-        note: `Цена за 1 м: ${fmt(strobaPricePerMeter)}. Штроба считается минимум от 1 м`,
+        note: `Цена за 1 м: ${fmt(strobaPricePerMeter)}. От 0 до 1 м (не включая 1) — в расчёт 1 м; от 1 м — по введённым метрам`,
       });
     }
 
@@ -1493,11 +1557,14 @@ function CalculatorPage() {
               </select>
             </Label>
 
-            <Label text="Штроба, м" note="Штроба считается минимум от 1 м">
+            <Label
+              text="Штроба, м"
+              note="Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту без округления вверх до целого"
+            >
             <input
                 value={strobaMeters}
                 onChange={(e) =>
-                  onIntFieldChange(
+                  onStrobaMetersFieldChange(
                     "strobaMeters",
                     e.target.value,
                     MAX_STROBA_METERS,
@@ -1506,7 +1573,7 @@ function CalculatorPage() {
                   )
                 }
               style={inputStyle}
-              inputMode="numeric"
+              inputMode="decimal"
             />
           </Label>
             <FieldMessage error={fieldErrors.strobaMeters} warning={fieldWarnings.strobaMeters} />
