@@ -52,6 +52,28 @@ export async function sendVerificationCodeEmail(params: { to: string; code: stri
   }
 }
 
+/** Письмо с 6-значным кодом для восстановления пароля. */
+export async function sendPasswordResetCodeEmail(params: { to: string; code: string }) {
+  const transporter = createGmailVerificationTransporter();
+  const user = getGmailSmtpUser();
+  const text = [
+    `Ваш код восстановления пароля: ${params.code}`,
+    "Код действует 10 минут.",
+    "Если вы не запрашивали восстановление, просто игнорируйте это письмо.",
+  ].join("\n");
+  try {
+    await transporter.sendMail({
+      from: `Калькулятор кондиционеров <${user}>`,
+      to: params.to,
+      subject: "Код восстановления пароля HVAC SaaS",
+      text,
+    });
+  } catch (error) {
+    console.error("PASSWORD RESET EMAIL SEND ERROR:", error);
+    throw new Error("Ошибка отправки email");
+  }
+}
+
 /** Простое письмо (напоминание о незавершённом входе), только если SMTP настроен. */
 export async function sendPlainGmailEmail(params: {
   to: string;
