@@ -17,34 +17,104 @@ export function getGmailSmtpPass(): string {
 }
 
 export function isGmailVerificationSmtpConfigured(): boolean {
-  return getGmailSmtpPass().length > 0;
+  return (
+    String(process.env.SMTP_HOST || "").trim().length > 0 ||
+    String(process.env.SMTP_USER || "").trim().length > 0 ||
+    getGmailSmtpPass().length > 0
+  );
+}
+
+export function getSmtpHost(): string {
+  return String(process.env.SMTP_HOST || "").trim() || GMAIL_HOST;
+}
+
+export function getSmtpPort(): number {
+  const fromEnv = Number(String(process.env.SMTP_PORT || "").trim());
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.trunc(fromEnv);
+  return GMAIL_PORT;
+}
+
+export function getEmailFrom(): string {
+  const fromEnv = String(process.env.EMAIL_FROM || "").trim();
+  const smtpUser = String(process.env.SMTP_USER || "").trim();
+  if (fromEnv) return fromEnv;
+  if (smtpUser) return smtpUser;
+  return getGmailSmtpUser();
+}
+
+export function getSmtpEnvStatus() {
+  return {
+    SMTP_HOST: String(process.env.SMTP_HOST || "").trim().length > 0,
+    SMTP_PORT: String(process.env.SMTP_PORT || "").trim().length > 0,
+    SMTP_USER: String(process.env.SMTP_USER || "").trim().length > 0,
+    SMTP_PASS: String(process.env.SMTP_PASS || process.env.GMAIL_SMTP_PASS || "").trim().length > 0,
+    EMAIL_FROM: String(process.env.EMAIL_FROM || "").trim().length > 0,
+  };
 }
 
 export function createGmailVerificationTransporter() {
+  const host = getSmtpHost();
+  const port = getSmtpPort();
+  const secure = port === 465;
+  const user = String(process.env.SMTP_USER || "").trim() || getGmailSmtpUser();
+  const pass = getGmailSmtpPass();
   return nodemailer.createTransport({
-    host: GMAIL_HOST,
-    port: GMAIL_PORT,
-    secure: false,
+    host,
+    port,
+    secure,
     auth: {
-      user: getGmailSmtpUser(),
-      pass: getGmailSmtpPass(),
+      user,
+      pass,
     },
     connectionTimeout: 10000,
   });
 }
 
+async function sendCodeEmail(params: {
+  to: string;
+  code: string;
+  subject: string;
+  text: string;
+  logPrefix: string;
+}): Promise<{ messageId: string }> {
+  const transporter = createGmailVerificationTransporter();
+  const envStatus = getSmtpEnvStatus();
+  console.log(`[${params.logPrefix}] SMTP_HOST exists`, envStatus.SMTP_HOST);
+  console.log(`[${params.logPrefix}] SMTP_USER exists`, envStatus.SMTP_USER);
+  console.log(`[${params.logPrefix}] SMTP_PASS exists`, envStatus.SMTP_PASS);
+  console.log(`[${params.logPrefix}] EMAIL_FROM exists`, envStatus.EMAIL_FROM);
+
+  try {
+    const verifyResult = await transporter.verify();
+    console.log(`[${params.logPrefix}] transporter.verify result`, verifyResult);
+  } catch (error) {
+    console.error(`[${params.logPrefix}] transporter.verify error`, error);
+    throw error;
+  }
+
+  const from = getEmailFrom();
+  const info = await transporter.sendMail({
+    from: `Калькулятор кондиционеров <${from}>`,
+    to: params.to,
+    subject: params.subject,
+    text: params.text,
+  });
+  const messageId = String((info as { messageId?: unknown }).messageId || "");
+  console.log(`[${params.logPrefix}] sendMail result messageId`, messageId || null);
+  return { messageId };
+}
+
 /**
  * Отправка кода подтверждения регистрации только через Gmail SMTP (nodemailer).
  */
-export async function sendVerificationCodeEmail(params: { to: string; code: string }) {
-  const transporter = createGmailVerificationTransporter();
-  const user = getGmailSmtpUser();
+export async function sendVerificationCodeEmail(params: { to: string; code: string }): Promise<{ messageId: string }> {
   try {
-    await transporter.sendMail({
-      from: `Калькулятор кондиционеров <${user}>`,
+    return await sendCodeEmail({
       to: params.to,
+      code: params.code,
       subject: "Код подтверждения",
       text: `Ваш код подтверждения: ${params.code}`,
+      logPrefix: "send-verification-code",
     });
   } catch (error) {
     console.error("EMAIL SEND ERROR:", error);
@@ -53,23 +123,41 @@ export async function sendVerificationCodeEmail(params: { to: string; code: stri
 }
 
 /** Письмо с 6-значным кодом для восстановления пароля. */
-export async function sendPasswordResetCodeEmail(params: { to: string; code: string }) {
-  const transporter = createGmailVerificationTransporter();
-  const user = getGmailSmtpUser();
+export async function sendPasswordResetCodeEmail(params: {
+  to: string;
+  code: string;
+}): Promise<{ messageId: string }> {
   const text = [
     `Ваш код восстановления пароля: ${params.code}`,
     "Код действует 10 минут.",
     "Если вы не запрашивали восстановление, просто игнорируйте это письмо.",
   ].join("\n");
   try {
-    await transporter.sendMail({
-      from: `Калькулятор кондиционеров <${user}>`,
+    return await sendCodeEmail({
       to: params.to,
+      code: params.code,
       subject: "Код восстановления пароля HVAC SaaS",
       text,
+      logPrefix: "send-password-reset-code",
     });
   } catch (error) {
     console.error("PASSWORD RESET EMAIL SEND ERROR:", error);
+    throw new Error("Ошибка отправки email");
+  }
+}
+
+/** Тестовое письмо восстановления пароля (для debug endpoint). */
+export async function sendPasswordResetTestEmail(params: { to: string }): Promise<{ messageId: string }> {
+  try {
+    return await sendCodeEmail({
+      to: params.to,
+      code: "000000",
+      subject: "Код восстановления пароля HVAC SaaS",
+      text: "TEST PASSWORD RESET EMAIL",
+      logPrefix: "send-password-reset-test",
+    });
+  } catch (error) {
+    console.error("PASSWORD RESET TEST EMAIL SEND ERROR:", error);
     throw new Error("Ошибка отправки email");
   }
 }

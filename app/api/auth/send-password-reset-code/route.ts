@@ -10,6 +10,8 @@ import {
 } from "@/lib/server/emailCodeConstants";
 import { generateSixDigitCode, getEmailCodePepper, hashEmailCode } from "@/lib/server/emailCodeCrypto";
 import {
+  getEmailFrom,
+  getSmtpEnvStatus,
   isGmailVerificationSmtpConfigured,
   sendPasswordResetCodeEmail,
 } from "@/lib/server/gmailNodemailer";
@@ -29,6 +31,7 @@ function passwordResetDocId(email: string): string {
 }
 
 export async function POST(req: Request) {
+  console.log("[PASSWORD_RESET_CODE_REQUEST] start");
   let body: { email?: string };
   try {
     body = (await req.json()) as { email?: string };
@@ -37,6 +40,7 @@ export async function POST(req: Request) {
   }
 
   const email = normalizeEmail(body.email);
+  console.log("[PASSWORD_RESET_CODE_REQUEST] email normalized", email);
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ ok: false, error: "invalid_email" }, { status: 400 });
   }
@@ -51,8 +55,26 @@ export async function POST(req: Request) {
   if (!db || !app) {
     return NextResponse.json({ ok: false, error: "server_unavailable" }, { status: 503 });
   }
+  const smtpStatus = getSmtpEnvStatus();
+  console.log("[PASSWORD_RESET_CODE_REQUEST] SMTP_HOST exists", smtpStatus.SMTP_HOST);
+  console.log("[PASSWORD_RESET_CODE_REQUEST] SMTP_USER exists", smtpStatus.SMTP_USER);
+  console.log("[PASSWORD_RESET_CODE_REQUEST] SMTP_PASS exists", smtpStatus.SMTP_PASS);
+  console.log("[PASSWORD_RESET_CODE_REQUEST] EMAIL_FROM exists", smtpStatus.EMAIL_FROM);
+  console.log("[PASSWORD_RESET_CODE_REQUEST] EMAIL_FROM value", getEmailFrom());
   if (!isGmailVerificationSmtpConfigured()) {
-    return NextResponse.json({ ok: false, error: "smtp_unavailable" }, { status: 503 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "smtp_unavailable",
+        missingEnv: {
+          SMTP_HOST: !smtpStatus.SMTP_HOST,
+          SMTP_USER: !smtpStatus.SMTP_USER,
+          SMTP_PASS: !smtpStatus.SMTP_PASS,
+          EMAIL_FROM: !smtpStatus.EMAIL_FROM,
+        },
+      },
+      { status: 503 }
+    );
   }
 
   const now = Date.now();
@@ -104,9 +126,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    await sendPasswordResetCodeEmail({ to: email, code: plain });
-  } catch {
-    return NextResponse.json({ ok: false, error: "send_failed" }, { status: 502 });
+    const sent = await sendPasswordResetCodeEmail({ to: email, code: plain });
+    console.log("[PASSWORD_RESET_CODE_REQUEST] sendMail result messageId", sent.messageId || null);
+  } catch (error) {
+    console.error("[PASSWORD_RESET_CODE_REQUEST] sendMail error full", error);
+    return NextResponse.json(
+      { ok: false, error: "send_failed", detail: error instanceof Error ? error.message : String(error) },
+      { status: 502 }
+    );
   }
 
   return NextResponse.json(
