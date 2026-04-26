@@ -1294,6 +1294,8 @@ function CalculatorPage() {
       <div style={calcTgBanner}>
         <p style={calcTgBannerText}>
           💡 Монтаж + ремонт: лайфхаки, разборы и обновления сервиса → в канале
+          <br />
+          Инструкция по установке и использованию приложения — в канале
         </p>
         <a
           href="https://t.me/hvac_saas"
