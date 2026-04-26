@@ -219,8 +219,8 @@ function minOneMeter(value: number) {
   return value > 0 ? Math.max(1, value) : 0;
 }
 
-/** Парсинг метража штробы: цифры и одна точка/запятая, верхняя граница max. */
-function parseStrobaMetersInput(raw: string, max: number): number {
+/** Парсинг метража (трасса, штроба): цифры и одна точка/запятая, верхняя граница max. */
+function parseDecimalMetersInput(raw: string, max: number): number {
   const t = String(raw ?? "")
     .trim()
     .replace(",", ".")
@@ -250,9 +250,9 @@ function sanitizeDecimalMetersString(raw: string, max: number): string {
 }
 
 /**
- * Метры штробы в расчёт: 0 → 0; (0,1) → 1; ≥ 1 → фактические метры (без округления вверх до целого).
+ * Метры (трасса, штроба) в расчёт: 0 → 0; (0,1) → 1; ≥ 1 → фактические метры (без округления вверх до целого).
  */
-function chargedStrobaMetersForBilling(meters: number): number {
+function chargedMetersForBilling(meters: number): number {
   if (meters <= 0) return 0;
   if (meters < 1) return 1;
   return meters;
@@ -596,7 +596,7 @@ function CalculatorPage() {
     }
   }
 
-  function onStrobaMetersFieldChange(
+  function onDecimalMetersFieldChange(
     key: string,
     raw: string,
     max: number,
@@ -615,7 +615,7 @@ function CalculatorPage() {
       clearError(key);
     }
 
-    const n = parseStrobaMetersInput(next || "0", max);
+    const n = parseDecimalMetersInput(next || "0", max);
     if (next !== "" && Number.isFinite(n) && n >= warnAt) {
       setWarn(key, "Значение выглядит необычно большим — проверьте, что ввели верно");
     } else {
@@ -651,7 +651,8 @@ function CalculatorPage() {
   }
 
   const result = useMemo(() => {
-    const routeMetersNum = Number(sanitizeNonNegativeIntString(routeMeters, MAX_ROUTE_METERS) || 0);
+    const routeMetersRaw = parseDecimalMetersInput(routeMeters, MAX_ROUTE_METERS);
+    const chargedRouteMeters = chargedMetersForBilling(routeMetersRaw);
     const extraHolesNormalNum = Number(
       sanitizeNonNegativeIntString(extraHolesNormal, MAX_HOLES) || 0
     );
@@ -665,7 +666,7 @@ function CalculatorPage() {
     const manualDismantlingCostNum = Number(
       sanitizeNonNegativeMoneyString(manualDismantlingCost, MAX_MONEY) || 0
     );
-    const strobaMetersNum = parseStrobaMetersInput(strobaMeters, MAX_STROBA_METERS);
+    const strobaMetersNum = parseDecimalMetersInput(strobaMeters, MAX_STROBA_METERS);
     const cable40MetersNum = Number(
       sanitizeNonNegativeIntString(cable40Meters, MAX_CABLE_METERS) || 0
     );
@@ -675,10 +676,10 @@ function CalculatorPage() {
     const percentDiscountNum = Number(sanitizeNonNegativeIntString(percentDiscount, 100) || 0);
 
     const giftM = Math.max(0, Math.floor(Number(giftRouteMeters) || 0));
-    const routePaidMeters = Math.max(0, routeMetersNum - giftM);
+    const routePaidMeters = Math.max(0, chargedRouteMeters - giftM);
 
     const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
-    const chargedStrobaMeters = chargedStrobaMetersForBilling(strobaMetersNum);
+    const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
     const chargedCable40Meters = minOneMeter(cable40MetersNum);
     const chargedCable16Meters = minOneMeter(cable16MetersNum);
 
@@ -737,9 +738,9 @@ function CalculatorPage() {
       });
     }
 
-    if (routeMetersNum > 0) {
+    if (chargedRouteMeters > 0) {
       items.push({
-        title: `Трасса × ${routeMetersNum} м`,
+        title: `Трасса × ${chargedRouteMeters} м`,
         amount: routePaidMeters * routePricePerMeter,
         note: `Цена за 1 м: ${fmt(routePricePerMeter)}. В подарок ${giftM} м, к оплате ${routePaidMeters} м`,
       });
@@ -1483,21 +1484,21 @@ function CalculatorPage() {
 
           <Label
             text="Трасса, м"
-          note={`К оплате считается: введённые метры минус «в подарок» (${giftRouteMeters} м из личного прайса)`}
+            note={`Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту. К оплате: метры минус «в подарок» (${giftRouteMeters} м из личного прайса)`}
           >
             <input
               value={routeMeters}
-            onChange={(e) =>
-              onIntFieldChange(
-                "routeMeters",
-                e.target.value,
-                MAX_ROUTE_METERS,
-                WARN_ROUTE_METERS,
-                setRouteMeters
-              )
-            }
+              onChange={(e) =>
+                onDecimalMetersFieldChange(
+                  "routeMeters",
+                  e.target.value,
+                  MAX_ROUTE_METERS,
+                  WARN_ROUTE_METERS,
+                  setRouteMeters
+                )
+              }
               style={inputStyle}
-              inputMode="numeric"
+              inputMode="decimal"
             />
           </Label>
         <FieldMessage error={fieldErrors.routeMeters} warning={fieldWarnings.routeMeters} />
@@ -1579,7 +1580,7 @@ function CalculatorPage() {
             <input
                 value={strobaMeters}
                 onChange={(e) =>
-                  onStrobaMetersFieldChange(
+                  onDecimalMetersFieldChange(
                     "strobaMeters",
                     e.target.value,
                     MAX_STROBA_METERS,
