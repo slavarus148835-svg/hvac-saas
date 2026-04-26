@@ -105,15 +105,23 @@ async function sendCodeEmail(params: {
 }
 
 /**
- * Отправка кода подтверждения регистрации только через Gmail SMTP (nodemailer).
+ * Отправка 6-значного кода через тот же SMTP-транспорт, что и регистрация.
+ * Для восстановления пароля передайте subject и text — логируется как send-verification-code.
  */
-export async function sendVerificationCodeEmail(params: { to: string; code: string }): Promise<{ messageId: string }> {
+export async function sendVerificationCodeEmail(params: {
+  to: string;
+  code: string;
+  subject?: string;
+  text?: string;
+}): Promise<{ messageId: string }> {
+  const subject = params.subject ?? "Код подтверждения";
+  const text = params.text ?? `Ваш код подтверждения: ${params.code}`;
   try {
     return await sendCodeEmail({
       to: params.to,
       code: params.code,
-      subject: "Код подтверждения",
-      text: `Ваш код подтверждения: ${params.code}`,
+      subject,
+      text,
       logPrefix: "send-verification-code",
     });
   } catch (error) {
@@ -122,44 +130,14 @@ export async function sendVerificationCodeEmail(params: { to: string; code: stri
   }
 }
 
-/** Письмо с 6-значным кодом для восстановления пароля. */
-export async function sendPasswordResetCodeEmail(params: {
-  to: string;
-  code: string;
-}): Promise<{ messageId: string }> {
-  const text = [
-    `Ваш код восстановления пароля: ${params.code}`,
-    "Код действует 10 минут.",
-    "Если вы не запрашивали восстановление, просто игнорируйте это письмо.",
-  ].join("\n");
-  try {
-    return await sendCodeEmail({
-      to: params.to,
-      code: params.code,
-      subject: "Код восстановления пароля HVAC SaaS",
-      text,
-      logPrefix: "send-password-reset-code",
-    });
-  } catch (error) {
-    console.error("PASSWORD RESET EMAIL SEND ERROR:", error);
-    throw new Error("Ошибка отправки email");
-  }
-}
-
-/** Тестовое письмо восстановления пароля (для debug endpoint). */
+/** Тестовое письмо SMTP (debug): тот же путь, что и регистрация/код. */
 export async function sendPasswordResetTestEmail(params: { to: string }): Promise<{ messageId: string }> {
-  try {
-    return await sendCodeEmail({
-      to: params.to,
-      code: "000000",
-      subject: "Код восстановления пароля HVAC SaaS",
-      text: "TEST PASSWORD RESET EMAIL",
-      logPrefix: "send-password-reset-test",
-    });
-  } catch (error) {
-    console.error("PASSWORD RESET TEST EMAIL SEND ERROR:", error);
-    throw new Error("Ошибка отправки email");
-  }
+  return sendVerificationCodeEmail({
+    to: params.to,
+    code: "000000",
+    subject: "Код восстановления пароля HVAC SaaS",
+    text: "TEST PASSWORD RESET EMAIL",
+  });
 }
 
 /** Простое письмо (напоминание о незавершённом входе), только если SMTP настроен. */

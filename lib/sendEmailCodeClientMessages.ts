@@ -18,9 +18,16 @@ export function formatSendEmailCodeApiError(parsed: {
     case "missing_smtp_env":
       return "Заданы не все переменные SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM)";
     case "smtp_env_incomplete":
+    case "smtp_unavailable":
       return detail
         ? `Неполные или неверные настройки SMTP: ${detail}`
         : "Неполные или неверные настройки SMTP (проверьте переменные на сервере)";
+    case "server_unavailable":
+      return detail
+        ? `Сервер временно недоступен (${detail})`
+        : "Сервер временно недоступен. Попробуйте позже.";
+    case "send_failed":
+      return detail ? `Не удалось отправить письмо: ${detail}` : "Не удалось отправить письмо";
     case "missing_email_from":
       return "Не задан EMAIL_FROM (адрес отправителя для Resend/SMTP)";
     case "resend_provider_failed":

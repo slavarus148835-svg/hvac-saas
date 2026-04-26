@@ -52,10 +52,12 @@ export default function ResetPasswordPage() {
     setStatus("idle");
     setMessage("");
     try {
+      const payload = { email: trimmed };
+      console.log("[reset-password] POST /api/auth/send-password-reset-code", { payload });
       const res = await fetch("/api/auth/send-password-reset-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmed }),
+        body: JSON.stringify(payload),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -63,6 +65,7 @@ export default function ResetPasswordPage() {
         error?: string;
         detail?: string;
       };
+      console.log("[reset-password] response", res.status, data);
       if (!res.ok || !data.ok) {
         const maybe = formatSendEmailCodeApiError(data as { error?: string; detail?: string });
         throw new Error(maybe || "Не удалось отправить код.");
