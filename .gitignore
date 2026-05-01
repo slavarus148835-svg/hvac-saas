@@ -53,3 +53,4 @@ functions/lib
 .vercel
 
 .vercel
+.env*.local

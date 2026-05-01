@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildTelegramStatsReportText } from "@/lib/server/buildTelegramStatsReportText";
 import { getReport } from "@/lib/server/getStatsReport";
+import { buildTrialStatsTelegramBlock, getTrialStats } from "@/lib/server/getTrialStats";
 import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
 
@@ -16,12 +17,17 @@ export async function GET(req: Request) {
   }
 
   const report = await getReport("yesterday");
-  const text = buildTelegramStatsReportText("yesterday", report);
+  const trialStats = await getTrialStats();
+  const text = [
+    buildTelegramStatsReportText("yesterday", report),
+    "",
+    buildTrialStatsTelegramBlock(trialStats),
+  ].join("\n");
   const send = await sendTelegramMessage(adminChat, text);
   if (!send.ok) {
     console.error("[cron/telegram-daily-report] send failed", send.error);
     return NextResponse.json({ ok: false, error: send.error }, { status: 502 });
   }
   console.log("DAILY REPORT SENT");
-  return NextResponse.json({ ok: true, period: "yesterday", ...report });
+  return NextResponse.json({ ok: true, period: "yesterday", ...report, trialStats });
 }
