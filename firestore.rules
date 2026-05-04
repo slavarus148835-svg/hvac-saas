@@ -27,10 +27,11 @@ service cloud.firestore {
     }
 
     match /calculationHistory/{docId} {
-      allow read, update, delete: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn()
+      allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid;
+
+      allow read, update, delete: if request.auth != null
+        && resource.data.uid == request.auth.uid;
     }
 
     match /paymentOrders/{document=**} {

@@ -1194,22 +1194,42 @@ function CalculatorPage() {
     if (saveBusy) return;
 
     const current = auth.currentUser;
-    if (!current?.uid || !uid?.trim() || current.uid !== uid) {
+    if (!current?.uid) {
+      showErrorToast("Нужно войти в аккаунт");
+      return;
+    }
+
+    console.log("[calculator] uid", uid, "auth.uid", current.uid);
+
+    if (!uid?.trim() || uid !== current.uid) {
+      console.error("[calculator] saveCalculationToHistory uid mismatch", {
+        stateUid: uid,
+        authUid: current.uid,
+      });
       showErrorToast("Нужно войти в аккаунт");
       return;
     }
 
     setSaveBusy(true);
     try {
-      const raw = buildHistoryPayload();
-      const payload = omitUndefinedForFirestore(raw);
-      if (!payload.uid?.trim()) {
+      await current.getIdToken(true);
+      const rawData = buildHistoryPayload();
+      const cleanData = JSON.parse(JSON.stringify(rawData)) as Omit<HistoryCalcDoc, "id">;
+      cleanData.uid = current.uid;
+
+      if (!cleanData.uid || typeof cleanData.uid !== "string") {
+        console.error("[calculator] saveCalculationToHistory invalid uid on payload", cleanData);
         showErrorToast("Нужно войти в аккаунт");
         return;
       }
-      const ref = await addDoc(collection(db, "calculationHistory"), payload);
+
+      console.log("[calculator] saveCalculationToHistory addDoc", {
+        uid: cleanData.uid,
+        total: cleanData.total,
+      });
+      const ref = await addDoc(collection(db, "calculationHistory"), cleanData);
       autoSavedDocIdRef.current = ref.id;
-      void ensureTrialStartedOnFirstCalculation(uid);
+      void ensureTrialStartedOnFirstCalculation(current.uid);
       void (async () => {
         try {
           const token = await current.getIdToken();
