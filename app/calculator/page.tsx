@@ -1443,7 +1443,8 @@ function CalculatorPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <div className="calc-page" style={pageStyle}>
+      <style dangerouslySetInnerHTML={{ __html: CALC_PAGE_INJECTED_CSS }} />
       <div style={calcTgBanner}>
         <p style={calcTgBannerText}>
           💡 Монтаж + ремонт: лайфхаки, разборы и обновления сервиса → в канале
@@ -1451,6 +1452,7 @@ function CalculatorPage() {
           Инструкция по установке и использованию приложения — в канале
         </p>
         <a
+          className="calc-tg-link"
           href="https://t.me/hvac_saas"
           target="_blank"
           rel="noopener noreferrer"
@@ -1510,7 +1512,7 @@ function CalculatorPage() {
         </p>
       </div>
 
-      <div style={actionRowTop}>
+      <div className="calc-action-row" style={actionRowTop}>
         <button type="button" onClick={() => router.push("/dashboard")} style={ghostButtonStyle}>
           Назад в кабинет
         </button>
@@ -1553,14 +1555,14 @@ function CalculatorPage() {
             type="button"
             onClick={() => void addModelQuicklyFromCalculator()}
             disabled={modelBusy}
-            style={{ ...primaryButtonStyle, opacity: modelBusy ? 0.6 : 1 }}
+            style={primaryButtonStyle}
           >
             {modelBusy ? "Добавление…" : "Добавить модель"}
           </button>
         </div>
       </div>
 
-        <div style={cardStyle}>
+      <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
         <Label text="Мощность" note="кВт (модель ряда)">
@@ -1582,7 +1584,7 @@ function CalculatorPage() {
         {acModels.length > 0 ? (
           <div style={selectedModelsBlockStyle}>
             <Label text="Модели кондиционеров" note="Можно добавить несколько моделей в текущую смету">
-              <div style={modelPickerRowStyle}>
+              <div className="calc-model-row" style={modelPickerRowStyle}>
                 <select
                   value={selectedAcModelPick}
                   onChange={(e) => setSelectedAcModelPick(e.target.value)}
@@ -1603,7 +1605,7 @@ function CalculatorPage() {
                   type="button"
                   onClick={addSelectedModelToCalculation}
                   disabled={!selectedAcModelPick}
-                  style={{ ...secondaryButtonStyle, minWidth: 140, opacity: selectedAcModelPick ? 1 : 0.6 }}
+                  style={{ ...primaryButtonStyle, minWidth: 140 }}
                 >
                   Добавить в смету
                 </button>
@@ -1994,24 +1996,11 @@ function CalculatorPage() {
         </div>
 
         {quickCalculationExtras.length > 0 ? (
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
             {quickCalculationExtras.map((line) => (
-              <div
-                key={line.id}
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 10,
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #e5e7eb",
-                  background: "#fafbfc",
-                }}
-              >
+              <div key={line.id} style={quickExtraRowStyle}>
                 <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, wordBreak: "break-word" }}>{line.name}</div>
+                  <div style={{ fontWeight: 600, wordBreak: "break-word", color: "#0f172a" }}>{line.name}</div>
                   <div style={smallTextStyle}>{fmt(line.price)}</div>
                 </div>
                 <button type="button" onClick={() => removeQuickExtra(line.id)} style={deleteButtonStyle}>
@@ -2027,26 +2016,21 @@ function CalculatorPage() {
         <h2 style={sectionTitle}>6. Расчётная часть</h2>
 
         <div style={calcBreakdownLight}>
-        {result.items.map((item, index) => (
+          {result.items.map((item, index) => (
             <div
               key={index}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 8,
-                marginBottom: 6,
-                lineHeight: 1.35,
-                fontSize: 13,
-                color: "#111827",
+                ...calcBreakdownRowStyle,
+                marginBottom: index === result.items.length - 1 ? 0 : 10,
               }}
             >
-              <span style={{ flex: 1 }}>{item.title}</span>
-              <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+              <span style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>{item.title}</span>
+              <span style={calcBreakdownAmountStyle}>
                 {item.amount < 0 ? "−" : ""}
-              {fmt(Math.abs(item.amount))}
+                {fmt(Math.abs(item.amount))}
               </span>
-          </div>
-        ))}
+            </div>
+          ))}
         </div>
 
         <div style={calcTotalPlaque}>
@@ -2081,16 +2065,12 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Клиент и отправка</h2>
 
-        <div style={{ ...buttonGridStyle, marginBottom: 16 }}>
+        <div className="calc-btn-grid" style={{ ...buttonGridStyle, marginBottom: 16 }}>
           <button
             type="button"
             onClick={() => void saveCalculationToHistory()}
             disabled={saveBusy}
-            style={{
-              ...secondaryButtonStyle,
-              opacity: saveBusy ? 0.65 : 1,
-              cursor: saveBusy ? "not-allowed" : "pointer",
-            }}
+            style={primaryButtonStyle}
           >
             {saveBusy ? "Сохранение…" : "Сохранить расчёт"}
           </button>
@@ -2098,7 +2078,7 @@ function CalculatorPage() {
           <button
             type="button"
             onClick={() => void copyFinalText()}
-            style={secondaryButtonStyle}
+            style={primaryButtonStyle}
           >
             Скопировать текст
           </button>
@@ -2217,13 +2197,72 @@ function Check({
   );
 }
 
-const firstCalcHintCard: React.CSSProperties = {
-  marginBottom: "12px",
-  padding: "14px 16px",
-  borderRadius: "16px",
-  background: "#fffbeb",
-  border: "1px solid #fde68a",
+const CALC_CARD_SHADOW =
+  "0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 18px rgba(15, 23, 42, 0.06)";
+
+const CALC_PAGE_INJECTED_CSS = `
+.calc-page button[type="button"] {
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.calc-page button[type="button"]:hover:not(:disabled) {
+  background: #1e293b !important;
+}
+.calc-page button[type="button"]:active:not(:disabled) {
+  background: #1e293b !important;
+}
+.calc-page a.calc-tg-link {
+  transition: background 0.15s ease;
+}
+.calc-page a.calc-tg-link:hover {
+  background: #1e293b !important;
+}
+.calc-page a.calc-tg-link:active {
+  background: #1e293b !important;
+}
+.calc-page button[type="button"]:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+.calc-page input:not([type="checkbox"]),
+.calc-page select,
+.calc-page textarea {
+  font-family: inherit;
+  max-width: 100%;
+}
+.calc-page input:not([type="checkbox"]):focus,
+.calc-page select:focus,
+.calc-page textarea:focus {
+  outline: none;
+  border-color: #0f172a !important;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
+}
+@media (max-width: 640px) {
+  .calc-page .calc-btn-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .calc-page .calc-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .calc-page .calc-model-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+`;
+
+const calcCardSurface: React.CSSProperties = {
+  background: "#ffffff",
+  borderRadius: 22,
+  padding: 20,
+  border: "1px solid #e5e7eb",
+  boxShadow: CALC_CARD_SHADOW,
   boxSizing: "border-box",
+};
+
+const firstCalcHintCard: React.CSSProperties = {
+  ...calcCardSurface,
+  marginBottom: 20,
+  borderLeft: "4px solid #0f172a",
 };
 
 const loadingStyle: React.CSSProperties = {
@@ -2231,33 +2270,32 @@ const loadingStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "#f4f6f8",
+  background: "#f8fafc",
   fontSize: "18px",
+  color: "#475569",
 };
 
 const pageStyle: React.CSSProperties = {
   position: "relative",
   minHeight: "100vh",
-  background: "#f4f6f8",
-  padding: "12px",
+  background: "#f3f4f6",
+  padding: "16px",
   paddingBottom: "calc(120px + env(safe-area-inset-bottom, 0px))",
-  maxWidth: "980px",
+  maxWidth: "800px",
+  width: "100%",
   margin: "0 auto",
   overflowX: "hidden",
+  boxSizing: "border-box",
 };
 
 const calcTgBanner: React.CSSProperties = {
+  ...calcCardSurface,
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: "10px 12px",
-  marginBottom: "14px",
-  padding: "10px 12px",
-  borderRadius: "14px",
-  background: "#eef2ff",
-  border: "1px solid #c7d2fe",
-  boxSizing: "border-box",
+  gap: "12px 16px",
+  marginBottom: 20,
 };
 
 const calcTgBannerText: React.CSSProperties = {
@@ -2265,8 +2303,8 @@ const calcTgBannerText: React.CSSProperties = {
   flex: "1 1 200px",
   minWidth: 0,
   fontSize: "14px",
-  lineHeight: 1.45,
-  color: "#312e81",
+  lineHeight: 1.5,
+  color: "#475569",
   fontWeight: 600,
 };
 
@@ -2275,85 +2313,110 @@ const calcTgBannerBtn: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   flex: "0 0 auto",
-  padding: "8px 14px",
-  borderRadius: "12px",
-  background: "#4f46e5",
-  color: "#fff",
-  fontSize: "14px",
+  padding: "14px 16px",
+  borderRadius: 14,
+  border: "none",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontSize: "15px",
   fontWeight: 700,
   textDecoration: "none",
   whiteSpace: "nowrap",
 };
 
 const calcBreakdownLight: React.CSSProperties = {
-  maxHeight: 160,
+  maxHeight: 240,
   overflowY: "auto",
-  marginBottom: 12,
-  padding: "10px 12px",
-  borderRadius: 12,
+  overflowX: "hidden",
+  marginBottom: 16,
+  padding: "16px 18px",
+  borderRadius: 16,
   background: "#f3f4f6",
   border: "1px solid #e5e7eb",
 };
 
+const calcBreakdownRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "baseline",
+  gap: 12,
+  lineHeight: 1.45,
+  fontSize: 15,
+  color: "#334155",
+};
+
+const calcBreakdownAmountStyle: React.CSSProperties = {
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+  color: "#0f172a",
+  textAlign: "right",
+  flexShrink: 0,
+};
+
 const calcTotalPlaque: React.CSSProperties = {
   marginTop: 4,
-  padding: "16px 14px",
-  borderRadius: 14,
-  background: "#111827",
-  color: "#fff",
-  fontSize: 20,
-  fontWeight: 900,
+  padding: "20px 22px",
+  borderRadius: 22,
+  background: "#0f172a",
+  color: "#ffffff",
+  fontSize: 22,
+  fontWeight: 800,
   textAlign: "center",
-  letterSpacing: "0.04em",
+  letterSpacing: "-0.02em",
 };
 
 const heroCard: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: "18px",
-  padding: "18px",
-  marginBottom: "16px",
-  boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
+  ...calcCardSurface,
+  marginBottom: 20,
 };
 
 const heroLabel: React.CSSProperties = {
   fontSize: "12px",
-  color: "#6b7280",
-  marginBottom: "6px",
+  color: "#64748b",
+  marginBottom: "8px",
+  fontWeight: 600,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase" as const,
 };
 
 const heroTitle: React.CSSProperties = {
   margin: 0,
-  fontSize: "28px",
-  lineHeight: 1.1,
-  marginBottom: "8px",
+  fontSize: "26px",
+  lineHeight: 1.15,
+  marginBottom: "10px",
+  color: "#0f172a",
+  fontWeight: 800,
 };
 
 const heroText: React.CSSProperties = {
   margin: 0,
-  color: "#6b7280",
-  fontSize: "14px",
+  color: "#64748b",
+  fontSize: "15px",
+  lineHeight: 1.55,
 };
 
 const hintCardStyle: React.CSSProperties = {
   marginTop: "10px",
   marginBottom: "10px",
-  padding: "12px 12px",
-  borderRadius: "14px",
+  padding: "16px 18px",
+  borderRadius: 16,
   border: "1px solid #e5e7eb",
-  background: "#f9fafb",
+  background: "#ffffff",
+  boxShadow: CALC_CARD_SHADOW,
 };
 
 const hintTitleStyle: React.CSSProperties = {
   fontWeight: 800,
   fontSize: "14px",
-  color: "#111827",
+  color: "#0f172a",
   marginBottom: "8px",
 };
 
 const hintListStyle: React.CSSProperties = {
   margin: 0,
   paddingLeft: "18px",
-  color: "#111827",
+  color: "#334155",
   fontSize: "14px",
   lineHeight: 1.45,
 };
@@ -2361,15 +2424,15 @@ const hintListStyle: React.CSSProperties = {
 const hintNoteStyle: React.CSSProperties = {
   marginTop: "10px",
   fontSize: "13px",
-  color: "#6b7280",
+  color: "#64748b",
   lineHeight: 1.45,
 };
 
 const actionRowTop: React.CSSProperties = {
   display: "flex",
-  gap: "10px",
+  gap: "12px",
   flexWrap: "wrap",
-  marginBottom: "16px",
+  marginBottom: "20px",
 };
 
 const gridStyle: React.CSSProperties = {
@@ -2380,11 +2443,8 @@ const gridStyle: React.CSSProperties = {
 };
 
 const detailsStyle: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: "18px",
-  padding: "12px 14px",
-  boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
-  marginBottom: "16px",
+  ...calcCardSurface,
+  marginBottom: 20,
 };
 
 const summaryStyle: React.CSSProperties = {
@@ -2412,46 +2472,54 @@ const quickOptionsTitleStyle: React.CSSProperties = {
   marginBottom: "8px",
   fontWeight: 800,
   fontSize: "15px",
+  color: "#0f172a",
 };
 
 const cardStyle: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: "18px",
-  padding: "16px",
-  boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
-  marginBottom: "16px",
+  ...calcCardSurface,
+  marginBottom: 20,
 };
 
 const sectionTitle: React.CSSProperties = {
   marginTop: 0,
-  marginBottom: "14px",
-  fontSize: "20px",
+  marginBottom: "16px",
+  fontSize: "18px",
+  fontWeight: 800,
+  color: "#0f172a",
+  letterSpacing: "-0.02em",
 };
 
 const fieldLabelStyle: React.CSSProperties = {
-  marginBottom: "6px",
+  marginBottom: "8px",
   fontWeight: 700,
   fontSize: "15px",
+  color: "#334155",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "46px",
-  padding: "12px 14px",
-  borderRadius: "12px",
+  minHeight: 48,
+  padding: "14px 16px",
+  borderRadius: 14,
   border: "1px solid #d1d5db",
-  fontSize: "17px",
-  background: "#fff",
+  fontSize: 16,
+  background: "#ffffff",
   boxSizing: "border-box",
+  color: "#0f172a",
 };
 
 const textareaStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "180px",
-  padding: "12px",
-  borderRadius: "14px",
+  minHeight: 160,
+  padding: "14px 16px",
+  borderRadius: 14,
   border: "1px solid #d1d5db",
-  fontSize: "15px",
+  fontSize: 16,
+  background: "#ffffff",
+  boxSizing: "border-box",
+  color: "#0f172a",
+  lineHeight: 1.45,
+  resize: "vertical" as const,
 };
 
 const lineItemStyle: React.CSSProperties = {
@@ -2465,14 +2533,13 @@ const lineItemStyle: React.CSSProperties = {
 
 const serviceRowStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "12px",
   alignItems: "stretch",
-  padding: "12px 0",
-  borderTop: "1px solid #eef1f4",
-  background: "#f9fafb",
-  borderRadius: "12px",
-  paddingInline: "10px",
-  marginBottom: "8px",
+  padding: "14px 16px",
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  borderRadius: 16,
+  marginBottom: "10px",
 };
 
 const serviceHeaderStyle: React.CSSProperties = {
@@ -2488,10 +2555,12 @@ const serviceControlsStyle: React.CSSProperties = {
 
 const checkboxWrapStyle: React.CSSProperties = {
   display: "flex",
-  alignItems: "center",
-  gap: "8px",
+  alignItems: "flex-start",
+  gap: "10px",
   whiteSpace: "normal",
-  fontSize: "16px",
+  fontSize: "15px",
+  lineHeight: 1.45,
+  color: "#334155",
 };
 
 const quickAddWrapStyle: React.CSSProperties = {
@@ -2501,8 +2570,20 @@ const quickAddWrapStyle: React.CSSProperties = {
 const quickAddGridStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "10px",
+  gap: "12px",
   alignItems: "stretch",
+};
+
+const quickExtraRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
 };
 
 const selectedModelsBlockStyle: React.CSSProperties = {
@@ -2512,9 +2593,10 @@ const selectedModelsBlockStyle: React.CSSProperties = {
 };
 
 const modelPickerRowStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(140px, auto)",
+  gap: "12px",
+  alignItems: "stretch",
 };
 
 const selectedModelsListStyle: React.CSSProperties = {
@@ -2525,12 +2607,12 @@ const selectedModelsListStyle: React.CSSProperties = {
 const selectedModelRowStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "10px",
+  gap: "12px",
   justifyContent: "space-between",
   border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "10px",
-  background: "#fff",
+  borderRadius: 16,
+  padding: "14px 16px",
+  background: "#ffffff",
 };
 
 const selectedModelNameStyle: React.CSSProperties = {
@@ -2541,9 +2623,16 @@ const selectedModelNameStyle: React.CSSProperties = {
 
 const checkboxRowStyle: React.CSSProperties = {
   display: "flex",
-  gap: "10px",
-  alignItems: "center",
-  marginBottom: "10px",
+  gap: "12px",
+  alignItems: "flex-start",
+  marginBottom: "12px",
+  padding: "14px 16px",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  background: "#ffffff",
+  lineHeight: 1.45,
+  fontSize: 15,
+  color: "#334155",
 };
 
 const smallTextStyle: React.CSSProperties = {
@@ -2569,58 +2658,27 @@ const warnTextStyle: React.CSSProperties = {
 
 const buttonGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "10px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+  gap: "12px",
 };
 
 const primaryButtonStyle: React.CSSProperties = {
-  minHeight: "46px",
-  padding: "12px 16px",
-  borderRadius: "14px",
+  minHeight: 48,
+  padding: "14px 16px",
+  borderRadius: 14,
   border: "none",
-  background: "#111827",
-  color: "#fff",
-  fontSize: "16px",
+  background: "#0f172a",
+  color: "#ffffff",
+  fontSize: 16,
   fontWeight: 700,
   cursor: "pointer",
+  fontFamily: "inherit",
+  lineHeight: 1.25,
 };
 
-const secondaryButtonStyle: React.CSSProperties = {
-  minHeight: "46px",
-  padding: "12px 16px",
-  borderRadius: "14px",
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111827",
-  fontSize: "16px",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const ghostButtonStyle: React.CSSProperties = {
-  minHeight: "42px",
-  padding: "10px 12px",
-  borderRadius: "14px",
-  border: "1px solid #e5e7eb",
-  background: "#ffffff",
-  color: "#6b7280",
-  fontSize: "14px",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const deleteButtonStyle: React.CSSProperties = {
-  minHeight: "44px",
-  padding: "10px 12px",
-  borderRadius: "10px",
-  border: "1px solid #fecaca",
-  background: "#fff1f2",
-  color: "#b91c1c",
-  cursor: "pointer",
-  fontSize: "15px",
-  fontWeight: 700,
-  width: "100%",
-};
+const secondaryButtonStyle = primaryButtonStyle;
+const ghostButtonStyle = primaryButtonStyle;
+const deleteButtonStyle = primaryButtonStyle;
 
 const qtyInputStyle: React.CSSProperties = {
   ...inputStyle,
