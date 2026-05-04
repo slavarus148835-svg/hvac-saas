@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -10,8 +10,12 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
+  limit,
+  onSnapshot,
+  query,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import {
@@ -361,11 +365,32 @@ function CalculatorPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [fieldWarnings, setFieldWarnings] = useState<Record<string, string>>({});
   const [actionToast, setActionToast] = useState("");
+  const [actionToastIsError, setActionToastIsError] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const shareBusyRef = useRef(false);
+
+  const historyIdFromUrl = searchParams.get("historyId")?.trim();
+  const [hasSavedCalculation, setHasSavedCalculation] = useState<boolean | null>(null);
 
   const autoSavedDocIdRef = useRef<string | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedFromHistoryRef = useRef(false);
+
+  useEffect(() => {
+    if (!uid) return;
+    if (historyIdFromUrl) {
+      setHasSavedCalculation(true);
+      return;
+    }
+
+    const q = query(collection(db, "calculationHistory"), where("uid", "==", uid), limit(1));
+    const unsub = onSnapshot(
+      q,
+      (snap) => setHasSavedCalculation(!snap.empty),
+      () => setHasSavedCalculation(null)
+    );
+    return () => unsub();
+  }, [uid, historyIdFromUrl]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
@@ -961,6 +986,82 @@ function CalculatorPage() {
 
   const finalClientText = `${result.autoClientText}\n${editableTailText}`.trim();
 
+  const buildHistoryPayload = useCallback((): Omit<HistoryCalcDoc, "id"> => {
+    const iso = new Date().toISOString();
+    return {
+      uid,
+      createdAt: iso,
+      updatedAt: iso,
+      capacity,
+      total: result.total,
+      clientName: clientName.trim(),
+      clientContact: clientContact.trim(),
+      clientText: finalClientText,
+      editableTailText,
+
+      mountType,
+      routeMeters,
+      baseWallType,
+      extraHolesNormal,
+      extraHolesArm,
+      carryToolFloors,
+      carryBlockCount,
+      manualDismantlingCost,
+
+      strobaType,
+      strobaMeters,
+      cable40Meters,
+      cable16Meters,
+
+      buyAcAndRouteFromUs,
+      includeBrackets,
+      includeGlass,
+      includeTile,
+      includeDrain,
+      includePump,
+      includeLadderConnection,
+
+      percentDiscount,
+      selectedExtraServices,
+      quickCalculationExtras,
+      giftRouteMeters,
+      selectedAcModelIds,
+      selectedAcModelId: selectedAcModelIds[0] || "",
+    };
+  }, [
+    uid,
+    capacity,
+    result.total,
+    clientName,
+    clientContact,
+    finalClientText,
+    editableTailText,
+    mountType,
+    routeMeters,
+    baseWallType,
+    extraHolesNormal,
+    extraHolesArm,
+    carryToolFloors,
+    carryBlockCount,
+    manualDismantlingCost,
+    strobaType,
+    strobaMeters,
+    cable40Meters,
+    cable16Meters,
+    buyAcAndRouteFromUs,
+    includeBrackets,
+    includeGlass,
+    includeTile,
+    includeDrain,
+    includePump,
+    includeLadderConnection,
+    percentDiscount,
+    selectedExtraServices,
+    quickCalculationExtras,
+    giftRouteMeters,
+    selectedAcModelIds,
+  ]);
+
   useEffect(() => {
     if (!openedFromHistoryRef.current && !editableTailText.trim()) {
       setEditableTailText(buildClosingText(clientName));
@@ -979,46 +1080,7 @@ function CalculatorPage() {
 
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
-        const payload: Omit<HistoryCalcDoc, "id"> = {
-          uid,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          capacity,
-          total: result.total,
-          clientName: clientName.trim(),
-          clientContact: clientContact.trim(),
-          clientText: finalClientText,
-          editableTailText,
-
-          mountType,
-          routeMeters,
-          baseWallType,
-          extraHolesNormal,
-          extraHolesArm,
-          carryToolFloors,
-          carryBlockCount,
-          manualDismantlingCost,
-
-          strobaType,
-          strobaMeters,
-          cable40Meters,
-          cable16Meters,
-
-          buyAcAndRouteFromUs,
-          includeBrackets,
-          includeGlass,
-          includeTile,
-          includeDrain,
-          includePump,
-          includeLadderConnection,
-
-          percentDiscount,
-          selectedExtraServices,
-          quickCalculationExtras,
-          giftRouteMeters,
-          selectedAcModelIds,
-          selectedAcModelId: selectedAcModelIds[0] || "",
-        };
+        const payload = buildHistoryPayload();
 
         let createdNewHistoryDoc = false;
         if (autoSavedDocIdRef.current) {
@@ -1038,6 +1100,20 @@ function CalculatorPage() {
         }
         if (uid && createdNewHistoryDoc) {
           void ensureTrialStartedOnFirstCalculation(uid);
+          const current = auth.currentUser;
+          if (current) {
+            void (async () => {
+              try {
+                const token = await current.getIdToken();
+                await fetch("/api/users/mark-first-calculation", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+              } catch (e) {
+                console.warn("[calculator] mark-first-calculation", e);
+              }
+            })();
+          }
         }
       } catch (error) {
         console.error(error);
@@ -1081,6 +1157,7 @@ function CalculatorPage() {
     quickCalculationExtras,
     giftRouteMeters,
     selectedAcModelIds,
+    buildHistoryPayload,
   ]);
 
   const MAX_SHARE_URL_CHARS = 3800;
@@ -1094,8 +1171,49 @@ function CalculatorPage() {
   }
 
   function showToast(msg: string) {
+    setActionToastIsError(false);
     setActionToast(msg);
     window.setTimeout(() => setActionToast(""), 3500);
+  }
+
+  function showErrorToast(msg: string) {
+    setActionToastIsError(true);
+    setActionToast(msg);
+    window.setTimeout(() => {
+      setActionToast("");
+      setActionToastIsError(false);
+    }, 4000);
+  }
+
+  async function saveCalculationToHistory() {
+    if (!uid || saveBusy) return;
+    setSaveBusy(true);
+    try {
+      const payload = buildHistoryPayload();
+      const ref = await addDoc(collection(db, "calculationHistory"), payload);
+      autoSavedDocIdRef.current = ref.id;
+      void ensureTrialStartedOnFirstCalculation(uid);
+      const current = auth.currentUser;
+      if (current) {
+        void (async () => {
+          try {
+            const token = await current.getIdToken();
+            await fetch("/api/users/mark-first-calculation", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } catch (e) {
+            console.warn("[calculator] mark-first-calculation (manual save)", e);
+          }
+        })();
+      }
+      showToast("Расчёт сохранён");
+    } catch (e) {
+      console.error("[calculator] manual save failed", e);
+      showErrorToast("Не удалось сохранить расчёт");
+    } finally {
+      setSaveBusy(false);
+    }
   }
 
   async function copyFinalText() {
@@ -1307,6 +1425,21 @@ function CalculatorPage() {
           Перейти в Telegram
         </a>
       </div>
+
+      {hasSavedCalculation === false ? (
+        <div style={firstCalcHintCard}>
+          <div style={{ fontWeight: 800, fontSize: "16px", marginBottom: "6px", color: "#1e293b" }}>
+            Первый расчёт
+          </div>
+          <div style={{ fontSize: "15px", color: "#475569", lineHeight: 1.45 }}>
+            Выберите мощность, тип монтажа и нажмите сохранить расчёт
+            <span style={{ fontSize: "13px", display: "block", marginTop: "8px", color: "#64748b" }}>
+              Достаточно указать имя клиента или контакт — сохранение в историю включится автоматически через пару секунд.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       <div
         data-hvac-report-calc
         aria-hidden
@@ -1918,6 +2051,37 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Клиент и отправка</h2>
 
+        <div style={{ ...buttonGridStyle, marginBottom: 16 }}>
+          <button
+            type="button"
+            onClick={() => void saveCalculationToHistory()}
+            disabled={saveBusy}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: saveBusy ? 0.65 : 1,
+              cursor: saveBusy ? "not-allowed" : "pointer",
+            }}
+          >
+            {saveBusy ? "Сохранение…" : "Сохранить расчёт"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void copyFinalText()}
+            style={secondaryButtonStyle}
+          >
+            Скопировать текст
+          </button>
+
+          <button type="button" onClick={sendToWhatsApp} style={primaryButtonStyle}>
+            Отправить в WhatsApp
+          </button>
+
+          <button type="button" onClick={sendToTelegram} style={primaryButtonStyle}>
+            Отправить в Telegram
+          </button>
+        </div>
+
         <Label text="Имя клиента">
           <input
             value={clientName}
@@ -1957,9 +2121,9 @@ function CalculatorPage() {
               marginBottom: 10,
               padding: "10px 12px",
               borderRadius: 12,
-              background: "#ecfdf5",
-              border: "1px solid #bbf7d0",
-              color: "#166534",
+              background: actionToastIsError ? "#fef2f2" : "#ecfdf5",
+              border: actionToastIsError ? "1px solid #fecaca" : "1px solid #bbf7d0",
+              color: actionToastIsError ? "#991b1b" : "#166534",
               fontSize: 14,
               fontWeight: 600,
             }}
@@ -1967,24 +2131,6 @@ function CalculatorPage() {
             {actionToast}
           </div>
         ) : null}
-
-        <div style={buttonGridStyle}>
-          <button
-            type="button"
-            onClick={() => void copyFinalText()}
-            style={secondaryButtonStyle}
-          >
-            Скопировать текст
-          </button>
-
-          <button type="button" onClick={sendToWhatsApp} style={primaryButtonStyle}>
-            Отправить в WhatsApp
-          </button>
-
-          <button type="button" onClick={sendToTelegram} style={primaryButtonStyle}>
-            Отправить в Telegram
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -2040,6 +2186,15 @@ function Check({
     </label>
   );
 }
+
+const firstCalcHintCard: React.CSSProperties = {
+  marginBottom: "12px",
+  padding: "14px 16px",
+  borderRadius: "16px",
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  boxSizing: "border-box",
+};
 
 const loadingStyle: React.CSSProperties = {
   minHeight: "100vh",
