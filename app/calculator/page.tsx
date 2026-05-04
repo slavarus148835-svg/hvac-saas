@@ -131,6 +131,11 @@ type HistoryCalcDoc = {
   selectedAcModelId?: string;
 };
 
+/** Firestore не принимает `undefined` в полях документа (в т.ч. во вложенных объектах). */
+function omitUndefinedForFirestore<T>(input: T): T {
+  return JSON.parse(JSON.stringify(input)) as T;
+}
+
 const defaultPrices: PriceList = {
   standard_7: 5900,
   standard_9: 5900,
@@ -1080,7 +1085,7 @@ function CalculatorPage() {
 
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
-        const payload = buildHistoryPayload();
+        const payload = omitUndefinedForFirestore(buildHistoryPayload());
 
         let createdNewHistoryDoc = false;
         if (autoSavedDocIdRef.current) {
@@ -1186,30 +1191,39 @@ function CalculatorPage() {
   }
 
   async function saveCalculationToHistory() {
-    if (!uid || saveBusy) return;
+    if (saveBusy) return;
+
+    const current = auth.currentUser;
+    if (!current?.uid || !uid?.trim() || current.uid !== uid) {
+      showErrorToast("Нужно войти в аккаунт");
+      return;
+    }
+
     setSaveBusy(true);
     try {
-      const payload = buildHistoryPayload();
+      const raw = buildHistoryPayload();
+      const payload = omitUndefinedForFirestore(raw);
+      if (!payload.uid?.trim()) {
+        showErrorToast("Нужно войти в аккаунт");
+        return;
+      }
       const ref = await addDoc(collection(db, "calculationHistory"), payload);
       autoSavedDocIdRef.current = ref.id;
       void ensureTrialStartedOnFirstCalculation(uid);
-      const current = auth.currentUser;
-      if (current) {
-        void (async () => {
-          try {
-            const token = await current.getIdToken();
-            await fetch("/api/users/mark-first-calculation", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` },
-            });
-          } catch (e) {
-            console.warn("[calculator] mark-first-calculation (manual save)", e);
-          }
-        })();
-      }
+      void (async () => {
+        try {
+          const token = await current.getIdToken();
+          await fetch("/api/users/mark-first-calculation", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (e) {
+          console.warn("[calculator] mark-first-calculation (manual save)", e);
+        }
+      })();
       showToast("Расчёт сохранён");
-    } catch (e) {
-      console.error("[calculator] manual save failed", e);
+    } catch (error) {
+      console.error("[calculator] saveCalculationToHistory failed", error);
       showErrorToast("Не удалось сохранить расчёт");
     } finally {
       setSaveBusy(false);
