@@ -2015,10 +2015,6 @@ function CalculatorPage() {
         ))}
         </div>
 
-        <Label text="Текст расчёта для клиента" note="Формируется автоматически, не редактируется">
-          <textarea value={result.autoClientText} readOnly style={textareaStyle} />
-        </Label>
-
         <div style={calcTotalPlaque}>
           ИТОГО: {fmt(result.total)}
         </div>
