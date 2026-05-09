@@ -1,6 +1,7 @@
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
+import { isPaidUserForStatsTotals } from "@/lib/server/statsPaidUser";
 
 const TRIAL_DAYS = 15;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -54,8 +55,8 @@ export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
   for (const doc of snap.docs) {
     totalUsers++;
     const user = doc.data() as Record<string, unknown>;
-    const hasPaid = user.hasPaid === true;
-    if (hasPaid) paidUsers++;
+    const paid = isPaidUserForStatsTotals(user, nowMs);
+    if (paid) paidUsers++;
 
     const trialStartMs = resolveTrialStartMs(user);
     if (trialStartMs <= 0) continue;
@@ -67,7 +68,7 @@ export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
     }
 
     endedTrialUsers++;
-    if (!hasPaid) endedWithoutPaymentUsers++;
+    if (!paid) endedWithoutPaymentUsers++;
   }
 
   const conversionPercent =
@@ -92,6 +93,6 @@ export function buildTrialStatsTelegramBlock(stats: TrialStats): string {
     `• Триал закончился: ${stats.endedTrialUsers}`,
     `• Закончился без оплаты: ${stats.endedWithoutPaymentUsers}`,
     `• Оплатили: ${stats.paidUsers}`,
-    `• Конверсия: ${stats.conversionPercent}%`,
+    `• Конверсия: ${stats.conversionPercent.toFixed(2)}%`,
   ].join("\n");
 }

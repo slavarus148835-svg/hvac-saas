@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
-import { getStats } from "@/lib/server/getStats";
+import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
 import { provisionTelegramLoginUser } from "@/lib/server/provisionTelegramLoginUser";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
+import {
+  extractTelegramIdentityFromWebhook,
+  syncTelegramIdentityFromWebhook,
+} from "@/lib/server/telegramUserLink";
 import { confirmTelegramLoginSession } from "@/lib/server/telegramLoginSession";
-import { telegramGetWebhookInfo } from "@/lib/server/telegramBotApiDebug";
 
 export const runtime = "nodejs";
 
@@ -89,24 +92,70 @@ export async function POST(req: Request) {
     const textRaw = String(msg.text ?? "");
     const normalized = textRaw.trim().toLowerCase();
     const sessionIdFromStart = parseStartSessionId(textRaw);
+    const dbForSync = getAdminDb();
+    const identity = extractTelegramIdentityFromWebhook(msg);
+    if (dbForSync && identity) {
+      try {
+        const linked = await syncTelegramIdentityFromWebhook(dbForSync, identity);
+        console.log("[telegram/webhook] telegram identity synced", linked);
+      } catch (e) {
+        console.warn("[telegram/webhook] telegram identity sync failed", e);
+      }
+    }
 
     console.log("CHAT ID:", String(chatId));
     console.log("ADMIN ID:", process.env.ADMIN_TELEGRAM_CHAT_ID ?? "(unset)");
     console.log("MESSAGE TEXT:", textRaw.slice(0, 500));
 
     const adminRaw = String(process.env.ADMIN_TELEGRAM_CHAT_ID || "").trim();
-    if (!adminRaw) {
-      console.warn(
-        "[telegram/webhook] ADMIN_TELEGRAM_CHAT_ID is empty — /stat still processed"
-      );
-    } else if (String(chatId) !== adminRaw) {
-      console.warn(
-        "[telegram/webhook] chat id does not match ADMIN_TELEGRAM_CHAT_ID — /stat still processed"
-      );
+
+    if (normalized.startsWith("/stat")) {
+      if (!adminRaw || String(chatId) !== adminRaw) {
+        await sendTelegramMessage(
+          String(chatId),
+          "Команда /stat доступна только администратору."
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      const dbStat = getAdminDb();
+      if (!dbStat) {
+        await sendTelegramMessage(
+          String(chatId),
+          "Сервер временно недоступен. Попробуйте позже."
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      try {
+        console.log("TELEGRAM_STAT_START");
+        const report = await buildTelegramFullStatsReportText(Date.now(), {
+          topPeriod: "yesterday",
+        });
+        console.log("TELEGRAM_STAT_BUILT");
+        const sendStat = await sendTelegramMessage(String(chatId), report);
+        console.log(
+          "[telegram/webhook] /stat sendTelegramMessage:",
+          safeJsonStringify(sendStat)
+        );
+        if (!sendStat.ok) {
+          console.error("TELEGRAM_STAT_ERROR", sendStat.error);
+          console.error("[telegram/webhook] /stat sendMessage failed", sendStat.error);
+        } else {
+          console.log("TELEGRAM_STAT_SENT");
+        }
+      } catch (e) {
+        console.error("TELEGRAM_STAT_ERROR", e);
+        console.error("[telegram/webhook] /stat stats failed", e);
+        await sendTelegramMessage(
+          String(chatId),
+          "Не удалось загрузить статистику. Попробуйте позже."
+        );
+      }
+      return NextResponse.json({ ok: true });
     }
 
-    if (!normalized.startsWith("/stat")) {
-      if (sessionIdFromStart) {
+    if (sessionIdFromStart) {
         console.log("[telegram/webhook] login start payload", { sessionId: sessionIdFromStart });
         const from = msg.from;
         const telegramUserId = String(from?.id ?? "").replace(/\D/g, "");
@@ -160,45 +209,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      if (normalized === "/start") {
-        await sendTelegramMessage(
-          String(chatId),
-          "Бот подключён. Теперь вы можете подтверждать вход через Telegram."
-        );
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    console.log("STAT COMMAND RECEIVED");
-
-    let hookInfo: unknown;
-    try {
-      hookInfo = await telegramGetWebhookInfo();
-      console.log(
-        "[telegram/webhook] getWebhookInfo (before /stat stats):",
-        JSON.stringify(hookInfo)
+    if (normalized === "/start") {
+      await sendTelegramMessage(
+        String(chatId),
+        "Бот подключён. Теперь вы можете подтверждать вход через Telegram."
       );
-    } catch (e) {
-      console.error("[telegram/webhook] getWebhookInfo failed", e);
     }
-
-    const { totalUsers, paidUsers, conversion } = await getStats();
-    const text = [
-      "📊 Статистика",
-      "",
-      `👥 Регистрации: ${totalUsers}`,
-      `💰 Оплатили: ${paidUsers}`,
-      `📈 Конверсия: ${conversion}%`,
-    ].join("\n");
-
-    const send = await sendTelegramMessage(String(chatId), text);
-    console.log(
-      "[telegram/webhook] sendTelegramMessage result:",
-      safeJsonStringify(send)
-    );
-    if (!send.ok) {
-      console.error("[telegram/webhook] sendMessage failed", send.error);
-    }
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[telegram/webhook] handler error", e);
   }

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildTelegramStatsReportText } from "@/lib/server/buildTelegramStatsReportText";
-import { getReport } from "@/lib/server/getStatsReport";
+import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
 import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
 
@@ -15,13 +14,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "admin_telegram_chat_id_missing" }, { status: 503 });
   }
 
-  const report = await getReport("week");
-  const text = buildTelegramStatsReportText("week", report);
+  const body = await buildTelegramFullStatsReportText(Date.now(), {
+    topPeriod: "week",
+  });
+  const text = ["📊 Отчёт за неделю (скользящие 7 дней)", "", body].join("\n");
   const send = await sendTelegramMessage(adminChat, text);
   if (!send.ok) {
     console.error("[cron/telegram-weekly-report] send failed", send.error);
     return NextResponse.json({ ok: false, error: send.error }, { status: 502 });
   }
   console.log("WEEKLY REPORT SENT");
-  return NextResponse.json({ ok: true, period: "week", ...report });
+  return NextResponse.json({ ok: true, period: "week" });
 }

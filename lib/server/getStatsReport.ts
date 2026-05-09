@@ -1,6 +1,7 @@
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
+import { getPaidEventMsForStats } from "@/lib/server/statsPaidUser";
 
 export type StatsReportPeriod = "today" | "yesterday" | "week" | "month";
 
@@ -37,19 +38,6 @@ export function getReportPeriodRange(period: StatsReportPeriod): { start: number
   return { start: now - 30 * 24 * 60 * 60 * 1000, end: now };
 }
 
-function paidEventMs(data: Record<string, unknown>): number {
-  const p = data.paidAt;
-  if (typeof p === "number" && Number.isFinite(p) && p > 0) {
-    return p;
-  }
-  const lc = data.lastPaymentConfirmed;
-  if (lc && typeof lc === "object") {
-    const c = (lc as Record<string, unknown>).confirmedAt;
-    return firestoreTimeToMs(c);
-  }
-  return 0;
-}
-
 function registrationMs(data: Record<string, unknown>): number {
   return firestoreTimeToMs(data.createdAt);
 }
@@ -60,7 +48,7 @@ function inRange(ms: number, start: number, end: number): boolean {
 
 /**
  * registrations — createdAt в периоде [start, end).
- * paid — paidAt в периоде, иначе confirmedAt из lastPaymentConfirmed.
+ * paid — paidAt в периоде, иначе confirmedAt / restoredAt / createdAt из lastPaymentConfirmed.
  * conversion — paid / registrations * 100, если registrations > 0.
  */
 export async function getReport(period: StatsReportPeriod): Promise<StatsReport> {
@@ -77,7 +65,7 @@ export async function getReport(period: StatsReportPeriod): Promise<StatsReport>
     if (inRange(registrationMs(d), start, end)) {
       registrations++;
     }
-    if (inRange(paidEventMs(d), start, end)) {
+    if (inRange(getPaidEventMsForStats(d), start, end)) {
       paid++;
     }
   }
