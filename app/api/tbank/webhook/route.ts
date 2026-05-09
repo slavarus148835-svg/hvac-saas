@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { creditPartnerCommissionIfNeeded } from "@/lib/server/creditPartnerCommission";
+import { resolveMonthlySubscriptionIntent } from "@/lib/server/tbankMonthlyPayment";
 import {
   buildPaymentSuccessNotificationHtml,
   sendTelegramNotification,
@@ -9,7 +11,6 @@ import {
 
 /** Подпись webhook только из process.env (тот же пароль, что для Init). */
 const PASSWORD = process.env.TBANK_PASSWORD || "";
-const MONTHLY_AMOUNT_KOPECKS = 1190 * 100;
 
 function generateWebhookToken(payload: Record<string, unknown>) {
   const values: Record<string, string> = {};
@@ -50,6 +51,7 @@ function parseUserIdFromOrderId(orderId: string): string | null {
 
 export async function POST(req: Request) {
   try {
+    console.log("PAYMENT_WEBHOOK_START");
     const adminDb = getAdminDb();
     if (!adminDb) {
       console.error(
@@ -87,6 +89,7 @@ export async function POST(req: Request) {
 
     const orderId = String(body.OrderId || "");
     const paymentStatus = String(body.Status || "");
+    const bankAmountKopecks = Number(body.Amount ?? NaN);
     console.log("[payment] callback received", { orderId, status: paymentStatus });
 
     if (!orderId) {
@@ -108,12 +111,14 @@ export async function POST(req: Request) {
     const userSnap = await userRef.get();
 
     if (!userSnap.exists) {
+      console.error("[payment] webhook user doc missing", { orderId, userId });
       return NextResponse.json(
         { error: "Пользователь не найден" },
         { status: 404 }
       );
     }
 
+    console.log("PAYMENT_USER_FOUND", { userId, orderId });
     const userData = userSnap.data() || {};
     const intent = userData.lastPaymentIntent as
       | {
@@ -125,34 +130,37 @@ export async function POST(req: Request) {
         }
       | undefined;
 
-    if (!intent || intent.orderId !== orderId) {
-      console.error("[payment] callback failed lastPaymentIntent mismatch", { orderId, userId });
+    const resolved = resolveMonthlySubscriptionIntent(intent, orderId, {
+      bankAmountKopecks: Number.isFinite(bankAmountKopecks) ? bankAmountKopecks : undefined,
+    });
+    if (!resolved.ok) {
+      console.error("[payment] callback failed intent resolve", {
+        orderId,
+        userId,
+        code: resolved.code,
+        bankAmountKopecks: Number.isFinite(bankAmountKopecks) ? bankAmountKopecks : null,
+        intentSnapshot: intent
+          ? { orderId: intent.orderId, months: intent.months, amount: intent.amount }
+          : null,
+      });
       return NextResponse.json(
-        { error: "Черновик оплаты не найден или orderId не совпадает" },
+        {
+          error:
+            resolved.code === "intent_order_mismatch"
+              ? "Черновик оплаты не найден или orderId не совпадает"
+              : "Некорректный lastPaymentIntent или сумма в уведомлении банка",
+        },
         { status: 400 }
       );
     }
 
     const paymentOrder = {
       userId,
-      months: Number(intent.months || 0),
-      amount: Number(intent.amount || 0),
+      months: resolved.months,
+      amount: resolved.amount,
       plan: "standard" as const,
-      email: String(intent.email || userData.email || ""),
+      email: resolved.email || String(userData.email || ""),
     };
-
-    if (paymentOrder.months !== 1 || paymentOrder.amount !== MONTHLY_AMOUNT_KOPECKS) {
-      console.error("[payment] callback failed invalid payment intent payload", {
-        userId,
-        orderId,
-        months: paymentOrder.months,
-        amount: paymentOrder.amount,
-      });
-      return NextResponse.json(
-        { error: "Некорректный lastPaymentIntent: ожидается только 1190 ₽ за 1 месяц" },
-        { status: 400 }
-      );
-    }
 
     await userRef.set(
       {
@@ -167,6 +175,12 @@ export async function POST(req: Request) {
     );
 
     if (paymentStatus !== "CONFIRMED") {
+      console.log("PAYMENT_WEBHOOK_SUCCESS", {
+        outcome: "ignored_not_confirmed",
+        orderId,
+        userId,
+        paymentStatus,
+      });
       console.log("[payment] callback success (no access change; status not CONFIRMED)");
       return NextResponse.json({ ok: true });
     }
@@ -197,6 +211,33 @@ export async function POST(req: Request) {
       },
       { merge: true }
     );
+
+    console.log("PAYMENT_FIRESTORE_UPDATED", {
+      userId,
+      orderId,
+      paidUntil: newPaidUntil,
+      plan: paymentOrder.plan,
+    });
+    console.log("PAYMENT_ACCESS_GRANTED", { userId, orderId, paidUntil: newPaidUntil });
+
+    const paymentIdRaw =
+      body.PaymentId != null
+        ? String(body.PaymentId)
+        : body.PaymentID != null
+          ? String(body.PaymentID)
+          : "";
+
+    try {
+      await creditPartnerCommissionIfNeeded({
+        db: adminDb,
+        paidUserId: userId,
+        orderId,
+        amountKopecks: paymentOrder.amount,
+        paymentId: paymentIdRaw.trim() || undefined,
+      });
+    } catch (e) {
+      console.error("[payment] partner commission failed", e);
+    }
 
     console.log("[payment] access granted", {
       userId,
@@ -233,6 +274,11 @@ export async function POST(req: Request) {
       })
       .catch((err) => console.error("[payment] telegram notify failed", err));
 
+    console.log("PAYMENT_WEBHOOK_SUCCESS", {
+      outcome: "confirmed_access_granted",
+      userId,
+      orderId,
+    });
     console.log("[payment] callback success");
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {

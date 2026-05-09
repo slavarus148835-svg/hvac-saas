@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { creditPartnerCommissionIfNeeded } from "@/lib/server/creditPartnerCommission";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
+import {
+  resolveMonthlySubscriptionIntent,
+  TBANK_MONTHLY_AMOUNT_KOPECKS,
+} from "@/lib/server/tbankMonthlyPayment";
 import {
   escapeTelegramHtml,
   sendTelegramNotification,
@@ -11,7 +16,6 @@ import {
 const TERMINAL_KEY = process.env.TBANK_TERMINAL_KEY || "";
 const PASSWORD = process.env.TBANK_PASSWORD || "";
 const TBANK_GET_STATE_URL = "https://securepay.tinkoff.ru/v2/GetState";
-const MONTHLY_AMOUNT_KOPECKS = 1190 * 100;
 
 function generateGetStateToken(payload: Record<string, string | number>) {
   const values: Record<string, string> = {};
@@ -59,6 +63,7 @@ function buildFallbackPaymentTelegramHtml(email: string, uid: string, amountRub:
 }
 
 export async function POST(req: Request) {
+  console.log("PAYMENT_CHECK_STATUS", { phase: "start" });
   console.log("[payment] checking status start");
 
   const fail = (
@@ -80,6 +85,7 @@ export async function POST(req: Request) {
     message: string,
     extra?: Record<string, unknown>
   ) => {
+    console.log("PAYMENT_CHECK_STATUS", { phase: "fail", reason, ...extra });
     console.log("[payment] failed", { reason, ...extra });
     return NextResponse.json(
       {
@@ -131,6 +137,7 @@ export async function POST(req: Request) {
   if (!userSnap.exists) {
     return fail(404, "user_not_found", "Пользователь не найден");
   }
+  console.log("PAYMENT_USER_FOUND", { uid: bearerUid });
   const userData = userSnap.data() || {};
   const intent = userData.lastPaymentIntent as
     | {
@@ -225,7 +232,7 @@ export async function POST(req: Request) {
   console.log("[payment] GetState response", {
     status,
     amount: amountFromBank,
-    expectedAmount: MONTHLY_AMOUNT_KOPECKS,
+    expectedAmount: TBANK_MONTHLY_AMOUNT_KOPECKS,
     orderIdFromBank: orderIdFromBank || null,
   });
 
@@ -241,10 +248,10 @@ export async function POST(req: Request) {
     );
   }
 
-  if (amountFromBank !== MONTHLY_AMOUNT_KOPECKS) {
+  if (amountFromBank !== TBANK_MONTHLY_AMOUNT_KOPECKS) {
     return fail(400, "amount_mismatch", "Неверная сумма платежа", {
       amountFromBank,
-      expectedAmount: MONTHLY_AMOUNT_KOPECKS,
+      expectedAmount: TBANK_MONTHLY_AMOUNT_KOPECKS,
     });
   }
 
@@ -257,37 +264,55 @@ export async function POST(req: Request) {
 
   const lastConfirmed = userData.lastPaymentConfirmed as { orderId?: string } | undefined;
   if (lastConfirmed?.orderId === orderIdRaw) {
+    console.log("PAYMENT_CHECK_STATUS", {
+      phase: "already_processed",
+      uid: bearerUid,
+      orderId: orderIdRaw,
+    });
     console.log("[payment] confirmed", { alreadyProcessed: true });
     return NextResponse.json({ confirmed: true, alreadyProcessed: true });
   }
 
-  const intentOk = intent?.orderId === orderIdRaw;
-  if (!intentOk) {
+  const resolved = resolveMonthlySubscriptionIntent(intent, orderIdRaw, {
+    bankAmountKopecks: amountFromBank,
+  });
+  if (!resolved.ok) {
+    console.log("PAYMENT_CHECK_STATUS", {
+      phase: "intent_resolve_failed",
+      uid: bearerUid,
+      orderId: orderIdRaw,
+      code: resolved.code,
+    });
     return fail(
       400,
-      "last_payment_intent_missing",
-      "Черновик оплаты не найден или orderId не совпадает",
+      resolved.code === "intent_order_mismatch"
+        ? "last_payment_intent_missing"
+        : "amount_mismatch",
+      resolved.code === "intent_order_mismatch"
+        ? "Черновик оплаты не найден или orderId не совпадает"
+        : "Некорректный lastPaymentIntent (или сумма в банке не совпала с тарифом)",
       {
         lastPaymentIntentOrderId: intentOrderId || null,
         orderIdExpected: orderIdRaw,
+        resolveCode: resolved.code,
       }
     );
   }
 
-  const months = Number(intent.months || 0);
-  const amount = Number(intent.amount || 0);
-  if (months !== 1 || amount !== MONTHLY_AMOUNT_KOPECKS) {
-    return fail(400, "amount_mismatch", "Некорректный lastPaymentIntent", {
-      amountFromIntent: amount,
-      monthsFromIntent: months,
-      expectedAmount: MONTHLY_AMOUNT_KOPECKS,
-    });
-  }
-
-  const emailOut = String(intent.email || userData.email || bearerEmail || "").trim();
+  const months = resolved.months;
+  const amount = resolved.amount;
+  const emailOut = String(
+    resolved.email || userData.email || bearerEmail || ""
+  ).trim();
   const currentPaidUntil = Number(userData.paidUntil || 0);
   const newPaidUntil = addMonthsToPaidUntil(currentPaidUntil, months);
 
+  console.log("PAYMENT_CHECK_STATUS", {
+    phase: "grant_access_getstate_confirmed",
+    uid: bearerUid,
+    orderId: orderIdRaw,
+    paidUntil: newPaidUntil,
+  });
   console.log("[payment] firestore grant start", {
     uid: bearerUid,
     orderId: orderIdRaw,
@@ -315,12 +340,34 @@ export async function POST(req: Request) {
       },
       { merge: true }
     );
+    console.log("PAYMENT_FIRESTORE_UPDATED", {
+      uid: bearerUid,
+      orderId: orderIdRaw,
+      source: "check_payment_getstate",
+    });
+    console.log("PAYMENT_ACCESS_GRANTED", {
+      uid: bearerUid,
+      orderId: orderIdRaw,
+      paidUntil: newPaidUntil,
+    });
     console.log("[payment] firestore grant success");
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
     return fail(500, "firestore_update_failed", "Не удалось выдать доступ в Firestore", {
       firestoreError: err,
     });
+  }
+
+  try {
+    await creditPartnerCommissionIfNeeded({
+      db: adminDb,
+      paidUserId: bearerUid,
+      orderId: orderIdRaw,
+      amountKopecks: amount,
+      paymentId: paymentIdRaw || undefined,
+    });
+  } catch (e) {
+    console.error("[payment] partner commission failed", e);
   }
 
   const amountRub = amount / 100;
@@ -340,6 +387,11 @@ export async function POST(req: Request) {
     console.error("[payment] telegram notify failed", err);
   }
 
+  console.log("PAYMENT_CHECK_STATUS", {
+    phase: "success_confirmed",
+    uid: bearerUid,
+    orderId: orderIdRaw,
+  });
   console.log("[payment] confirmed");
   return NextResponse.json({
     confirmed: true,

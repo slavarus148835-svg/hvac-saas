@@ -169,12 +169,18 @@ export default function BillingPage() {
       if (data.url) {
         // Сохраняем paymentId/orderId в Firestore на случай потери sessionStorage после банка.
         if (data.paymentId && data.orderId) {
+          // Важно: merge целиком перезаписывает вложенный объект lastPaymentIntent.
+          // Не удалять plan/months/amount/email — иначе webhook и check-payment отклоняют платёж.
           await setDoc(
             doc(db, "users", effectiveUid),
             {
               lastPaymentIntent: {
                 orderId: String(data.orderId),
                 paymentId: String(data.paymentId),
+                plan: "standard",
+                months: 1,
+                amount: MONTHLY_AMOUNT_KOPECKS,
+                email: payEmail,
                 status: "bank_redirect_ready",
                 updatedAt: new Date().toISOString(),
               },
