@@ -20,9 +20,18 @@ export {
   formatCapacityBtu,
   formatCapacityLabel,
 } from "./capacityDisplay";
-export { computeCalculatorEstimate } from "./compute";
+export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
+export { computeMultiRoomEstimate } from "./computeMultiRoomEstimate";
+export {
+  createDefaultRoomDraft,
+  flatCalculatorStateToRoomDraft,
+  newRoomId,
+  roomDraftToComputeInput,
+  roomDraftToFlatState,
+} from "./roomDraft";
+export type { CalculatorRoomDraft } from "./roomDraft";
 export { DEFAULT_CALCULATOR_PRICES } from "./defaultPrices";
-export { formatRubles } from "./format";
+export { formatAmountRu, formatRubles } from "./format";
 export { normalizePriceDocForSplitCapacity } from "./normalizePriceDoc";
 export {
   capacityKey,
@@ -40,5 +49,8 @@ export type {
   CalculatorComputeResult,
   CalculatorLineItem,
   CalculatorPriceList,
+  CalculatorRoomInput,
+  MultiRoomComputeResult,
+  MultiRoomComputeRoomResult,
   SelectedExtraServiceMap,
 } from "./types";

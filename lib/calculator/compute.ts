@@ -15,7 +15,6 @@ import {
   capacityKey,
   chargedFloorsFromSecond,
   chargedMetersForBilling,
-  minOneMeter,
   parseDecimalMetersInput,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
@@ -28,10 +27,27 @@ import type {
   SelectedExtraServiceMap,
 } from "./types";
 
-function computeLineItems(
+/** Метраж для заголовка строки сметы (1,5 м). */
+export function formatMetersQtyRu(meters: number): string {
+  if (!Number.isFinite(meters) || meters <= 0) return "0";
+  const x = Math.round(meters * 10) / 10;
+  if (Math.abs(x - Math.round(x)) < 1e-9) return String(Math.round(x));
+  return String(x).replace(".", ",");
+}
+
+export type ComputeLineItemsOptions = {
+  /** По умолчанию true: добавить строку скидки % на весь расчёт. Для multi-room — false. */
+  applyPercentDiscount?: boolean;
+};
+
+/**
+ * Позиции сметы (до итоговой суммы). Экспорт для multi-room и тестов.
+ */
+export function computeCalculatorLineItems(
   prices: CalculatorPriceList,
   input: CalculatorComputeInput,
-  fmt: (n: number) => string
+  fmt: (n: number) => string,
+  opts?: ComputeLineItemsOptions
 ): CalculatorLineItem[] {
   const routeMetersRaw = parseDecimalMetersInput(input.routeMeters, MAX_ROUTE_METERS);
   const chargedRouteMeters = chargedMetersForBilling(routeMetersRaw);
@@ -51,12 +67,10 @@ function computeLineItems(
     sanitizeNonNegativeMoneyString(input.manualDismantlingCost, MAX_MONEY) || 0
   );
   const strobaMetersNum = parseDecimalMetersInput(input.strobaMeters, MAX_STROBA_METERS);
-  const cable40MetersNum = Number(
-    sanitizeNonNegativeIntString(input.cable40Meters, MAX_CABLE_METERS) || 0
-  );
-  const cable16MetersNum = Number(
-    sanitizeNonNegativeIntString(input.cable16Meters, MAX_CABLE_METERS) || 0
-  );
+  const cable40Raw = parseDecimalMetersInput(input.cable40Meters, MAX_CABLE_METERS);
+  const cable16Raw = parseDecimalMetersInput(input.cable16Meters, MAX_CABLE_METERS);
+  const chargedCable40Meters = chargedMetersForBilling(cable40Raw);
+  const chargedCable16Meters = chargedMetersForBilling(cable16Raw);
   const percentDiscountNum = Number(
     sanitizeNonNegativeIntString(input.percentDiscount, 100) || 0
   );
@@ -66,8 +80,6 @@ function computeLineItems(
 
   const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
   const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
-  const chargedCable40Meters = minOneMeter(cable40MetersNum);
-  const chargedCable16Meters = minOneMeter(cable16MetersNum);
 
   const capKey = capacityKey(input.capacity);
 
@@ -158,16 +170,18 @@ function computeLineItems(
   }
 
   if (chargedCable40Meters > 0) {
+    const mLabel = formatMetersQtyRu(chargedCable40Meters);
     items.push({
-      title: `Кабель-канал 40×40 × ${chargedCable40Meters} м`,
+      title: `Кабель-канал 40×40 × ${mLabel} м`,
       amount: chargedCable40Meters * prices.cable40,
       note: `Цена за 1 м: ${fmt(prices.cable40)}. Кабель-канал считается минимум от 1 м`,
     });
   }
 
   if (chargedCable16Meters > 0) {
+    const mLabel = formatMetersQtyRu(chargedCable16Meters);
     items.push({
-      title: `Кабель-канал 16×16 × ${chargedCable16Meters} м`,
+      title: `Кабель-канал 16×16 × ${mLabel} м`,
       amount: chargedCable16Meters * prices.cable16,
       note: `Цена за 1 м: ${fmt(prices.cable16)}. Кабель-канал считается минимум от 1 м`,
     });
@@ -230,8 +244,12 @@ function computeLineItems(
   }
 
   if (carryBlockCountNum > 0) {
+    const carryTitle =
+      carryBlockCountNum === 1
+        ? "Подъём внешнего блока на плече по лестнице"
+        : `Подъём внешнего блока × ${carryBlockCountNum}`;
     items.push({
-      title: `Подъём внешнего блока × ${carryBlockCountNum}`,
+      title: carryTitle,
       amount: carryBlockCountNum * prices.outdoorBlockCarry,
       note: `Цена за 1 блок: ${fmt(prices.outdoorBlockCarry)}`,
     });
@@ -277,6 +295,11 @@ function computeLineItems(
     });
   });
 
+  const applyPct = opts?.applyPercentDiscount !== false;
+  if (!applyPct) {
+    return items;
+  }
+
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
 
   const discountByPercent =
@@ -303,7 +326,7 @@ export function computeCalculatorEstimate(
   input: CalculatorComputeInput,
   fmt: (n: number) => string = formatRubles
 ): CalculatorComputeResult {
-  const items = computeLineItems(prices, input, fmt);
+  const items = computeCalculatorLineItems(prices, input, fmt);
 
   const totalRaw = items.reduce((sum, item) => sum + item.amount, 0);
   const total = Number.isFinite(totalRaw) ? Math.max(0, totalRaw) : 0;
@@ -311,7 +334,6 @@ export function computeCalculatorEstimate(
   const autoClientText = buildStructuredClientQuoteMessage({
     items: items.map((item) => ({ title: item.title, amount: item.amount })),
     total,
-    formatMoney: fmt,
   });
 
   return {

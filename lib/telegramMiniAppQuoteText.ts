@@ -1,4 +1,3 @@
-import { formatRubles } from "@/lib/calculator/format";
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
 
 export type MiniAppQuoteLineInput = {
@@ -40,7 +39,6 @@ export function buildTelegramMiniAppClientQuoteText(params: {
     total: params.total,
     clientName: params.clientName,
     clientContact: params.clientContact,
-    formatMoney: formatRubles,
     mapTitle: mapMiniAppQuoteItemTitle,
   });
 }

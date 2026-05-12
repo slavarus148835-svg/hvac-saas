@@ -7,9 +7,9 @@ import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import {
   computeCalculatorEstimate,
   DEFAULT_CALCULATOR_PRICES,
+  formatAmountRu,
   formatCapacityBtu,
   formatRubles,
-  MAX_BLOCKS,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -33,6 +33,7 @@ import {
   mapMiniAppQuoteItemTitle,
 } from "@/lib/telegramMiniAppQuoteText";
 import { hydrateTgCalculatorFromHistoryDoc } from "@/lib/tgCalculatorHistoryHydrate";
+import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 import { tgHapticButtonTap, tgHapticNotification } from "@/lib/telegramHaptic";
 import {
   createMiniAppModel,
@@ -67,8 +68,11 @@ const BTU_MODEL_OPTIONS = ["7", "9", "12", "18", "24", "30", "36"] as const;
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
+  maxHeight: "100dvh",
+  overflowY: "auto",
+  scrollPaddingBottom: "calc(200px + env(safe-area-inset-bottom, 0px))",
   padding:
-    "max(12px, env(safe-area-inset-top)) 16px calc(168px + env(safe-area-inset-bottom))",
+    "max(12px, env(safe-area-inset-top)) 16px calc(200px + env(safe-area-inset-bottom))",
   maxWidth: 440,
   margin: "0 auto",
   fontFamily:
@@ -468,6 +472,8 @@ export default function TgCalculatorPage() {
       calcPhase === "ready" &&
       Boolean(profile));
 
+  useScrollInputIntoView(showCalculatorForm);
+
   const canOperate = useMemo(() => {
     if (authUi !== "profile" || calcPhase !== "ready" || !profile) return false;
     return Boolean(getMiniAppSessionToken()?.trim());
@@ -485,6 +491,14 @@ export default function TgCalculatorPage() {
       historyLoadedRef.current = hid;
       const doc = { ...r.doc };
       delete doc.id;
+      const docRaw = doc as Record<string, unknown>;
+      const isMulti =
+        docRaw.multiRoom === true &&
+        Array.isArray(docRaw.rooms) &&
+        docRaw.rooms.length > 1;
+      const savedClientText =
+        typeof docRaw.clientText === "string" ? docRaw.clientText.trim() : "";
+
       const h = hydrateTgCalculatorFromHistoryDoc(doc);
       if (h.capacity != null) setCapacity(h.capacity);
       if (h.mountType) setMountType(h.mountType);
@@ -512,8 +526,15 @@ export default function TgCalculatorPage() {
       if (h.quickCalculationExtras) setQuickCalculationExtras(h.quickCalculationExtras);
       if (h.clientName != null) setClientName(h.clientName);
       if (h.clientContact != null) setClientContact(h.clientContact);
-      setClientQuoteUserEdited(false);
-      setClientQuoteDraft("");
+      if (isMulti && savedClientText) {
+        setClientQuoteUserEdited(true);
+        setClientQuoteDraft(savedClientText);
+        setSaveToast("Несколько комнат: таблица — по первой комнате; полный текст в блоке ниже.");
+        window.setTimeout(() => setSaveToast(null), 5000);
+      } else {
+        setClientQuoteUserEdited(false);
+        setClientQuoteDraft("");
+      }
       tgHapticNotification("success");
     })();
     return () => {
@@ -1000,270 +1021,6 @@ export default function TgCalculatorPage() {
             {showCalculatorForm ? (
               <>
                 <div style={card}>
-                  <span style={label}>Мощность BTU</span>
-                  <select
-                    style={input}
-                    value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
-                    aria-label="Выберите мощность BTU"
-                  >
-                    {BTU_MODEL_OPTIONS.map((v) => (
-                      <option key={v} value={v}>
-                        {formatCapacityBtu(v)}
-                      </option>
-                    ))}
-                  </select>
-
-                  <span style={label}>Тип монтажа</span>
-                  <select
-                    style={input}
-                    value={mountType}
-                    onChange={(e) =>
-                      setMountType(e.target.value as "standard" | "existing")
-                    }
-                  >
-                    <option value="standard">На нашу трассу</option>
-                    <option value="existing">На чужую трассу</option>
-                  </select>
-
-                  <span style={label}>
-                    Трасса, м (в подарок {giftRouteMeters} м с сайта)
-                  </span>
-                  <input
-                    style={input}
-                    inputMode="decimal"
-                    value={routeMeters}
-                    onChange={(e) =>
-                      setRouteMeters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_ROUTE_METERS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Основное отверстие</span>
-                  <select
-                    style={input}
-                    value={baseWallType}
-                    onChange={(e) =>
-                      setBaseWallType(e.target.value as "normal" | "arm")
-                    }
-                  >
-                    <option value="normal">Кирпич / газобетон / неарм. бетон</option>
-                    <option value="arm">Армированный бетон</option>
-                  </select>
-
-                  <span style={label}>Доп. отверстия обычные</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={extraHolesNormal}
-                    onChange={(e) =>
-                      setExtraHolesNormal(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Доп. отверстия арм. бетон</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={extraHolesArm}
-                    onChange={(e) =>
-                      setExtraHolesArm(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Штроба</span>
-                  <select
-                    style={input}
-                    value={strobaType}
-                    onChange={(e) =>
-                      setStrobaType(e.target.value as "none" | "brick" | "concrete")
-                    }
-                  >
-                    <option value="none">Нет</option>
-                    <option value="brick">Кирпич</option>
-                    <option value="concrete">Бетон</option>
-                  </select>
-                  <input
-                    style={input}
-                    inputMode="decimal"
-                    placeholder="Метры штробления"
-                    value={strobaMeters}
-                    onChange={(e) =>
-                      setStrobaMeters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Кабель-канал 40×40, м</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={cable40Meters}
-                    onChange={(e) =>
-                      setCable40Meters(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_CABLE_METERS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Кабель-канал 16×16, м</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={cable16Meters}
-                    onChange={(e) =>
-                      setCable16Meters(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_CABLE_METERS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Подъём инструмента (этаж с)</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={carryToolFloors}
-                    onChange={(e) =>
-                      setCarryToolFloors(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_FLOORS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Подъём внешнего блока, шт</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={carryBlockCount}
-                    onChange={(e) =>
-                      setCarryBlockCount(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_BLOCKS)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Демонтаж вручную, ₽</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={manualDismantlingCost}
-                    onChange={(e) =>
-                      setManualDismantlingCost(
-                        sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY)
-                      )
-                    }
-                  />
-
-                  {(
-                    [
-                      ["Кронштейны", includeBrackets, setIncludeBrackets],
-                      ["Демонтаж и монтаж стеклопакета", includeGlass, setIncludeGlass],
-                      ["Демонтаж, резка и монтаж фасадной плитки", includeTile, setIncludeTile],
-                      ["Монтаж дренажа в водосток", includeDrain, setIncludeDrain],
-                      ["Установка и подключение дренажной помпы", includePump, setIncludePump],
-                      [
-                        "Подключение внешнего блока на лестнице",
-                        includeLadderConnection,
-                        setIncludeLadderConnection,
-                      ],
-                    ] as const
-                  ).map(([t, v, set]) => (
-                    <label key={t} style={row}>
-                      <input
-                        type="checkbox"
-                        style={chk}
-                        checked={v}
-                        onChange={(e) => set(e.target.checked)}
-                      />
-                      <span>{t}</span>
-                    </label>
-                  ))}
-
-                  <label style={row}>
-                    <input
-                      type="checkbox"
-                      style={chk}
-                      checked={buyAcAndRouteFromUs}
-                      onChange={(e) => setBuyAcAndRouteFromUs(e.target.checked)}
-                    />
-                    <span>Скидка при покупке кондиционера и трассы у нас (−1000 ₽)</span>
-                  </label>
-                </div>
-
-                <div style={card}>
-                  <span style={label}>Быстрая услуга</span>
-                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
-                    В расчёт сразу, без сохранения в прайс (как на сайте).
-                  </p>
-                  <input
-                    style={input}
-                    placeholder="Название услуги"
-                    value={quickSvcName}
-                    onChange={(e) => setQuickSvcName(e.target.value)}
-                  />
-                  <input
-                    style={input}
-                    placeholder="Цена, ₽"
-                    inputMode="numeric"
-                    value={quickSvcPrice}
-                    onChange={(e) =>
-                      setQuickSvcPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
-                    }
-                  />
-                  <button type="button" style={btnSecondary} onClick={addQuickServiceToCalc}>
-                    Добавить услугу
-                  </button>
-                  {quickCalculationExtras.length > 0 ? (
-                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                      {quickCalculationExtras.map((line) => (
-                        <div
-                          key={line.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            padding: "10px 12px",
-                            background: "#f8fafc",
-                            borderRadius: 10,
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</div>
-                            <div style={{ fontSize: 13, color: "#64748b" }}>
-                              {formatRubles(line.price)}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeQuickExtraLine(line.id)}
-                            style={{
-                              flexShrink: 0,
-                              background: "#fee2e2",
-                              color: "#991b1b",
-                              border: "none",
-                              borderRadius: 8,
-                              padding: "8px 12px",
-                              fontWeight: 600,
-                              fontSize: 13,
-                            }}
-                          >
-                            Убрать
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div style={card}>
                   <span style={label}>Модели кондиционеров из прайса</span>
                   {models.length === 0 ? (
                     <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
@@ -1416,6 +1173,268 @@ export default function TgCalculatorPage() {
                   ) : null}
                 </div>
 
+                <div style={card}>
+                  <span style={label}>Мощность BTU</span>
+                  <select
+                    style={input}
+                    value={capacity}
+                    onChange={(e) => setCapacity(e.target.value)}
+                    aria-label="Выберите мощность BTU"
+                  >
+                    {BTU_MODEL_OPTIONS.map((v) => (
+                      <option key={v} value={v}>
+                        {formatCapacityBtu(v)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span style={label}>Тип монтажа</span>
+                  <select
+                    style={input}
+                    value={mountType}
+                    onChange={(e) =>
+                      setMountType(e.target.value as "standard" | "existing")
+                    }
+                  >
+                    <option value="standard">На нашу трассу</option>
+                    <option value="existing">На чужую трассу</option>
+                  </select>
+
+                  <span style={label}>
+                    Трасса, м (в подарок {giftRouteMeters} м с сайта)
+                  </span>
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    value={routeMeters}
+                    onChange={(e) =>
+                      setRouteMeters(
+                        sanitizeDecimalMetersString(e.target.value, MAX_ROUTE_METERS)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Основное отверстие</span>
+                  <select
+                    style={input}
+                    value={baseWallType}
+                    onChange={(e) =>
+                      setBaseWallType(e.target.value as "normal" | "arm")
+                    }
+                  >
+                    <option value="normal">Кирпич / газобетон / неарм. бетон</option>
+                    <option value="arm">Армированный бетон</option>
+                  </select>
+
+                  <span style={label}>Доп. отверстия обычные</span>
+                  <input
+                    style={input}
+                    inputMode="numeric"
+                    value={extraHolesNormal}
+                    onChange={(e) =>
+                      setExtraHolesNormal(
+                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Доп. отверстия арм. бетон</span>
+                  <input
+                    style={input}
+                    inputMode="numeric"
+                    value={extraHolesArm}
+                    onChange={(e) =>
+                      setExtraHolesArm(
+                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Штроба</span>
+                  <select
+                    style={input}
+                    value={strobaType}
+                    onChange={(e) =>
+                      setStrobaType(e.target.value as "none" | "brick" | "concrete")
+                    }
+                  >
+                    <option value="none">Нет</option>
+                    <option value="brick">Кирпич</option>
+                    <option value="concrete">Бетон</option>
+                  </select>
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    placeholder="Метры штробления"
+                    value={strobaMeters}
+                    onChange={(e) =>
+                      setStrobaMeters(
+                        sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Кабель-канал 40×40, м</span>
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    value={cable40Meters}
+                    onChange={(e) =>
+                      setCable40Meters(
+                        sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Кабель-канал 16×16, м</span>
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    value={cable16Meters}
+                    onChange={(e) =>
+                      setCable16Meters(
+                        sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS)
+                      )
+                    }
+                  />
+
+                  <span style={label}>Подъём инструмента (этаж с)</span>
+                  <input
+                    style={input}
+                    inputMode="numeric"
+                    value={carryToolFloors}
+                    onChange={(e) =>
+                      setCarryToolFloors(
+                        sanitizeNonNegativeIntString(e.target.value, MAX_FLOORS)
+                      )
+                    }
+                  />
+
+                  <label style={row}>
+                    <input
+                      type="checkbox"
+                      style={chk}
+                      checked={Number(carryBlockCount || 0) > 0}
+                      onChange={(e) => setCarryBlockCount(e.target.checked ? "1" : "0")}
+                    />
+                    <span>Подъём внешнего блока на плече по лестнице</span>
+                  </label>
+
+                  <span style={label}>Демонтаж вручную, ₽</span>
+                  <input
+                    style={input}
+                    inputMode="numeric"
+                    value={manualDismantlingCost}
+                    onChange={(e) =>
+                      setManualDismantlingCost(
+                        sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY)
+                      )
+                    }
+                  />
+
+                  {(
+                    [
+                      ["Кронштейны", includeBrackets, setIncludeBrackets],
+                      ["Демонтаж и монтаж стеклопакета", includeGlass, setIncludeGlass],
+                      ["Демонтаж, резка и монтаж фасадной плитки", includeTile, setIncludeTile],
+                      ["Монтаж дренажа в водосток", includeDrain, setIncludeDrain],
+                      ["Установка и подключение дренажной помпы", includePump, setIncludePump],
+                      [
+                        "Подключение внешнего блока на лестнице",
+                        includeLadderConnection,
+                        setIncludeLadderConnection,
+                      ],
+                    ] as const
+                  ).map(([t, v, set]) => (
+                    <label key={t} style={row}>
+                      <input
+                        type="checkbox"
+                        style={chk}
+                        checked={v}
+                        onChange={(e) => set(e.target.checked)}
+                      />
+                      <span>{t}</span>
+                    </label>
+                  ))}
+
+                  <label style={row}>
+                    <input
+                      type="checkbox"
+                      style={chk}
+                      checked={buyAcAndRouteFromUs}
+                      onChange={(e) => setBuyAcAndRouteFromUs(e.target.checked)}
+                    />
+                    <span>Скидка при покупке кондиционера и трассы у нас (−1000 ₽)</span>
+                  </label>
+                </div>
+
+                <div style={card}>
+                  <span style={label}>Быстрая услуга</span>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
+                    В расчёт сразу, без сохранения в прайс (как на сайте).
+                  </p>
+                  <input
+                    style={input}
+                    placeholder="Название услуги"
+                    value={quickSvcName}
+                    onChange={(e) => setQuickSvcName(e.target.value)}
+                  />
+                  <input
+                    style={input}
+                    placeholder="Цена, ₽"
+                    inputMode="numeric"
+                    value={quickSvcPrice}
+                    onChange={(e) =>
+                      setQuickSvcPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
+                    }
+                  />
+                  <button type="button" style={btnSecondary} onClick={addQuickServiceToCalc}>
+                    Добавить услугу
+                  </button>
+                  {quickCalculationExtras.length > 0 ? (
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {quickCalculationExtras.map((line) => (
+                        <div
+                          key={line.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            padding: "10px 12px",
+                            background: "#f8fafc",
+                            borderRadius: 10,
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</div>
+                            <div style={{ fontSize: 13, color: "#64748b" }}>
+                              {formatRubles(line.price)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeQuickExtraLine(line.id)}
+                            style={{
+                              flexShrink: 0,
+                              background: "#fee2e2",
+                              color: "#991b1b",
+                              border: "none",
+                              borderRadius: 8,
+                              padding: "8px 12px",
+                              fontWeight: 600,
+                              fontSize: 13,
+                            }}
+                          >
+                            Убрать
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
                 {customServices.length > 0 ? (
                   <div style={{ ...card, maxHeight: 220, overflowY: "auto" }}>
                     <span style={label}>Услуги из прайса</span>
@@ -1509,7 +1528,7 @@ export default function TgCalculatorPage() {
                           <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
                           <span style={{ flexShrink: 0, fontWeight: 700 }}>
                             {sign}
-                            {formatRubles(Math.abs(i.amount))} ₽
+                            {formatAmountRu(Math.abs(i.amount))} ₽
                           </span>
                         </div>
                       );

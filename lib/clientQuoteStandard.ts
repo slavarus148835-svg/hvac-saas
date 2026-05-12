@@ -1,4 +1,4 @@
-import { formatRubles } from "@/lib/calculator/format";
+import { formatAmountRu } from "@/lib/calculator/format";
 
 /** Единое начало клиентского текста сметы (веб, Mini App, share, сохранение). */
 export const CLIENT_QUOTE_GREETING =
@@ -10,6 +10,12 @@ export const CLIENT_QUOTE_MATERIALS_BLOCK =
 
 export type ClientQuoteLine = { title: string; amount: number };
 
+export type ClientQuoteRoomBlock = {
+  roomName: string;
+  items: ClientQuoteLine[];
+  subtotal: number;
+};
+
 /**
  * Основной блок сообщения клиенту: приветствие, позиции с суммами, итого, опционально контакты, блок про материалы.
  * Примечания к позициям (технические) не включаются.
@@ -19,10 +25,9 @@ export function buildStructuredClientQuoteMessage(params: {
   total: number;
   clientName?: string;
   clientContact?: string;
-  formatMoney?: (n: number) => string;
   mapTitle?: (title: string) => string;
 }): string {
-  const fmt = params.formatMoney ?? formatRubles;
+  const fmtNum = (n: number) => formatAmountRu(Math.abs(n));
   const map = params.mapTitle ?? ((t: string) => t);
   const name = (params.clientName ?? "").trim();
   const contact = (params.clientContact ?? "").trim();
@@ -32,10 +37,55 @@ export function buildStructuredClientQuoteMessage(params: {
   for (const it of params.items) {
     const title = map(it.title);
     const sign = it.amount < 0 ? "−" : "";
-    lines.push(`• ${title} — ${sign}${fmt(Math.abs(it.amount))} ₽`);
+    lines.push(`• ${title} — ${sign}${fmtNum(it.amount)} ₽`);
   }
 
-  lines.push("", `Итого: ${fmt(params.total)} ₽`);
+  lines.push("", `Итого: ${fmtNum(params.total)} ₽`);
+
+  if (name) lines.push("", `Клиент: ${name}`);
+  if (contact) lines.push(`Контакт: ${contact}`);
+
+  lines.push("", CLIENT_QUOTE_MATERIALS_BLOCK);
+
+  return lines.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n").trim();
+}
+
+/**
+ * Смета по нескольким комнатам: заголовок комнаты, позиции, итого по комнате; затем общий итог и блок про материалы.
+ */
+export function buildMultiRoomClientQuoteMessage(params: {
+  rooms: ClientQuoteRoomBlock[];
+  total: number;
+  clientName?: string;
+  clientContact?: string;
+  mapTitle?: (title: string) => string;
+  discountLine?: { title: string; amount: number } | null;
+}): string {
+  const fmtNum = (n: number) => formatAmountRu(Math.abs(n));
+  const map = params.mapTitle ?? ((t: string) => t);
+  const name = (params.clientName ?? "").trim();
+  const contact = (params.clientContact ?? "").trim();
+
+  const lines: string[] = [CLIENT_QUOTE_GREETING, ""];
+
+  for (const room of params.rooms) {
+    const label = (room.roomName || "Комната").trim() || "Комната";
+    lines.push(`${label}:`, "");
+    for (const it of room.items) {
+      const title = map(it.title);
+      const sign = it.amount < 0 ? "−" : "";
+      lines.push(`• ${title} — ${sign}${fmtNum(it.amount)} ₽`);
+    }
+    lines.push("", `Итого по комнате: ${fmtNum(room.subtotal)} ₽`, "");
+  }
+
+  if (params.discountLine && params.discountLine.amount !== 0) {
+    const t = map(params.discountLine.title);
+    const sign = params.discountLine.amount < 0 ? "−" : "";
+    lines.push(`• ${t} — ${sign}${fmtNum(params.discountLine.amount)} ₽`, "");
+  }
+
+  lines.push(`Итого по всем комнатам: ${fmtNum(params.total)} ₽`);
 
   if (name) lines.push("", `Клиент: ${name}`);
   if (contact) lines.push(`Контакт: ${contact}`);

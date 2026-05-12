@@ -14,11 +14,15 @@ import {
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
+  maxHeight: "100dvh",
+  overflowY: "auto",
+  scrollPaddingBottom: "calc(96px + env(safe-area-inset-bottom, 0px))",
   padding:
-    "max(12px, env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))",
+    "max(12px, env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))",
   maxWidth: 440,
   margin: "0 auto",
   fontFamily:
@@ -85,6 +89,8 @@ export default function TgPricePage() {
   const [giftRouteMeters, setGiftRouteMeters] = useState("1");
   const [hasSavedPriceList, setHasSavedPriceList] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+
+  useScrollInputIntoView(ready && authOk);
 
   useEffect(() => {
     let cancelled = false;

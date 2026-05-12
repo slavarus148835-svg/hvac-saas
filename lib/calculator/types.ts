@@ -93,6 +93,31 @@ export type CalculatorComputeInput = {
   quickCalculationExtras: QuickCalculationExtra[];
 };
 
+export type CalculatorRoomInput = {
+  id: string;
+  roomName: string;
+  input: CalculatorComputeInput;
+};
+
+export type MultiRoomComputeRoomResult = {
+  id: string;
+  roomName: string;
+  items: CalculatorLineItem[];
+  subtotal: number;
+};
+
+export type MultiRoomComputeResult = {
+  rooms: MultiRoomComputeRoomResult[];
+  /** Сумма по комнатам до глобальной скидки %. */
+  totalBeforeGlobalDiscount: number;
+  discountByPercent: number;
+  percentDiscountNum: number;
+  total: number;
+  /** Плоский список для PDF/экрана (все позиции комнат подряд). */
+  flatItems: CalculatorLineItem[];
+  autoClientText: string;
+};
+
 export type CalculatorComputeResult = {
   items: CalculatorLineItem[];
   total: number;

@@ -31,22 +31,26 @@ import { buildLoginRedirectUrl } from "@/lib/safeRedirect";
 import {
   buildCalculatorClosingText,
   computeCalculatorEstimate,
+  computeMultiRoomEstimate,
+  createDefaultRoomDraft,
   DEFAULT_CALCULATOR_PRICES,
+  flatCalculatorStateToRoomDraft,
   formatCapacityBtu,
   formatRubles,
-  MAX_BLOCKS,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
   MAX_MONEY,
   MAX_ROUTE_METERS,
   MAX_STROBA_METERS,
+  newRoomId,
   normalizePriceDocForSplitCapacity,
   parseDecimalMetersInput,
+  roomDraftToComputeInput,
+  roomDraftToFlatState,
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
-  WARN_BLOCKS,
   WARN_CABLE_METERS,
   WARN_FLOORS,
   WARN_HOLES,
@@ -54,7 +58,14 @@ import {
   WARN_ROUTE_METERS,
   WARN_STROBA_METERS,
 } from "@/lib/calculator";
-import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
+import type {
+  CalculatorComputeInput,
+  CalculatorPriceList,
+  CalculatorRoomDraft,
+  CalculatorRoomInput,
+  SelectedExtraServiceMap,
+} from "@/lib/calculator";
+import { RoomFormBlock } from "@/app/calculator/RoomFormBlock";
 import { mergeNumericPriceDocument } from "@/lib/mergeNumericPriceDocument";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
@@ -102,7 +113,67 @@ type HistoryCalcDoc = {
   selectedAcModelIds?: string[];
   /** legacy */
   selectedAcModelId?: string;
+  multiRoom?: boolean;
+  roomCount?: number;
+  rooms?: Array<{ id: string; roomName: string; input: CalculatorComputeInput }>;
 };
+
+function draftFromSavedHistoryRoom(entry: {
+  id?: unknown;
+  roomName?: unknown;
+  input?: unknown;
+}): CalculatorRoomDraft | null {
+  if (!entry.input || typeof entry.input !== "object" || Array.isArray(entry.input)) return null;
+  const inp = entry.input as Record<string, unknown>;
+  const id =
+    typeof entry.id === "string" && entry.id.trim() ? String(entry.id).trim() : newRoomId();
+  const roomName =
+    typeof entry.roomName === "string" && entry.roomName.trim()
+      ? String(entry.roomName).trim()
+      : "Комната";
+  return {
+    id,
+    roomName,
+    capacity: typeof inp.capacity === "string" ? inp.capacity : "12",
+    mountType: inp.mountType === "existing" ? "existing" : "standard",
+    routeMeters: typeof inp.routeMeters === "string" ? inp.routeMeters : "0",
+    baseWallType: inp.baseWallType === "arm" ? "arm" : "normal",
+    extraHolesNormal:
+      typeof inp.extraHolesNormal === "string" ? inp.extraHolesNormal : String(inp.extraHolesNormal ?? "0"),
+    extraHolesArm:
+      typeof inp.extraHolesArm === "string" ? inp.extraHolesArm : String(inp.extraHolesArm ?? "0"),
+    carryToolFloors:
+      typeof inp.carryToolFloors === "string" ? inp.carryToolFloors : String(inp.carryToolFloors ?? "0"),
+    carryBlockCount:
+      typeof inp.carryBlockCount === "string" ? inp.carryBlockCount : String(inp.carryBlockCount ?? "0"),
+    manualDismantlingCost:
+      typeof inp.manualDismantlingCost === "string"
+        ? inp.manualDismantlingCost
+        : String(inp.manualDismantlingCost ?? "0"),
+    strobaType:
+      inp.strobaType === "brick" || inp.strobaType === "concrete" ? inp.strobaType : "none",
+    strobaMeters: typeof inp.strobaMeters === "string" ? inp.strobaMeters : "0",
+    cable40Meters: typeof inp.cable40Meters === "string" ? inp.cable40Meters : "0",
+    cable16Meters: typeof inp.cable16Meters === "string" ? inp.cable16Meters : "0",
+    buyAcAndRouteFromUs: Boolean(inp.buyAcAndRouteFromUs),
+    includeBrackets: Boolean(inp.includeBrackets),
+    includeGlass: Boolean(inp.includeGlass),
+    includeTile: Boolean(inp.includeTile),
+    includeDrain: Boolean(inp.includeDrain),
+    includePump: Boolean(inp.includePump),
+    includeLadderConnection: Boolean(inp.includeLadderConnection),
+    selectedAcModelIds: Array.isArray(inp.selectedAcModelIds)
+      ? inp.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+      : [],
+    selectedExtraServices:
+      inp.selectedExtraServices && typeof inp.selectedExtraServices === "object" && !Array.isArray(inp.selectedExtraServices)
+        ? (inp.selectedExtraServices as SelectedExtraServiceMap)
+        : {},
+    quickCalculationExtras: Array.isArray(inp.quickCalculationExtras)
+      ? (inp.quickCalculationExtras as QuickCalculationExtra[])
+      : [],
+  };
+}
 
 /** Firestore не принимает `undefined` в полях документа (в т.ч. во вложенных объектах). */
 function omitUndefinedForFirestore<T>(input: T): T {
@@ -189,6 +260,11 @@ function CalculatorPage() {
   const [actionToastIsError, setActionToastIsError] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const shareBusyRef = useRef(false);
+
+  const [multiRoomEnabled, setMultiRoomEnabled] = useState(false);
+  const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
+    createDefaultRoomDraft("Комната 1"),
+  ]);
 
   const historyIdFromUrl = searchParams.get("historyId")?.trim();
   const [hasSavedCalculation, setHasSavedCalculation] = useState<boolean | null>(null);
@@ -380,6 +456,21 @@ function CalculatorPage() {
             } else {
               setQuickCalculationExtras([]);
             }
+
+            if (data.multiRoom && Array.isArray(data.rooms) && data.rooms.length > 0) {
+              const drafts = data.rooms
+                .map((r) =>
+                  draftFromSavedHistoryRoom(r as { id?: unknown; roomName?: unknown; input?: unknown })
+                )
+                .filter((x): x is CalculatorRoomDraft => Boolean(x));
+              if (drafts.length > 0) {
+                setMultiRoomEnabled(true);
+                setRoomDrafts(drafts);
+              }
+            } else {
+              setMultiRoomEnabled(false);
+              setRoomDrafts([createDefaultRoomDraft("Комната 1")]);
+            }
           }
         }
           } catch (e) {
@@ -501,7 +592,7 @@ function CalculatorPage() {
     }
   }
 
-  const result = useMemo(() => {
+  const singleEstimate = useMemo(() => {
     return computeCalculatorEstimate(prices, {
       capacity,
       mountType,
@@ -562,49 +653,126 @@ function CalculatorPage() {
     selectedAcModelIds,
   ]);
 
+  const multiEstimate = useMemo(() => {
+    if (!multiRoomEnabled || roomDrafts.length === 0) return null;
+    const rooms: CalculatorRoomInput[] = roomDrafts.map((d) => ({
+      id: d.id,
+      roomName: d.roomName,
+      input: roomDraftToComputeInput(d, {
+        giftRouteMeters,
+        acModels,
+        pricelistCustomServices,
+      }),
+    }));
+    return computeMultiRoomEstimate(prices, rooms, percentDiscount, fmt);
+  }, [
+    multiRoomEnabled,
+    roomDrafts,
+    prices,
+    percentDiscount,
+    giftRouteMeters,
+    acModels,
+    pricelistCustomServices,
+  ]);
+
+  const result = useMemo(() => {
+    if (multiEstimate) {
+      return {
+        items: multiEstimate.flatItems,
+        total: multiEstimate.total,
+        autoClientText: multiEstimate.autoClientText,
+      };
+    }
+    return singleEstimate;
+  }, [multiEstimate, singleEstimate]);
+
   const finalClientText = `${result.autoClientText}\n${editableTailText}`.trim();
 
   const buildHistoryPayload = useCallback((): Omit<HistoryCalcDoc, "id"> => {
     const iso = new Date().toISOString();
+    const scalar =
+      multiRoomEnabled && roomDrafts[0]
+        ? roomDraftToFlatState(roomDrafts[0])
+        : {
+            capacity,
+            mountType,
+            routeMeters,
+            baseWallType,
+            extraHolesNormal,
+            extraHolesArm,
+            carryToolFloors,
+            carryBlockCount,
+            manualDismantlingCost,
+            strobaType,
+            strobaMeters,
+            cable40Meters,
+            cable16Meters,
+            buyAcAndRouteFromUs,
+            includeBrackets,
+            includeGlass,
+            includeTile,
+            includeDrain,
+            includePump,
+            includeLadderConnection,
+            selectedAcModelIds,
+            selectedExtraServices,
+            quickCalculationExtras,
+          };
+
     return {
       uid,
       createdAt: iso,
       updatedAt: iso,
-      capacity,
+      capacity: scalar.capacity,
       total: result.total,
       clientName: clientName.trim(),
       clientContact: clientContact.trim(),
       clientText: finalClientText,
       editableTailText,
 
-      mountType,
-      routeMeters,
-      baseWallType,
-      extraHolesNormal,
-      extraHolesArm,
-      carryToolFloors,
-      carryBlockCount,
-      manualDismantlingCost,
+      mountType: scalar.mountType,
+      routeMeters: scalar.routeMeters,
+      baseWallType: scalar.baseWallType,
+      extraHolesNormal: scalar.extraHolesNormal,
+      extraHolesArm: scalar.extraHolesArm,
+      carryToolFloors: scalar.carryToolFloors,
+      carryBlockCount: scalar.carryBlockCount,
+      manualDismantlingCost: scalar.manualDismantlingCost,
 
-      strobaType,
-      strobaMeters,
-      cable40Meters,
-      cable16Meters,
+      strobaType: scalar.strobaType,
+      strobaMeters: scalar.strobaMeters,
+      cable40Meters: scalar.cable40Meters,
+      cable16Meters: scalar.cable16Meters,
 
-      buyAcAndRouteFromUs,
-      includeBrackets,
-      includeGlass,
-      includeTile,
-      includeDrain,
-      includePump,
-      includeLadderConnection,
+      buyAcAndRouteFromUs: scalar.buyAcAndRouteFromUs,
+      includeBrackets: scalar.includeBrackets,
+      includeGlass: scalar.includeGlass,
+      includeTile: scalar.includeTile,
+      includeDrain: scalar.includeDrain,
+      includePump: scalar.includePump,
+      includeLadderConnection: scalar.includeLadderConnection,
 
       percentDiscount,
-      selectedExtraServices,
-      quickCalculationExtras,
+      selectedExtraServices: scalar.selectedExtraServices,
+      quickCalculationExtras: scalar.quickCalculationExtras,
       giftRouteMeters,
-      selectedAcModelIds,
-      selectedAcModelId: selectedAcModelIds[0] || "",
+      selectedAcModelIds: scalar.selectedAcModelIds,
+      selectedAcModelId: scalar.selectedAcModelIds[0] || "",
+      ...(multiRoomEnabled && roomDrafts.length > 0
+        ? {
+            multiRoom: true,
+            roomCount: roomDrafts.length,
+            rooms: roomDrafts.map((d) => ({
+              id: d.id,
+              roomName: d.roomName,
+              input: roomDraftToComputeInput(d, {
+                giftRouteMeters,
+                acModels,
+                pricelistCustomServices,
+              }),
+            })),
+          }
+        : { multiRoom: false }),
     };
   }, [
     uid,
@@ -638,6 +806,10 @@ function CalculatorPage() {
     quickCalculationExtras,
     giftRouteMeters,
     selectedAcModelIds,
+    multiRoomEnabled,
+    roomDrafts,
+    acModels,
+    pricelistCustomServices,
   ]);
 
   useEffect(() => {
@@ -736,6 +908,8 @@ function CalculatorPage() {
     giftRouteMeters,
     selectedAcModelIds,
     buildHistoryPayload,
+    multiRoomEnabled,
+    roomDrafts,
   ]);
 
   const MAX_SHARE_URL_CHARS = 3800;
@@ -1011,6 +1185,105 @@ function CalculatorPage() {
     setQuickCalculationExtras((prev) => prev.filter((x) => x.id !== id));
   }
 
+  function turnOnMultiRoom() {
+    setRoomDrafts([
+      flatCalculatorStateToRoomDraft({
+        roomName: "Комната 1",
+        capacity,
+        mountType,
+        routeMeters,
+        baseWallType,
+        extraHolesNormal,
+        extraHolesArm,
+        carryToolFloors,
+        carryBlockCount,
+        manualDismantlingCost,
+        strobaType,
+        strobaMeters,
+        cable40Meters,
+        cable16Meters,
+        buyAcAndRouteFromUs,
+        includeBrackets,
+        includeGlass,
+        includeTile,
+        includeDrain,
+        includePump,
+        includeLadderConnection,
+        selectedAcModelIds,
+        selectedExtraServices,
+        quickCalculationExtras,
+      }),
+    ]);
+    setMultiRoomEnabled(true);
+  }
+
+  function turnOffMultiRoom() {
+    const first = roomDrafts[0];
+    if (first) {
+      const f = roomDraftToFlatState(first);
+      setCapacity(f.capacity);
+      setMountType(f.mountType);
+      setRouteMeters(f.routeMeters);
+      setBaseWallType(f.baseWallType);
+      setExtraHolesNormal(f.extraHolesNormal);
+      setExtraHolesArm(f.extraHolesArm);
+      setCarryToolFloors(f.carryToolFloors);
+      setCarryBlockCount(f.carryBlockCount);
+      setManualDismantlingCost(f.manualDismantlingCost);
+      setStrobaType(f.strobaType);
+      setStrobaMeters(f.strobaMeters);
+      setCable40Meters(f.cable40Meters);
+      setCable16Meters(f.cable16Meters);
+      setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
+      setIncludeBrackets(f.includeBrackets);
+      setIncludeGlass(f.includeGlass);
+      setIncludeTile(f.includeTile);
+      setIncludeDrain(f.includeDrain);
+      setIncludePump(f.includePump);
+      setIncludeLadderConnection(f.includeLadderConnection);
+      setSelectedAcModelIds(f.selectedAcModelIds);
+      setSelectedExtraServices(f.selectedExtraServices);
+      setQuickCalculationExtras(f.quickCalculationExtras);
+    }
+    setMultiRoomEnabled(false);
+    setRoomDrafts([createDefaultRoomDraft("Комната 1")]);
+  }
+
+  function addEmptyRoom() {
+    setRoomDrafts((prev) => [
+      ...prev,
+      createDefaultRoomDraft(`Комната ${prev.length + 1}`),
+    ]);
+  }
+
+  function duplicateRoomAt(index: number) {
+    setRoomDrafts((prev) => {
+      const src = prev[index];
+      if (!src) return prev;
+      const copy: CalculatorRoomDraft = {
+        ...src,
+        id: newRoomId(),
+        roomName: `${(src.roomName || "Комната").trim() || "Комната"} (копия)`,
+        selectedAcModelIds: [...src.selectedAcModelIds],
+        selectedExtraServices: JSON.parse(JSON.stringify(src.selectedExtraServices)) as SelectedExtraServiceMap,
+        quickCalculationExtras: src.quickCalculationExtras.map((x) => ({
+          ...x,
+          id: newQuickExtraId(),
+        })),
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  }
+
+  function removeRoomAt(index: number) {
+    setRoomDrafts((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
   if (loading) {
     return <div style={loadingStyle}>Загрузка калькулятора...</div>;
   }
@@ -1136,25 +1409,36 @@ function CalculatorPage() {
       </div>
 
       <div style={cardStyle}>
-        <h2 style={sectionTitle}>1. Основные параметры</h2>
+        <h2 style={sectionTitle}>Режим расчёта</h2>
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={multiRoomEnabled}
+            onChange={(e) => {
+              if (e.target.checked) turnOnMultiRoom();
+              else turnOffMultiRoom();
+            }}
+          />
+          <span style={{ fontSize: 15, color: "#334155", lineHeight: 1.45 }}>
+            <strong>Расчёт по комнатам</strong> — несколько кондиционеров в одной смете, текст для клиента
+            группируется по комнатам.
+          </span>
+        </label>
+        {multiRoomEnabled ? (
+          <button type="button" style={secondaryButtonStyle} onClick={addEmptyRoom}>
+            + Добавить комнату
+          </button>
+        ) : null}
+      </div>
 
-        <Label text="Мощность BTU" note="типоразмер ряда кондиционера">
-            <select
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-              style={inputStyle}
-            >
-              {(["7", "9", "12", "18", "24", "30", "36"] as const).map((v) => (
-                <option key={v} value={v}>
-                  {formatCapacityBtu(v)}
-                </option>
-              ))}
-            </select>
-          </Label>
+      {!multiRoomEnabled ? (
+        <>
+      <div style={cardStyle}>
+        <h2 style={sectionTitle}>1. Основные параметры</h2>
 
         {acModels.length > 0 ? (
           <div style={selectedModelsBlockStyle}>
-            <Label text="Модели кондиционеров" note="Можно добавить несколько моделей в текущую смету">
+            <Label text="Модели кондиционеров" note="Сначала выберите модель — она попадёт в смету и расчёт">
               <div className="calc-model-row" style={modelPickerRowStyle}>
                 <select
                   value={selectedAcModelPick}
@@ -1209,95 +1493,107 @@ function CalculatorPage() {
           </div>
         ) : null}
 
-          <Label text="Тип монтажа" note="На нашу трассу или на чужую трассу">
-            <select
-              value={mountType}
-              onChange={(e) =>
-                setMountType(e.target.value as "standard" | "existing")
-              }
-              style={inputStyle}
-            >
-              <option value="standard">На нашу трассу</option>
-              <option value="existing">На чужую трассу</option>
-            </select>
-          </Label>
-
-          <Label
-            text="Трасса, м"
-            note={`Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту. К оплате: метры минус «в подарок» (${giftRouteMeters} м из личного прайса)`}
+        <Label
+          text="Мощность BTU"
+          note="Типоразмер ряда; используется, если модель кондиционера не выбрана"
+        >
+          <select
+            value={capacity}
+            onChange={(e) => setCapacity(e.target.value)}
+            style={inputStyle}
           >
-            <input
-              value={routeMeters}
-              onChange={(e) =>
-                onDecimalMetersFieldChange(
-                  "routeMeters",
-                  e.target.value,
-                  MAX_ROUTE_METERS,
-                  WARN_ROUTE_METERS,
-                  setRouteMeters
-                )
-              }
-              style={inputStyle}
-              inputMode="decimal"
-            />
-          </Label>
+            {(["7", "9", "12", "18", "24", "30", "36"] as const).map((v) => (
+              <option key={v} value={v}>
+                {formatCapacityBtu(v)}
+              </option>
+            ))}
+          </select>
+        </Label>
+
+        <Label text="Тип монтажа" note="На нашу трассу или на чужую трассу">
+          <select
+            value={mountType}
+            onChange={(e) => setMountType(e.target.value as "standard" | "existing")}
+            style={inputStyle}
+          >
+            <option value="standard">На нашу трассу</option>
+            <option value="existing">На чужую трассу</option>
+          </select>
+        </Label>
+
+        <Label
+          text="Трасса, м"
+          note={`Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту. К оплате: метры минус «в подарок» (${giftRouteMeters} м из личного прайса)`}
+        >
+          <input
+            value={routeMeters}
+            onChange={(e) =>
+              onDecimalMetersFieldChange(
+                "routeMeters",
+                e.target.value,
+                MAX_ROUTE_METERS,
+                WARN_ROUTE_METERS,
+                setRouteMeters
+              )
+            }
+            style={inputStyle}
+            inputMode="decimal"
+          />
+        </Label>
         <FieldMessage error={fieldErrors.routeMeters} warning={fieldWarnings.routeMeters} />
 
+        <Label text="Материал основного отверстия" note="Влияет на доплату за армированный бетон в итоге">
+          <select
+            value={baseWallType}
+            onChange={(e) => setBaseWallType(e.target.value as "normal" | "arm")}
+            style={inputStyle}
+          >
+            <option value="normal">Кирпич / газобетон / неармированный бетон</option>
+            <option value="arm">Армированный бетон</option>
+          </select>
+        </Label>
+
+        <Label text="Доп. отверстия обычные, шт." note="Количество дополнительных отверстий">
+          <input
+            value={extraHolesNormal}
+            onChange={(e) =>
+              onIntFieldChange(
+                "extraHolesNormal",
+                e.target.value,
+                MAX_HOLES,
+                WARN_HOLES,
+                setExtraHolesNormal
+              )
+            }
+            style={inputStyle}
+            inputMode="numeric"
+          />
+        </Label>
+        <FieldMessage error={fieldErrors.extraHolesNormal} warning={fieldWarnings.extraHolesNormal} />
+
+        <Label text="Доп. отверстия армированные, шт." note="Количество отверстий в армированном бетоне">
+          <input
+            value={extraHolesArm}
+            onChange={(e) =>
+              onIntFieldChange(
+                "extraHolesArm",
+                e.target.value,
+                MAX_HOLES,
+                WARN_HOLES,
+                setExtraHolesArm
+              )
+            }
+            style={inputStyle}
+            inputMode="numeric"
+          />
+        </Label>
+        <FieldMessage error={fieldErrors.extraHolesArm} warning={fieldWarnings.extraHolesArm} />
       </div>
 
       <div style={cardStyle}>
         <h2 style={sectionTitle}>2. Дополнительные работы</h2>
 
-        <Label text="Материал основного отверстия" note="Влияет на доплату за армированный бетон в итоге">
-            <select
-              value={baseWallType}
-              onChange={(e) => setBaseWallType(e.target.value as "normal" | "arm")}
-              style={inputStyle}
-            >
-              <option value="normal">
-                Кирпич / газобетон / неармированный бетон
-              </option>
-              <option value="arm">Армированный бетон</option>
-            </select>
-          </Label>
-
-        <Label text="Доп. отверстия обычные, шт." note="Количество дополнительных отверстий">
-            <input
-              value={extraHolesNormal}
-                onChange={(e) =>
-                  onIntFieldChange(
-                    "extraHolesNormal",
-                    e.target.value,
-                    MAX_HOLES,
-                    WARN_HOLES,
-                    setExtraHolesNormal
-                  )
-                }
-              style={inputStyle}
-              inputMode="numeric"
-            />
-          </Label>
-            <FieldMessage error={fieldErrors.extraHolesNormal} warning={fieldWarnings.extraHolesNormal} />
-
-            <Label text="Доп. отверстия армированные, шт." note="Количество отверстий в армированном бетоне">
-            <input
-              value={extraHolesArm}
-                onChange={(e) =>
-                  onIntFieldChange(
-                    "extraHolesArm",
-                    e.target.value,
-                    MAX_HOLES,
-                    WARN_HOLES,
-                    setExtraHolesArm
-                  )
-                }
-              style={inputStyle}
-              inputMode="numeric"
-            />
-          </Label>
-            <FieldMessage error={fieldErrors.extraHolesArm} warning={fieldWarnings.extraHolesArm} />
-
-            <div style={{ ...quickOptionsTitleStyle, marginTop: 16 }}>Штроба и кабель-каналы</div>
+            <div style={{ ...quickOptionsTitleStyle, marginTop: 0 }}>Штроба и кабель-каналы</div>
 
             <Label text="Штробление" note="Выбери тип материала">
               <select
@@ -1334,11 +1630,11 @@ function CalculatorPage() {
           </Label>
             <FieldMessage error={fieldErrors.strobaMeters} warning={fieldWarnings.strobaMeters} />
 
-            <Label text="Кабель-канал 40×40, м" note="При ненулевом значении минимум 1 м к расчёту">
+            <Label text="Кабель-канал 40×40, м" note="При ненулевом значении минимум 1 м к расчёту; можно ввести доли метра">
             <input
                 value={cable40Meters}
                 onChange={(e) =>
-                  onIntFieldChange(
+                  onDecimalMetersFieldChange(
                     "cable40Meters",
                     e.target.value,
                     MAX_CABLE_METERS,
@@ -1347,16 +1643,16 @@ function CalculatorPage() {
                   )
                 }
               style={inputStyle}
-              inputMode="numeric"
+              inputMode="decimal"
             />
           </Label>
             <FieldMessage error={fieldErrors.cable40Meters} warning={fieldWarnings.cable40Meters} />
 
-            <Label text="Кабель-канал 16×16, м" note="При ненулевом значении минимум 1 м к расчёту">
+            <Label text="Кабель-канал 16×16, м" note="При ненулевом значении минимум 1 м к расчёту; можно ввести доли метра">
             <input
                 value={cable16Meters}
                 onChange={(e) =>
-                  onIntFieldChange(
+                  onDecimalMetersFieldChange(
                     "cable16Meters",
                     e.target.value,
                     MAX_CABLE_METERS,
@@ -1365,7 +1661,7 @@ function CalculatorPage() {
                   )
                 }
               style={inputStyle}
-              inputMode="numeric"
+              inputMode="decimal"
             />
           </Label>
             <FieldMessage error={fieldErrors.cable16Meters} warning={fieldWarnings.cable16Meters} />
@@ -1403,22 +1699,11 @@ function CalculatorPage() {
           </Label>
         <FieldMessage error={fieldErrors.carryToolFloors} warning={fieldWarnings.carryToolFloors} />
 
-        <Label text="Подъём внешнего блока, шт." note="Количество подъёмов блока">
-            <input
-            value={carryBlockCount}
-            onChange={(e) =>
-              onIntFieldChange(
-                "carryBlockCount",
-                e.target.value,
-                MAX_BLOCKS,
-                WARN_BLOCKS,
-                setCarryBlockCount
-              )
-            }
-              style={inputStyle}
-              inputMode="numeric"
-            />
-          </Label>
+        <Check
+          label="Подъём внешнего блока на плече по лестнице"
+          checked={Number(carryBlockCount || 0) > 0}
+          onChange={(v) => setCarryBlockCount(v ? "1" : "0")}
+        />
         <FieldMessage error={fieldErrors.carryBlockCount} warning={fieldWarnings.carryBlockCount} />
 
         <Label text="Демонтаж, ₽" note="Фиксированная сумма вручную">
@@ -1583,6 +1868,29 @@ function CalculatorPage() {
         ) : null}
       </div>
 
+        </>
+      ) : (
+        <>
+          {roomDrafts.map((draft, idx) => (
+            <RoomFormBlock
+              key={draft.id}
+              draft={draft}
+              roomIndex={idx}
+              totalRooms={roomDrafts.length}
+              acModels={acModels}
+              giftRouteMeters={giftRouteMeters}
+              pricelistCustomServices={pricelistCustomServices}
+              fmt={fmt}
+              onPatch={(patch) =>
+                setRoomDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+              }
+              onRemove={() => removeRoomAt(idx)}
+              onDuplicate={() => duplicateRoomAt(idx)}
+            />
+          ))}
+        </>
+      )}
+
       <div style={cardStyle}>
         <h2 style={sectionTitle}>6. Расчётная часть</h2>
 
@@ -1625,11 +1933,17 @@ function CalculatorPage() {
             </select>
           </Label>
 
-          <Check
-            label="Клиент покупает кондиционер и трассу у вас (учёт фиксированной скидки в итоге)"
-            checked={buyAcAndRouteFromUs}
-            onChange={setBuyAcAndRouteFromUs}
-          />
+          {!multiRoomEnabled ? (
+            <Check
+              label="Клиент покупает кондиционер и трассу у вас (учёт фиксированной скидки в итоге)"
+              checked={buyAcAndRouteFromUs}
+              onChange={setBuyAcAndRouteFromUs}
+            />
+          ) : (
+            <p style={{ ...smallTextStyle, marginTop: 8 }}>
+              Скидка «кондиционер и трасса у нас» включается в карточке каждой комнаты.
+            </p>
+          )}
         </div>
       </div>
 

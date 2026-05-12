@@ -3,9 +3,12 @@ import type { QuickCalculationExtra } from "@/lib/customServices";
 import {
   buildCalculatorClosingText,
   computeCalculatorEstimate,
+  computeMultiRoomEstimate,
   normalizeCalculatorComputeInput,
+  type CalculatorRoomInput,
   type SelectedExtraServiceMap,
 } from "@/lib/calculator";
+import type { CalculatorComputeInput } from "@/lib/calculator/types";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { loadMiniAppCalculatorContext } from "@/lib/server/telegram/loadMiniAppCalculatorContext";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
@@ -43,6 +46,66 @@ function filterQuickExtras(raw: unknown): QuickCalculationExtra[] {
     out.push({ id, name, price: Math.min(5_000_000, Math.floor(price)) });
   }
   return out;
+}
+
+function slimComputeInputForStorage(
+  input: CalculatorComputeInput
+): Omit<CalculatorComputeInput, "acModels" | "pricelistCustomServices"> {
+  const { acModels: _a, pricelistCustomServices: _p, ...rest } = input;
+  return rest;
+}
+
+function parseRoomsFromBody(
+  body: Record<string, unknown>,
+  ctx: Awaited<ReturnType<typeof loadMiniAppCalculatorContext>>,
+  allowedServiceIds: Set<string>,
+  fallbackSelectedAcModelIds: string[],
+  fallbackSelectedExtraServices: SelectedExtraServiceMap,
+  fallbackQuickExtras: QuickCalculationExtra[]
+): CalculatorRoomInput[] | null {
+  const raw = body.rooms;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: CalculatorRoomInput[] = [];
+  for (const entry of raw.slice(0, 20)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const o = entry as Record<string, unknown>;
+    const id =
+      typeof o.id === "string" && o.id.trim() ? o.id.trim().slice(0, 80) : `room_${out.length}`;
+    const roomName =
+      typeof o.roomName === "string" && o.roomName.trim()
+        ? o.roomName.trim().slice(0, 120)
+        : `Комната ${out.length + 1}`;
+    const inputRaw = o.input;
+    if (!inputRaw || typeof inputRaw !== "object" || Array.isArray(inputRaw)) continue;
+    const roomBody = inputRaw as Record<string, unknown>;
+
+    const roomSelectedIds = Array.isArray(roomBody.selectedAcModelIds)
+      ? roomBody.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+      : fallbackSelectedAcModelIds;
+
+    const roomExtra =
+      roomBody.selectedExtraServices != null
+        ? filterSelectedExtraServices(allowedServiceIds, roomBody.selectedExtraServices)
+        : fallbackSelectedExtraServices;
+
+    const roomQuick =
+      roomBody.quickCalculationExtras != null
+        ? filterQuickExtras(roomBody.quickCalculationExtras)
+        : fallbackQuickExtras;
+
+    const computeInput = normalizeCalculatorComputeInput({
+      ...roomBody,
+      giftRouteMeters: ctx.giftRouteMeters,
+      acModels: ctx.models,
+      selectedAcModelIds: roomSelectedIds,
+      pricelistCustomServices: ctx.customServices,
+      selectedExtraServices: roomExtra,
+      quickCalculationExtras: roomQuick,
+    });
+
+    out.push({ id, roomName, input: computeInput });
+  }
+  return out.length ? out : null;
 }
 
 function filterSelectedExtraServices(
@@ -101,17 +164,47 @@ export async function POST(req: Request) {
 
     const quickCalculationExtras = filterQuickExtras(body.quickCalculationExtras);
 
-    const computeInput = normalizeCalculatorComputeInput({
-      ...body,
-      giftRouteMeters: ctx.giftRouteMeters,
-      acModels: ctx.models,
+    const roomsParsed = parseRoomsFromBody(
+      body,
+      ctx,
+      allowedServiceIds,
       selectedAcModelIds,
-      pricelistCustomServices: ctx.customServices,
       selectedExtraServices,
-      quickCalculationExtras,
-    });
+      quickCalculationExtras
+    );
 
-    const result = computeCalculatorEstimate(ctx.prices, computeInput);
+    const globalPercentDiscount =
+      typeof body.percentDiscount === "string" ? body.percentDiscount : "0";
+
+    let computeInput: ReturnType<typeof normalizeCalculatorComputeInput>;
+    let estimateTotal: number;
+    let estimateAutoClientText: string;
+    let roomsForPayload: CalculatorRoomInput[] | null = null;
+
+    if (roomsParsed && roomsParsed.length > 0) {
+      roomsForPayload = roomsParsed;
+      const multi = computeMultiRoomEstimate(
+        ctx.prices,
+        roomsParsed,
+        globalPercentDiscount
+      );
+      estimateTotal = multi.total;
+      estimateAutoClientText = multi.autoClientText;
+      computeInput = roomsParsed[0]!.input;
+    } else {
+      computeInput = normalizeCalculatorComputeInput({
+        ...body,
+        giftRouteMeters: ctx.giftRouteMeters,
+        acModels: ctx.models,
+        selectedAcModelIds,
+        pricelistCustomServices: ctx.customServices,
+        selectedExtraServices,
+        quickCalculationExtras,
+      });
+      const result = computeCalculatorEstimate(ctx.prices, computeInput);
+      estimateTotal = result.total;
+      estimateAutoClientText = result.autoClientText;
+    }
 
     const clientName =
       typeof body.clientName === "string" ? body.clientName.trim().slice(0, 200) : "";
@@ -125,7 +218,7 @@ export async function POST(req: Request) {
       editableTailText = buildCalculatorClosingText(clientName);
     }
 
-    const clientText = `${result.autoClientText}\n${editableTailText}`.trim();
+    const clientText = `${estimateAutoClientText}\n${editableTailText}`.trim();
 
     const iso = new Date().toISOString();
     const payload = omitUndefinedForFirestore({
@@ -133,7 +226,7 @@ export async function POST(req: Request) {
       createdAt: iso,
       updatedAt: iso,
       capacity: computeInput.capacity,
-      total: result.total,
+      total: estimateTotal,
       clientName,
       clientContact,
       clientText,
@@ -161,19 +254,30 @@ export async function POST(req: Request) {
       includePump: computeInput.includePump,
       includeLadderConnection: computeInput.includeLadderConnection,
 
-      percentDiscount: computeInput.percentDiscount,
+      percentDiscount: roomsForPayload ? globalPercentDiscount : computeInput.percentDiscount,
       selectedExtraServices: computeInput.selectedExtraServices,
       quickCalculationExtras: computeInput.quickCalculationExtras,
       giftRouteMeters: ctx.giftRouteMeters,
       selectedAcModelIds: computeInput.selectedAcModelIds,
       selectedAcModelId: computeInput.selectedAcModelIds[0] || "",
+      ...(roomsForPayload
+        ? {
+            multiRoom: true,
+            roomCount: roomsForPayload.length,
+            rooms: roomsForPayload.map((r) => ({
+              id: r.id,
+              roomName: r.roomName,
+              input: slimComputeInputForStorage(r.input),
+            })),
+          }
+        : {}),
     });
 
     const ref = await db.collection("calculationHistory").add(payload);
 
-    console.log("TELEGRAM_MINIAPP_CALC_SAVE_OK", { uid: v.uid, id: ref.id, total: result.total });
+    console.log("TELEGRAM_MINIAPP_CALC_SAVE_OK", { uid: v.uid, id: ref.id, total: estimateTotal });
 
-    return NextResponse.json({ ok: true, id: ref.id, total: result.total });
+    return NextResponse.json({ ok: true, id: ref.id, total: estimateTotal });
   } catch (e) {
     console.log("TELEGRAM_MINIAPP_CALC_SAVE_FAILED", {
       message: e instanceof Error ? e.message : String(e),

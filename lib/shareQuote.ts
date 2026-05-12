@@ -1,4 +1,3 @@
-import { formatRubles } from "@/lib/calculator/format";
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
 
 export type QuoteLineItem = {
@@ -31,7 +30,6 @@ export function buildClientQuoteText(params: BuildClientQuoteTextParams): string
     total: params.total,
     clientName: params.clientName,
     clientContact: params.clientContact,
-    formatMoney: formatRubles,
   });
 }
 
