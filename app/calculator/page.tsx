@@ -1676,12 +1676,106 @@ function CalculatorPage() {
             />
             <Check label="Кронштейны и крепежи" checked={includeBrackets} onChange={setIncludeBrackets} />
             <Check label="Стеклопакет (работы)" checked={includeGlass} onChange={setIncludeGlass} />
+            <Check
+              label="Подъём внешнего блока на плече по лестнице"
+              checked={Number(carryBlockCount || 0) > 0}
+              onChange={(v) => setCarryBlockCount(v ? "1" : "0")}
+            />
+            <FieldMessage error={fieldErrors.carryBlockCount} warning={fieldWarnings.carryBlockCount} />
+
+            <h3 style={{ ...sectionTitle, fontSize: 17, marginTop: 22, marginBottom: 12 }}>
+              Свои услуги из прайса
+            </h3>
+            <p style={{ ...smallTextStyle, marginTop: 0, marginBottom: 12 }}>
+              Список задаётся в разделе «Личный прайс». Отметьте позиции и количество — они попадут в смету.
+            </p>
+
+            {pricelistCustomServices.length === 0 ? (
+              <p style={{ margin: 0 }}>
+                В прайсе пока нет своих услуг. Добавьте их на странице «Личный прайс».
+              </p>
+            ) : (
+              pricelistCustomServices.map((service) => {
+                const state = selectedExtraServices[service.id] || {
+                  checked: false,
+                  qty: "1",
+                };
+
+                return (
+                  <div key={service.id} style={serviceRowStyle}>
+                    <div style={serviceHeaderStyle}>
+                      <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{service.name}</div>
+                      <div style={smallTextStyle}>{fmt(service.price)} за ед.</div>
+                    </div>
+
+                    <div style={serviceControlsStyle}>
+                      <label style={checkboxWrapStyle}>
+                        <input
+                          type="checkbox"
+                          checked={state.checked}
+                          onChange={(e) =>
+                            setSelectedExtraServices((prev) => ({
+                              ...prev,
+                              [service.id]: {
+                                ...prev[service.id],
+                                checked: e.target.checked,
+                                qty: prev[service.id]?.qty || "1",
+                              },
+                            }))
+                          }
+                        />
+                        <span>В расчёт</span>
+                      </label>
+
+                      <div>
+                        <input
+                          value={state.qty}
+                          onChange={(e) => {
+                            const next = sanitizeNonNegativeIntString(e.target.value, 999);
+                            setSelectedExtraServices((prev) => ({
+                              ...prev,
+                              [service.id]: {
+                                ...prev[service.id],
+                                checked: prev[service.id]?.checked || false,
+                                qty: next === "" ? "" : next,
+                              },
+                            }));
+
+                            const key = `extraServiceQty:${service.id}`;
+                            if (String(e.target.value || "").trim() !== "" && next === "") {
+                              setError(key, "Введите количество цифрами от 0");
+                            } else if (/\D/.test(String(e.target.value || "")) && next !== "") {
+                              setError(key, "Допустимы только цифры");
+                            } else {
+                              clearError(key);
+                            }
+
+                            const n = Number(next || 0);
+                            if (next !== "" && Number.isFinite(n) && n >= 50) {
+                              setWarn(key, "Количество выглядит очень большим — проверьте ввод");
+                            } else {
+                              clearWarn(key);
+                            }
+                          }}
+                          style={qtyInputStyle}
+                          inputMode="numeric"
+                        />
+                        <FieldMessage
+                          error={fieldErrors[`extraServiceQty:${service.id}`]}
+                          warning={fieldWarnings[`extraServiceQty:${service.id}`]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
         </div>
 
         <div style={cardStyle}>
         <h2 style={sectionTitle}>3. Дополнительные условия</h2>
 
-        <Label text="Подъём инструмента пешком, этажей" note="Тарификация со 2-го этажа">
+        <Label text="Подъём инструмента (начиная с 3 этажа)" note="Укажите номер этажа цифрой">
           <input
             value={carryToolFloors}
               onChange={(e) =>
@@ -1698,13 +1792,6 @@ function CalculatorPage() {
           />
           </Label>
         <FieldMessage error={fieldErrors.carryToolFloors} warning={fieldWarnings.carryToolFloors} />
-
-        <Check
-          label="Подъём внешнего блока на плече по лестнице"
-          checked={Number(carryBlockCount || 0) > 0}
-          onChange={(v) => setCarryBlockCount(v ? "1" : "0")}
-        />
-        <FieldMessage error={fieldErrors.carryBlockCount} warning={fieldWarnings.carryBlockCount} />
 
         <Label text="Демонтаж, ₽" note="Фиксированная сумма вручную">
             <input
@@ -1726,93 +1813,7 @@ function CalculatorPage() {
       </div>
 
       <div style={cardStyle}>
-        <h2 style={sectionTitle}>4. Свои услуги из прайса</h2>
-        <p style={{ ...smallTextStyle, marginTop: 0, marginBottom: 12 }}>
-          Список задаётся в разделе «Личный прайс». Отметьте позиции и количество — они попадут в смету.
-        </p>
-
-        {pricelistCustomServices.length === 0 ? (
-          <p style={{ margin: 0 }}>В прайсе пока нет своих услуг. Добавьте их на странице «Личный прайс».</p>
-        ) : (
-          pricelistCustomServices.map((service) => {
-            const state = selectedExtraServices[service.id] || {
-              checked: false,
-              qty: "1",
-            };
-
-            return (
-              <div key={service.id} style={serviceRowStyle}>
-                <div style={serviceHeaderStyle}>
-                  <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{service.name}</div>
-                  <div style={smallTextStyle}>{fmt(service.price)} за ед.</div>
-                </div>
-
-                <div style={serviceControlsStyle}>
-                  <label style={checkboxWrapStyle}>
-                    <input
-                      type="checkbox"
-                      checked={state.checked}
-                      onChange={(e) =>
-                        setSelectedExtraServices((prev) => ({
-                          ...prev,
-                          [service.id]: {
-                            ...prev[service.id],
-                            checked: e.target.checked,
-                            qty: prev[service.id]?.qty || "1",
-                          },
-                        }))
-                      }
-                    />
-                    <span>В расчёт</span>
-                  </label>
-
-                  <div>
-                    <input
-                      value={state.qty}
-                      onChange={(e) => {
-                        const next = sanitizeNonNegativeIntString(e.target.value, 999);
-                        setSelectedExtraServices((prev) => ({
-                          ...prev,
-                          [service.id]: {
-                            ...prev[service.id],
-                            checked: prev[service.id]?.checked || false,
-                            qty: next === "" ? "" : next,
-                          },
-                        }));
-
-                        const key = `extraServiceQty:${service.id}`;
-                        if (String(e.target.value || "").trim() !== "" && next === "") {
-                          setError(key, "Введите количество цифрами от 0");
-                        } else if (/\D/.test(String(e.target.value || "")) && next !== "") {
-                          setError(key, "Допустимы только цифры");
-                        } else {
-                          clearError(key);
-                        }
-
-                        const n = Number(next || 0);
-                        if (next !== "" && Number.isFinite(n) && n >= 50) {
-                          setWarn(key, "Количество выглядит очень большим — проверьте ввод");
-                        } else {
-                          clearWarn(key);
-                        }
-                      }}
-                      style={qtyInputStyle}
-                      inputMode="numeric"
-                    />
-                    <FieldMessage
-                      error={fieldErrors[`extraServiceQty:${service.id}`]}
-                      warning={fieldWarnings[`extraServiceQty:${service.id}`]}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div style={cardStyle}>
-        <h2 style={sectionTitle}>5. Добавить услугу в расчёт</h2>
+        <h2 style={sectionTitle}>4. Добавить услугу в расчёт</h2>
         <p style={{ ...smallTextStyle, marginTop: 0, marginBottom: 12 }}>
           Быстрая строка только в этом расчёте (не сохраняется в прайс). Можно добавить несколько позиций.
         </p>
@@ -1892,7 +1893,7 @@ function CalculatorPage() {
       )}
 
       <div style={cardStyle}>
-        <h2 style={sectionTitle}>6. Расчётная часть</h2>
+        <h2 style={sectionTitle}>5. Расчётная часть</h2>
 
         <div style={calcBreakdownLight}>
           {result.items.map((item, index) => (

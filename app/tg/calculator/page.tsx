@@ -1481,7 +1481,7 @@ export default function TgCalculatorPage() {
                   </select>
 
                   <span style={label}>
-                    Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м с сайта)
+                    Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м)
                   </span>
                   <input
                     style={input}
@@ -1578,7 +1578,7 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Подъём инструмента (этаж с)</span>
+                  <span style={label}>Подъём инструмента (начиная с 3 этажа)</span>
                   <input
                     style={input}
                     inputMode="numeric"

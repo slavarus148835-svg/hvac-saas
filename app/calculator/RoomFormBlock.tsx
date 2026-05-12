@@ -498,7 +498,7 @@ export function RoomFormBlock({
 
       <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", margin: "16px 0 8px" }}>Подъём и демонтаж</div>
 
-      <Label text="Подъём инструмента пешком, этажей">
+      <Label text="Подъём инструмента (начиная с 3 этажа)">
         <input
           value={draft.carryToolFloors}
           onChange={(e) =>

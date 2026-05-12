@@ -372,7 +372,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <span style={label}>Подъём инструмента (этаж с)</span>
+          <span style={label}>Подъём инструмента (начиная с 3 этажа)</span>
           <input
             style={input}
             inputMode="numeric"
