@@ -145,6 +145,8 @@ const label: React.CSSProperties = {
   fontWeight: 600,
   marginBottom: 6,
   color: "#475569",
+  lineHeight: 1.35,
+  wordBreak: "break-word",
 };
 
 const input: React.CSSProperties = {
@@ -1479,7 +1481,7 @@ export default function TgCalculatorPage() {
                   </select>
 
                   <span style={label}>
-                    Трасса, м (в подарок {giftRouteMeters} м с сайта)
+                    Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м с сайта)
                   </span>
                   <input
                     style={input}
@@ -1528,7 +1530,7 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Штроба</span>
+                  <span style={label}>Штроба, м, мин. 1 м</span>
                   <select
                     style={input}
                     value={strobaType}
@@ -1552,7 +1554,7 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Кабель-канал 40×40, м</span>
+                  <span style={label}>Кабель-канал 40×40, м, мин. 1 м</span>
                   <input
                     style={input}
                     inputMode="decimal"
@@ -1564,7 +1566,7 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Кабель-канал 16×16, м</span>
+                  <span style={label}>Кабель-канал 16×16, м, мин. 1 м</span>
                   <input
                     style={input}
                     inputMode="decimal"

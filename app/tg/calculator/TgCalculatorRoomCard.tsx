@@ -42,6 +42,8 @@ const label: React.CSSProperties = {
   fontWeight: 600,
   marginBottom: 6,
   color: "#475569",
+  lineHeight: 1.35,
+  wordBreak: "break-word",
 };
 
 const input: React.CSSProperties = {
@@ -276,7 +278,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             <option value="existing">На чужую трассу</option>
           </select>
 
-          <span style={label}>Трасса, м (в подарок {giftRouteMeters} м)</span>
+          <span style={label}>Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м)</span>
           <input
             style={input}
             inputMode="decimal"
@@ -322,7 +324,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <span style={label}>Штроба</span>
+          <span style={label}>Штроба, м, мин. 1 м</span>
           <select
             style={input}
             value={draft.strobaType}
@@ -346,7 +348,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <span style={label}>Кабель-канал 40×40, м</span>
+          <span style={label}>Кабель-канал 40×40, м, мин. 1 м</span>
           <input
             style={input}
             inputMode="decimal"
@@ -358,7 +360,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <span style={label}>Кабель-канал 16×16, м</span>
+          <span style={label}>Кабель-канал 16×16, м, мин. 1 м</span>
           <input
             style={input}
             inputMode="decimal"
