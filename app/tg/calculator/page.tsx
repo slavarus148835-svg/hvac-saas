@@ -19,7 +19,11 @@ import {
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
 } from "@/lib/calculator";
-import type { QuickCalculationExtra, UserCustomService } from "@/lib/customServices";
+import {
+  newQuickExtraId,
+  type QuickCalculationExtra,
+  type UserCustomService,
+} from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
 import { quoteCardToPngBlob } from "@/lib/quoteCardCanvas";
 import {
@@ -31,6 +35,7 @@ import {
 import { hydrateTgCalculatorFromHistoryDoc } from "@/lib/tgCalculatorHistoryHydrate";
 import { tgHapticButtonTap, tgHapticNotification } from "@/lib/telegramHaptic";
 import {
+  createMiniAppModel,
   fetchMiniAppCalculatorContext,
   fetchMiniAppHistoryDocument,
   saveMiniAppCalculation,
@@ -57,6 +62,8 @@ const ONBOARDING_STEPS = [
     body: "Сохраните расчёт, отправьте текст, PDF или сообщение в Telegram или WhatsApp.",
   },
 ] as const;
+
+const BTU_MODEL_OPTIONS = ["7", "9", "12", "18", "24", "30", "36"] as const;
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
@@ -203,6 +210,14 @@ export default function TgCalculatorPage() {
   const [quickCalculationExtras, setQuickCalculationExtras] = useState<
     QuickCalculationExtra[]
   >([]);
+  const [quickSvcName, setQuickSvcName] = useState("");
+  const [quickSvcPrice, setQuickSvcPrice] = useState("");
+  const [modelFormOpen, setModelFormOpen] = useState(false);
+  const [newMdlName, setNewMdlName] = useState("");
+  const [newMdlBtu, setNewMdlBtu] = useState<string>("12");
+  const [newMdlPrice, setNewMdlPrice] = useState("");
+  const [newMdlComment, setNewMdlComment] = useState("");
+  const [modelAddBusy, setModelAddBusy] = useState(false);
   const [sendMenuOpen, setSendMenuOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -507,6 +522,104 @@ export default function TgCalculatorPage() {
 
   function removeModel(id: string) {
     setSelectedAcModelIds((x) => x.filter((y) => y !== id));
+  }
+
+  function addQuickServiceToCalc() {
+    tgHapticButtonTap();
+    const name = quickSvcName.trim();
+    const price = Math.max(0, Math.floor(Number(quickSvcPrice.replace(/\D/g, "") || 0)));
+    if (!name) {
+      tgHapticNotification("warning");
+      setSaveToast("Укажите название услуги");
+      window.setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+    if (!price) {
+      tgHapticNotification("warning");
+      setSaveToast("Укажите цену больше 0");
+      window.setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+    const capped = Math.min(MAX_MONEY, price);
+    setQuickCalculationExtras((prev) => [
+      ...prev,
+      { id: newQuickExtraId(), name, price: capped },
+    ]);
+    setQuickSvcName("");
+    setQuickSvcPrice("");
+    tgHapticNotification("success");
+  }
+
+  function removeQuickExtraLine(id: string) {
+    tgHapticButtonTap();
+    setQuickCalculationExtras((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  function cancelInlineModelForm() {
+    tgHapticButtonTap();
+    setModelFormOpen(false);
+    setNewMdlName("");
+    setNewMdlPrice("");
+    setNewMdlComment("");
+    setNewMdlBtu("12");
+  }
+
+  async function saveInlineModel() {
+    tgHapticButtonTap();
+    if (!canOperate) {
+      tgHapticNotification("error");
+      setSaveToast("Войдите в аккаунт Mini App");
+      window.setTimeout(() => setSaveToast(null), 3000);
+      return;
+    }
+    const name = newMdlName.trim();
+    const price = Math.max(0, Math.floor(Number(newMdlPrice.replace(/\D/g, "") || 0)));
+    if (!name) {
+      tgHapticNotification("warning");
+      setSaveToast("Введите название модели");
+      window.setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+    if (!price) {
+      tgHapticNotification("warning");
+      setSaveToast("Введите цену больше 0");
+      window.setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+    setModelAddBusy(true);
+    const r = await createMiniAppModel({
+      name,
+      price,
+      capacityKw: newMdlBtu,
+      comment: newMdlComment.trim() || undefined,
+    });
+    setModelAddBusy(false);
+    if (!r.ok) {
+      tgHapticNotification("error");
+      setSaveToast(r.error);
+      window.setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    const id = r.id.trim();
+    if (!id) {
+      tgHapticNotification("error");
+      setSaveToast("Не получили id модели");
+      window.setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    setModels((prev) =>
+      [...prev.filter((m) => m.id !== id), { id, name, price }].sort((a, b) =>
+        a.name.localeCompare(b.name, "ru")
+      )
+    );
+    setSelectedAcModelIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setModelPick("");
+    setNewMdlName("");
+    setNewMdlPrice("");
+    setNewMdlComment("");
+    setNewMdlBtu("12");
+    setModelFormOpen(false);
+    tgHapticNotification("success");
   }
 
   async function onSave() {
@@ -1082,63 +1195,223 @@ export default function TgCalculatorPage() {
                   </label>
                 </div>
 
-                {models.length > 0 ? (
-                  <div style={card}>
-                    <span style={label}>Модели из прайса</span>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                      <select
-                        style={{ ...input, flex: 1, marginBottom: 0 }}
-                        value={modelPick}
-                        onChange={(e) => setModelPick(e.target.value)}
-                      >
-                        <option value="">Выберите</option>
-                        {models.map((m) => (
-                          <option
-                            key={m.id}
-                            value={m.id}
-                            disabled={selectedAcModelIds.includes(m.id)}
-                          >
-                            {m.name} — {formatRubles(m.price)}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="button" style={{ ...btn, width: "auto", padding: "12px 16px" }} onClick={addModel}>
-                        +
-                      </button>
-                    </div>
-                    {selectedAcModelIds.map((id) => {
-                      const m = models.find((x) => x.id === id);
-                      if (!m) return null;
-                      return (
+                <div style={card}>
+                  <span style={label}>Быстрая услуга</span>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
+                    В расчёт сразу, без сохранения в прайс (как на сайте).
+                  </p>
+                  <input
+                    style={input}
+                    placeholder="Название услуги"
+                    value={quickSvcName}
+                    onChange={(e) => setQuickSvcName(e.target.value)}
+                  />
+                  <input
+                    style={input}
+                    placeholder="Цена, ₽"
+                    inputMode="numeric"
+                    value={quickSvcPrice}
+                    onChange={(e) =>
+                      setQuickSvcPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
+                    }
+                  />
+                  <button type="button" style={btnSecondary} onClick={addQuickServiceToCalc}>
+                    Добавить услугу
+                  </button>
+                  {quickCalculationExtras.length > 0 ? (
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {quickCalculationExtras.map((line) => (
                         <div
-                          key={id}
+                          key={line.id}
                           style={{
                             display: "flex",
-                            justifyContent: "space-between",
                             alignItems: "center",
-                            marginBottom: 8,
+                            justifyContent: "space-between",
+                            gap: 10,
+                            padding: "10px 12px",
+                            background: "#f8fafc",
+                            borderRadius: 10,
+                            border: "1px solid #e2e8f0",
                           }}
                         >
-                          <span style={{ fontSize: 14 }}>{m.name}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</div>
+                            <div style={{ fontSize: 13, color: "#64748b" }}>
+                              {formatRubles(line.price)}
+                            </div>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => removeModel(id)}
+                            onClick={() => removeQuickExtraLine(line.id)}
                             style={{
+                              flexShrink: 0,
                               background: "#fee2e2",
                               color: "#991b1b",
                               border: "none",
                               borderRadius: 8,
                               padding: "8px 12px",
                               fontWeight: 600,
+                              fontSize: 13,
                             }}
                           >
-                            ×
+                            Убрать
                           </button>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div style={card}>
+                  <span style={label}>Модели из прайса</span>
+                  {models.length === 0 ? (
+                    <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
+                      Пока нет моделей — добавьте кнопкой ниже.
+                    </p>
+                  ) : null}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <select
+                      style={{ ...input, flex: 1, marginBottom: 0 }}
+                      value={modelPick}
+                      onChange={(e) => setModelPick(e.target.value)}
+                      disabled={models.length === 0}
+                    >
+                      <option value="">Выберите</option>
+                      {models.map((m) => (
+                        <option
+                          key={m.id}
+                          value={m.id}
+                          disabled={selectedAcModelIds.includes(m.id)}
+                        >
+                          {m.name} — {formatRubles(m.price)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      style={{ ...btn, width: "auto", padding: "12px 16px" }}
+                      onClick={addModel}
+                      disabled={!modelPick}
+                    >
+                      +
+                    </button>
                   </div>
-                ) : null}
+                  {!modelFormOpen ? (
+                    <button
+                      type="button"
+                      style={{ ...btnSecondary, marginTop: 0 }}
+                      onClick={() => {
+                        tgHapticButtonTap();
+                        setModelFormOpen(true);
+                      }}
+                    >
+                      + Добавить модель
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: "1px solid #e2e8f0",
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <span style={{ ...label, marginTop: 0 }}>Новая модель</span>
+                      <input
+                        style={input}
+                        placeholder="Название модели"
+                        value={newMdlName}
+                        onChange={(e) => setNewMdlName(e.target.value)}
+                      />
+                      <span style={label}>Типоразмер BTU</span>
+                      <select
+                        style={input}
+                        value={newMdlBtu}
+                        onChange={(e) => setNewMdlBtu(e.target.value)}
+                      >
+                        {BTU_MODEL_OPTIONS.map((c) => (
+                          <option key={c} value={c}>
+                            {c} BTU
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        style={input}
+                        placeholder="Цена, ₽"
+                        inputMode="numeric"
+                        value={newMdlPrice}
+                        onChange={(e) =>
+                          setNewMdlPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
+                        }
+                      />
+                      <input
+                        style={input}
+                        placeholder="Комментарий (необязательно)"
+                        value={newMdlComment}
+                        onChange={(e) => setNewMdlComment(e.target.value)}
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <button
+                          type="button"
+                          style={{ ...btn, flex: 1, marginTop: 0 }}
+                          disabled={modelAddBusy || !canOperate}
+                          onClick={() => void saveInlineModel()}
+                        >
+                          {modelAddBusy ? "…" : "Сохранить"}
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...btnSecondary, flex: 1, marginTop: 0 }}
+                          disabled={modelAddBusy}
+                          onClick={cancelInlineModelForm}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                      {!canOperate ? (
+                        <p style={{ margin: "10px 0 0", fontSize: 12, color: "#b45309" }}>
+                          Войдите в аккаунт Mini App, чтобы сохранять модели в профиль.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                  {selectedAcModelIds.length > 0 ? (
+                    <div style={{ marginTop: 12 }}>
+                      {selectedAcModelIds.map((id) => {
+                        const m = models.find((x) => x.id === id);
+                        if (!m) return null;
+                        return (
+                          <div
+                            key={id}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <span style={{ fontSize: 14 }}>{m.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeModel(id)}
+                              style={{
+                                background: "#fee2e2",
+                                color: "#991b1b",
+                                border: "none",
+                                borderRadius: 8,
+                                padding: "8px 12px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
 
                 {customServices.length > 0 ? (
                   <div style={{ ...card, maxHeight: 220, overflowY: "auto" }}>
