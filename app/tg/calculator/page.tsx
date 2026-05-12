@@ -20,6 +20,7 @@ import {
   MAX_ROUTE_METERS,
   MAX_STROBA_METERS,
   newRoomId,
+  normalizeCalculatorComputeInput,
   roomDraftFromFirestoreEntry,
   roomDraftToComputeInput,
   roomDraftToFlatState,
@@ -249,6 +250,12 @@ export default function TgCalculatorPage() {
     guaranteeText: "",
     masterContact: "",
   });
+  const modelPickRef = useRef("");
+  const modelPickByRoomRef = useRef<Record<string, string>>({});
+  const expandedRoomIdRef = useRef<string | null>(null);
+  modelPickRef.current = modelPick;
+  modelPickByRoomRef.current = modelPickByRoom;
+  expandedRoomIdRef.current = expandedRoomId;
   const cardCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const historyLoadedRef = useRef<string | null>(null);
 
@@ -406,35 +413,38 @@ export default function TgCalculatorPage() {
   }, [multiRoomEnabled, roomDrafts, expandedRoomId]);
 
   const singleResult = useMemo(() => {
-    return computeCalculatorEstimate(prices, {
-      capacity,
-      mountType,
-      routeMeters,
-      baseWallType,
-      extraHolesNormal,
-      extraHolesArm,
-      carryToolFloors,
-      carryBlockCount,
-      manualDismantlingCost,
-      strobaType,
-      strobaMeters,
-      cable40Meters,
-      cable16Meters,
-      buyAcAndRouteFromUs,
-      includeBrackets,
-      includeGlass,
-      includeTile,
-      includeDrain,
-      includePump,
-      includeLadderConnection,
-      percentDiscount,
-      giftRouteMeters,
-      acModels: models,
-      selectedAcModelIds,
-      pricelistCustomServices: customServices,
-      selectedExtraServices,
-      quickCalculationExtras,
-    });
+    return computeCalculatorEstimate(
+      prices,
+      normalizeCalculatorComputeInput({
+        capacity,
+        mountType,
+        routeMeters,
+        baseWallType,
+        extraHolesNormal,
+        extraHolesArm,
+        carryToolFloors,
+        carryBlockCount,
+        manualDismantlingCost,
+        strobaType,
+        strobaMeters,
+        cable40Meters,
+        cable16Meters,
+        buyAcAndRouteFromUs,
+        includeBrackets,
+        includeGlass,
+        includeTile,
+        includeDrain,
+        includePump,
+        includeLadderConnection,
+        percentDiscount,
+        giftRouteMeters,
+        acModels: models,
+        selectedAcModelIds,
+        pricelistCustomServices: customServices,
+        selectedExtraServices,
+        quickCalculationExtras,
+      })
+    );
   }, [
     prices,
     capacity,
@@ -471,11 +481,13 @@ export default function TgCalculatorPage() {
     const rooms = roomDrafts.map((d) => ({
       id: d.id,
       roomName: d.roomName,
-      input: roomDraftToComputeInput(d, {
-        giftRouteMeters,
-        acModels: models,
-        pricelistCustomServices: customServices,
-      }),
+      input: normalizeCalculatorComputeInput(
+        roomDraftToComputeInput(d, {
+          giftRouteMeters,
+          acModels: models,
+          pricelistCustomServices: customServices,
+        })
+      ),
     }));
     return computeMultiRoomEstimate(prices, rooms, percentDiscount, formatRubles, {
       clientName,
@@ -783,8 +795,8 @@ export default function TgCalculatorPage() {
 
   function addModel() {
     if (multiRoomEnabled) {
-      const rid = expandedRoomId ?? roomDrafts[0]?.id;
-      const pick = rid ? modelPickByRoom[rid] ?? "" : "";
+      const rid = expandedRoomIdRef.current ?? roomDrafts[0]?.id;
+      const pick = rid ? modelPickByRoomRef.current[rid] ?? "" : "";
       if (!rid || !pick) return;
       setRoomDrafts((prev) =>
         prev.map((r) => {
@@ -796,8 +808,9 @@ export default function TgCalculatorPage() {
       setModelPickByRoom((m) => ({ ...m, [rid]: "" }));
       return;
     }
-    if (!modelPick || selectedAcModelIds.includes(modelPick)) return;
-    setSelectedAcModelIds((x) => [...x, modelPick]);
+    const pick = modelPickRef.current;
+    if (!pick || selectedAcModelIds.includes(pick)) return;
+    setSelectedAcModelIds((x) => [...x, pick]);
     setModelPick("");
   }
 
@@ -894,7 +907,7 @@ export default function TgCalculatorPage() {
       )
     );
     if (multiRoomEnabled) {
-      const rid = expandedRoomId ?? roomDrafts[0]?.id;
+      const rid = expandedRoomIdRef.current ?? roomDrafts[0]?.id;
       if (rid) {
         setRoomDrafts((prev) =>
           prev.map((r) =>
@@ -1523,13 +1536,18 @@ export default function TgCalculatorPage() {
                           setModelPickByRoom((m) => ({ ...m, [d.id]: v }))
                         }
                         onAddPickedModel={() => {
-                          const pick = modelPickByRoom[d.id] ?? "";
-                          if (!pick || d.selectedAcModelIds.includes(pick)) return;
+                          const roomId = d.id;
                           tgHapticButtonTap();
-                          patchRoom(d.id, {
-                            selectedAcModelIds: [...d.selectedAcModelIds, pick],
+                          setRoomDrafts((prev) => {
+                            const pick = modelPickByRoomRef.current[roomId] ?? "";
+                            if (!pick) return prev;
+                            return prev.map((r) => {
+                              if (r.id !== roomId) return r;
+                              if (r.selectedAcModelIds.includes(pick)) return r;
+                              return { ...r, selectedAcModelIds: [...r.selectedAcModelIds, pick] };
+                            });
                           });
-                          setModelPickByRoom((m) => ({ ...m, [d.id]: "" }));
+                          setModelPickByRoom((m) => ({ ...m, [roomId]: "" }));
                         }}
                         onRemoveModelFromRoom={(modelId) => removeModelFromRoom(d.id, modelId)}
                         onToggle={() => {
@@ -1690,16 +1708,6 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <label style={row}>
-                    <input
-                      type="checkbox"
-                      style={chk}
-                      checked={Number(carryBlockCount || 0) > 0}
-                      onChange={(e) => setCarryBlockCount(e.target.checked ? "1" : "0")}
-                    />
-                    <span>Подъём внешнего блока на плече по лестнице</span>
-                  </label>
-
                   <span style={label}>Демонтаж вручную, ₽</span>
                   <input
                     style={input}
@@ -1714,6 +1722,11 @@ export default function TgCalculatorPage() {
 
                   {(
                     [
+                      [
+                        "Подъём кондиционера на плече по лестнице",
+                        Number(carryBlockCount || 0) > 0,
+                        (v: boolean) => setCarryBlockCount(v ? "1" : "0"),
+                      ],
                       ["Кронштейны", includeBrackets, setIncludeBrackets],
                       ["Демонтаж и монтаж стеклопакета", includeGlass, setIncludeGlass],
                       ["Демонтаж, резка и монтаж фасадной плитки", includeTile, setIncludeTile],

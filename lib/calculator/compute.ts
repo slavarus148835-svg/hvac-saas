@@ -120,10 +120,16 @@ export function computeCalculatorLineItems(
 
   for (const modelId of input.selectedAcModelIds) {
     const m = input.acModels.find((x) => x.id === modelId);
-    if (m && m.name && Number(m.price) > 0) {
+    const priceVal =
+      m && typeof m.price === "number"
+        ? m.price
+        : m
+          ? Number(m.price)
+          : NaN;
+    if (m && m.name && Number.isFinite(priceVal) && priceVal > 0) {
       items.push({
         title: `Кондиционер: ${m.name}`,
-        amount: Number(m.price),
+        amount: Math.floor(priceVal),
         note: "Модель из личного прайса",
       });
     }
@@ -246,8 +252,8 @@ export function computeCalculatorLineItems(
   if (carryBlockCountNum > 0) {
     const carryTitle =
       carryBlockCountNum === 1
-        ? "Подъём внешнего блока на плече по лестнице"
-        : `Подъём внешнего блока × ${carryBlockCountNum}`;
+        ? "Подъём кондиционера на плече по лестнице"
+        : `Подъём кондиционера на плече по лестнице × ${carryBlockCountNum}`;
     items.push({
       title: carryTitle,
       amount: carryBlockCountNum * prices.outdoorBlockCarry,

@@ -382,16 +382,6 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <label style={row}>
-            <input
-              type="checkbox"
-              style={chk}
-              checked={Number(draft.carryBlockCount || 0) > 0}
-              onChange={(e) => onPatch({ carryBlockCount: e.target.checked ? "1" : "0" })}
-            />
-            <span>Подъём внешнего блока на плече по лестнице</span>
-          </label>
-
           <span style={label}>Демонтаж вручную, ₽</span>
           <input
             style={input}
@@ -407,6 +397,11 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
 
           {(
             [
+              [
+                "Подъём кондиционера на плече по лестнице",
+                Number(draft.carryBlockCount || 0) > 0,
+                (v: boolean) => onPatch({ carryBlockCount: v ? "1" : "0" }),
+              ],
               ["Кронштейны", draft.includeBrackets, (v: boolean) => onPatch({ includeBrackets: v })],
               ["Демонтаж и монтаж стеклопакета", draft.includeGlass, (v: boolean) => onPatch({ includeGlass: v })],
               [
