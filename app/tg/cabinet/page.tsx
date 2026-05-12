@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
+import { fetchMiniAppMeAccount, type MiniAppMeAccount } from "@/lib/telegramMiniAppCalculatorApi";
+import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -59,6 +61,19 @@ const btnSecondary: React.CSSProperties = {
   marginTop: 12,
 };
 
+function formatIsoDate(iso: string | null): string {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+  return new Date(t).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 type AuthUi =
   | "idle"
   | "checking"
@@ -75,6 +90,7 @@ export default function TgCabinetPage() {
   const [authUi, setAuthUi] = useState<AuthUi>("idle");
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [accountExtra, setAccountExtra] = useState<MiniAppMeAccount | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +124,8 @@ export default function TgCabinetPage() {
           setProfile(resolved.profile);
           setAuthUi("profile");
           setAuthError(null);
+          const me = await fetchMiniAppMeAccount();
+          if (!cancelled && me.ok) setAccountExtra(me.account);
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
@@ -128,6 +146,8 @@ export default function TgCabinetPage() {
           setProfile(resolved.profile);
           setAuthUi("profile");
           setAuthError(null);
+          const me = await fetchMiniAppMeAccount();
+          if (!cancelled && me.ok) setAccountExtra(me.account);
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
@@ -156,6 +176,7 @@ export default function TgCabinetPage() {
       />
       <div style={page}>
         <h1 style={title}>Кабинет</h1>
+        {ready ? <TgMiniAppNav /> : null}
         <div style={statusBox}>
           <strong>Подключение Telegram</strong>
           <br />
@@ -193,10 +214,18 @@ export default function TgCabinetPage() {
                   color: "#475569",
                 }}
               >
-                {profile.uid ? <li>UID: {profile.uid}</li> : null}
                 {profile.email ? <li>Email: {profile.email}</li> : null}
-                <li>План: {profile.plan ?? "—"}</li>
-                <li>Оплата: {profile.hasPaid ? "да" : "нет"}</li>
+                <li>План / подписка: {profile.plan ?? "—"}</li>
+                {accountExtra?.subscriptionStatus ? (
+                  <li>Статус: {accountExtra.subscriptionStatus}</li>
+                ) : null}
+                <li>Оплата: {profile.hasPaid ? "активна" : "нет"}</li>
+                {!profile.hasPaid && accountExtra?.trialEndsAt ? (
+                  <li>Trial до: {formatIsoDate(accountExtra.trialEndsAt)}</li>
+                ) : null}
+                {profile.hasPaid && accountExtra?.paidAt ? (
+                  <li>Оплата отмечена: {formatIsoDate(accountExtra.paidAt)}</li>
+                ) : null}
                 {profile.telegramUsername ? (
                   <li>@{profile.telegramUsername}</li>
                 ) : null}
@@ -228,9 +257,26 @@ export default function TgCabinetPage() {
         ) : null}
 
         {authUi === "profile" ? (
-          <Link href="/dashboard" style={btn}>
-            Открыть кабинет
-          </Link>
+          <>
+            <Link href="/tg/price" style={btn}>
+              Редактировать прайс
+            </Link>
+            <Link href="/tg/models" style={btnSecondary}>
+              Мои модели
+            </Link>
+            <Link href="/tg/history" style={btnSecondary}>
+              История расчётов
+            </Link>
+            <Link href="/tg/settings" style={btnSecondary}>
+              Настройки расчёта
+            </Link>
+            <Link href="/tg/calculator" style={btnSecondary}>
+              Калькулятор
+            </Link>
+            <Link href="/dashboard" style={btnSecondary}>
+              Открыть веб-кабинет
+            </Link>
+          </>
         ) : null}
         {authUi === "need_registration" ? (
           <>
@@ -260,7 +306,7 @@ export default function TgCabinetPage() {
             textAlign: "center",
           }}
         >
-          В проекте кабинет — это /dashboard
+          Полный кабинет и оплата — на сайте (/dashboard)
         </p>
       </div>
     </>

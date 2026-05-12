@@ -10,6 +10,7 @@ import {
   type MiniAppHistoryListItem,
 } from "@/lib/telegramMiniAppCalculatorApi";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
+import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -136,6 +137,7 @@ export default function TgHistoryPage() {
       />
       <div style={page}>
         <h1 style={title}>Сохранённые расчёты</h1>
+        {ready ? <TgMiniAppNav /> : null}
 
         {!ready ? (
           <p>Загрузка…</p>
@@ -174,7 +176,25 @@ export default function TgHistoryPage() {
             {listError ? (
               <p style={{ color: "#b91c1c" }}>{listError}</p>
             ) : items.length === 0 ? (
-              <p style={{ color: "#64748b" }}>Пока нет сохранённых расчётов.</p>
+              <div
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 14,
+                  padding: 20,
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ margin: "0 0 12px", fontWeight: 700, color: "#0f172a" }}>
+                  Сохранённые расчёты появятся здесь
+                </p>
+                <p style={{ margin: "0 0 16px", color: "#64748b", fontSize: 14 }}>
+                  Сделайте расчёт в калькуляторе и нажмите «Сохранить».
+                </p>
+                <Link href="/tg/calculator" style={btn}>
+                  Сделать первый расчёт
+                </Link>
+              </div>
             ) : (
               items.map((row) => (
                 <div

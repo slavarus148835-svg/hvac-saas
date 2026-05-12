@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { firestoreFieldToIsoUtc } from "@/lib/server/telegram/firestoreTimeIso";
 import {
   loadUserDocByUid,
   telegramMiniAppPublicProfileFromUserDoc,
@@ -16,38 +17,31 @@ function bearerToken(req: Request): string | null {
 }
 
 export async function GET(req: Request) {
-  console.log("TELEGRAM_MINIAPP_ME_START");
   try {
     const token = bearerToken(req);
     if (!token) {
-      console.log("TELEGRAM_MINIAPP_ME_FAILED", { reason: "missing_bearer" });
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const db = getAdminDb();
     if (!db) {
-      console.log("TELEGRAM_MINIAPP_ME_FAILED", { reason: "no_firebase_admin" });
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const v = await verifyTelegramMiniAppSession(db, token);
     if (!v.ok) {
-      console.log("TELEGRAM_MINIAPP_ME_FAILED", { reason: v.error });
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const loaded = await loadUserDocByUid(db, v.uid);
     if (!loaded) {
-      console.log("TELEGRAM_MINIAPP_ME_FAILED", {
-        reason: "user_doc_missing",
-        uid: v.uid,
-      });
       return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
     }
 
     const profile = telegramMiniAppPublicProfileFromUserDoc(v.uid, loaded.data);
-
-    console.log("TELEGRAM_MINIAPP_ME_OK", { uid: v.uid });
+    const d = loaded.data;
+    const subscriptionStatus =
+      typeof d.subscriptionStatus === "string" ? d.subscriptionStatus : null;
 
     return NextResponse.json({
       ok: true,
@@ -60,6 +54,9 @@ export async function GET(req: Request) {
         telegramUserId: profile.telegramUserId,
         telegramId: profile.telegramId,
         telegramUsername: profile.telegramUsername,
+        trialEndsAt: firestoreFieldToIsoUtc(d.trialEndsAt),
+        paidAt: firestoreFieldToIsoUtc(d.paidAt),
+        subscriptionStatus,
       },
     });
   } catch (e) {

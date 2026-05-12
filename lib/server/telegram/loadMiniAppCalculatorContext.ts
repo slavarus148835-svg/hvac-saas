@@ -10,11 +10,19 @@ import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
 export type MiniAppCalculatorModel = { id: string; name: string; price: number };
 
+/** Тексты с users/{uid}, опционально для Mini App (веб может игнорировать). */
+export type MiniAppCalculatorTextSettings = {
+  quoteFooterTemplate: string;
+  guaranteeText: string;
+  masterContact: string;
+};
+
 export type MiniAppCalculatorContext = {
   prices: CalculatorPriceList;
   giftRouteMeters: number;
   models: MiniAppCalculatorModel[];
   customServices: UserCustomService[];
+  textSettings: MiniAppCalculatorTextSettings;
 };
 
 export async function loadMiniAppCalculatorContext(
@@ -26,7 +34,20 @@ export async function loadMiniAppCalculatorContext(
   const userData = userSnap.exists ? (userSnap.data() as Record<string, unknown>) : {};
   const gm = Number(userData.giftRouteMeters);
   const giftRouteMeters =
-    Number.isFinite(gm) && gm >= 0 ? Math.floor(gm) : 1;
+    Number.isFinite(gm) && gm >= 0 ? Math.min(500, Math.floor(gm)) : 1;
+
+  const quoteFooterTemplate =
+    typeof userData.calculatorQuoteFooterTemplate === "string"
+      ? userData.calculatorQuoteFooterTemplate.trim().slice(0, 4000)
+      : "";
+  const guaranteeText =
+    typeof userData.calculatorGuaranteeText === "string"
+      ? userData.calculatorGuaranteeText.trim().slice(0, 2000)
+      : "";
+  const masterContact =
+    typeof userData.calculatorMasterContact === "string"
+      ? userData.calculatorMasterContact.trim().slice(0, 500)
+      : "";
 
   let prices: CalculatorPriceList = { ...DEFAULT_CALCULATOR_PRICES };
   let customServices: UserCustomService[] = [];
@@ -61,5 +82,11 @@ export async function loadMiniAppCalculatorContext(
     .filter((m) => m.name && m.price > 0);
   models.sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
-  return { prices, giftRouteMeters, models, customServices };
+  return {
+    prices,
+    giftRouteMeters,
+    models,
+    customServices,
+    textSettings: { quoteFooterTemplate, guaranteeText, masterContact },
+  };
 }

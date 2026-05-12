@@ -37,12 +37,25 @@ import {
 } from "@/lib/telegramMiniAppCalculatorApi";
 import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import type { MiniAppCalculatorTextSettings } from "@/lib/telegramMiniAppCalculatorApi";
 
 const ONBOARDING_STORAGE_KEY = "hvac_tg_onboarding_seen";
-const ONBOARDING_SLIDES = [
-  "Расчёт кондиционера за 1 минуту",
-  "Ничего не забудете в смете",
-  "Отправка клиенту прямо с объекта",
+const CALC_HELP_DISMISSED_KEY = "hvac_tg_calc_help_dismissed";
+
+const ONBOARDING_STEPS = [
+  {
+    title: "Сначала проверьте личный прайс",
+    body: "Цены монтажа, трассы и допработ можно изменить под себя.",
+  },
+  {
+    title: "Добавьте модели кондиционеров",
+    body: "Модели из вашего прайса будут доступны прямо в расчёте.",
+  },
+  {
+    title: "Считайте и отправляйте смету клиенту",
+    body: "Сохраните расчёт, отправьте текст, PDF или сообщение в Telegram или WhatsApp.",
+  },
 ] as const;
 
 const page: React.CSSProperties = {
@@ -194,6 +207,12 @@ export default function TgCalculatorPage() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
+  const [calcHelpVisible, setCalcHelpVisible] = useState(false);
+  const [textSettings, setTextSettings] = useState<MiniAppCalculatorTextSettings>({
+    quoteFooterTemplate: "",
+    guaranteeText: "",
+    masterContact: "",
+  });
   const cardCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const historyLoadedRef = useRef<string | null>(null);
 
@@ -227,6 +246,7 @@ export default function TgCalculatorPage() {
             setGiftRouteMeters(ctx.giftRouteMeters);
             setModels(ctx.models);
             setCustomServices(ctx.customServices);
+            setTextSettings(ctx.textSettings);
             setCalcPhase("ready");
             setContextError(null);
           } else {
@@ -263,6 +283,7 @@ export default function TgCalculatorPage() {
             setGiftRouteMeters(ctx.giftRouteMeters);
             setModels(ctx.models);
             setCustomServices(ctx.customServices);
+            setTextSettings(ctx.textSettings);
             setCalcPhase("ready");
             setContextError(null);
           } else {
@@ -293,6 +314,17 @@ export default function TgCalculatorPage() {
       if (localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1") return;
       setOnboardingStep(0);
       setOnboardingOpen(true);
+    } catch {
+      /* */
+    }
+  }, [inTelegram, ready]);
+
+  useEffect(() => {
+    if (inTelegram !== true || !ready) return;
+    try {
+      if (typeof localStorage === "undefined") return;
+      if (localStorage.getItem(CALC_HELP_DISMISSED_KEY) === "1") return;
+      setCalcHelpVisible(true);
     } catch {
       /* */
     }
@@ -373,22 +405,40 @@ export default function TgCalculatorPage() {
     quickCalculationExtras,
   ]);
 
-  const quoteText = useMemo(
-    () =>
-      buildClientQuoteText({
-        clientName,
-        clientContact,
-        capacity,
-        mountType,
-        items: result.items.map((i) => ({
-          title: i.title,
-          amount: i.amount,
-          note: i.note,
-        })),
-        total: result.total,
-      }),
-    [clientName, clientContact, capacity, mountType, result.items, result.total]
-  );
+  const quoteText = useMemo(() => {
+    let t = buildClientQuoteText({
+      clientName,
+      clientContact,
+      capacity,
+      mountType,
+      items: result.items.map((i) => ({
+        title: i.title,
+        amount: i.amount,
+        note: i.note,
+      })),
+      total: result.total,
+    });
+    const tail: string[] = [];
+    if (textSettings.guaranteeText.trim()) tail.push(textSettings.guaranteeText.trim());
+    if (textSettings.masterContact.trim()) {
+      tail.push(`Мастер: ${textSettings.masterContact.trim()}`);
+    }
+    if (textSettings.quoteFooterTemplate.trim()) {
+      tail.push(textSettings.quoteFooterTemplate.trim());
+    }
+    if (tail.length) t = `${t}\n\n${tail.join("\n\n")}`;
+    return t;
+  }, [
+    clientName,
+    clientContact,
+    capacity,
+    mountType,
+    result.items,
+    result.total,
+    textSettings.guaranteeText,
+    textSettings.masterContact,
+    textSettings.quoteFooterTemplate,
+  ]);
 
   const showCalculatorForm =
     (inTelegram === true && ready) ||
@@ -653,37 +703,130 @@ export default function TgCalculatorPage() {
         }}
       />
       <div style={page}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 12,
-          }}
-        >
-          <h1 style={{ ...title, margin: 0, flex: 1, minWidth: 0 }}>Калькулятор монтажника</h1>
-          {ready ? (
-            <Link
-              href="/tg/history"
-              onClick={() => tgHapticButtonTap()}
-              style={{
-                flexShrink: 0,
-                padding: "10px 14px",
-                borderRadius: 12,
-                background: "#fff",
-                border: "1px solid #e2e8f0",
-                color: "#0f172a",
-                fontSize: 14,
-                fontWeight: 700,
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              История
-            </Link>
-          ) : null}
-        </div>
+        <h1 style={{ ...title, margin: "0 0 10px" }}>Калькулятор монтажника</h1>
+        {ready ? <TgMiniAppNav /> : null}
+
+        {ready && inTelegram === true && showCalculatorForm ? (
+          <>
+            <div style={{ ...card, marginBottom: 12, background: "#0f172a", color: "#fff" }}>
+              <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>
+                Быстрый расчёт на объекте
+              </div>
+              <p style={{ margin: "0 0 12px", fontSize: 14, opacity: 0.9, lineHeight: 1.45 }}>
+                Прайс, модели и тексты сметы настраиваются здесь же — как в веб-версии.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <Link
+                  href="/tg/price"
+                  onClick={() => tgHapticButtonTap()}
+                  style={{
+                    ...btnSecondary,
+                    marginTop: 0,
+                    padding: "12px 10px",
+                    fontSize: 14,
+                    textAlign: "center",
+                    background: "#1e293b",
+                    color: "#fff",
+                    borderColor: "#334155",
+                  }}
+                >
+                  Редактировать прайс
+                </Link>
+                <Link
+                  href="/tg/models"
+                  onClick={() => tgHapticButtonTap()}
+                  style={{
+                    ...btnSecondary,
+                    marginTop: 0,
+                    padding: "12px 10px",
+                    fontSize: 14,
+                    textAlign: "center",
+                    background: "#1e293b",
+                    color: "#fff",
+                    borderColor: "#334155",
+                  }}
+                >
+                  Мои модели
+                </Link>
+                <Link
+                  href="/tg/history"
+                  onClick={() => tgHapticButtonTap()}
+                  style={{
+                    ...btnSecondary,
+                    marginTop: 0,
+                    padding: "12px 10px",
+                    fontSize: 14,
+                    textAlign: "center",
+                    background: "#1e293b",
+                    color: "#fff",
+                    borderColor: "#334155",
+                  }}
+                >
+                  История
+                </Link>
+                <Link
+                  href="/tg/settings"
+                  onClick={() => tgHapticButtonTap()}
+                  style={{
+                    ...btnSecondary,
+                    marginTop: 0,
+                    padding: "12px 10px",
+                    fontSize: 14,
+                    textAlign: "center",
+                    background: "#1e293b",
+                    color: "#fff",
+                    borderColor: "#334155",
+                  }}
+                >
+                  Настройки
+                </Link>
+              </div>
+            </div>
+
+            {calcHelpVisible ? (
+              <div
+                style={{
+                  ...card,
+                  marginBottom: 12,
+                  background: "#eff6ff",
+                  borderColor: "#bfdbfe",
+                  position: "relative",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    tgHapticButtonTap();
+                    try {
+                      localStorage.setItem(CALC_HELP_DISMISSED_KEY, "1");
+                    } catch {
+                      /* */
+                    }
+                    setCalcHelpVisible(false);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 10,
+                    border: "none",
+                    background: "transparent",
+                    color: "#64748b",
+                    fontSize: 20,
+                    lineHeight: 1,
+                    cursor: "pointer",
+                    padding: 4,
+                  }}
+                  aria-label="Закрыть подсказку"
+                >
+                  ×
+                </button>
+                <p style={{ margin: "0 28px 0 0", fontSize: 14, color: "#1e3a5f", lineHeight: 1.5 }}>
+                  Перед первым расчётом проверьте личный прайс и модели кондиционеров.
+                </p>
+              </div>
+            ) : null}
+          </>
+        ) : null}
 
         {!ready ? (
           <p style={text}>Проверка окружения…</p>
@@ -1397,12 +1540,15 @@ export default function TgCalculatorPage() {
                 color: "#0f172a",
               }}
             >
-              {ONBOARDING_SLIDES[onboardingStep]}
+              {ONBOARDING_STEPS[onboardingStep].title}
             </p>
-            <p style={{ margin: "0 0 22px", fontSize: 14, color: "#64748b" }}>
-              {onboardingStep + 1} / {ONBOARDING_SLIDES.length}
+            <p style={{ margin: "0 0 16px", fontSize: 15, color: "#475569", lineHeight: 1.5 }}>
+              {ONBOARDING_STEPS[onboardingStep].body}
             </p>
-            {onboardingStep < ONBOARDING_SLIDES.length - 1 ? (
+            <p style={{ margin: "0 0 22px", fontSize: 13, color: "#94a3b8" }}>
+              {onboardingStep + 1} / {ONBOARDING_STEPS.length}
+            </p>
+            {onboardingStep < ONBOARDING_STEPS.length - 1 ? (
               <button
                 type="button"
                 style={btn}
@@ -1415,7 +1561,7 @@ export default function TgCalculatorPage() {
               </button>
             ) : (
               <button type="button" style={btn} onClick={finishOnboarding}>
-                Начать
+                Начать работу
               </button>
             )}
           </div>

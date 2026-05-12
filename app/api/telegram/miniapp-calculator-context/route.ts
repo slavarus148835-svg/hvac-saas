@@ -37,6 +37,7 @@ export async function GET(req: Request) {
       giftRouteMeters: ctx.giftRouteMeters,
       models: ctx.models,
       customServices: ctx.customServices,
+      textSettings: ctx.textSettings,
     });
   } catch (e) {
     console.log("TELEGRAM_MINIAPP_CALC_CONTEXT_FAILED", {
