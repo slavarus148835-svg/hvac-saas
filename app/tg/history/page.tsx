@@ -213,7 +213,7 @@ export default function TgHistoryPage() {
                   <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.5 }}>
                     <div>{formatWhen(row.createdAt)}</div>
                     <div>
-                      {mountLabel(row.mountType)} · {row.capacity} кВт
+                      {mountLabel(row.mountType)} · типоразмер {row.capacity} BTU
                     </div>
                     <div style={{ fontWeight: 800, marginTop: 8, color: "#0f172a" }}>
                       {new Intl.NumberFormat("ru-RU").format(Math.round(row.total))} ₽

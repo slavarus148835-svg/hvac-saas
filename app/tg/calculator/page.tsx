@@ -417,6 +417,7 @@ export default function TgCalculatorPage() {
         note: i.note,
       })),
       total: result.total,
+      capacityDisplay: "btu_typical",
     });
     const tail: string[] = [];
     if (textSettings.guaranteeText.trim()) tail.push(textSettings.guaranteeText.trim());
@@ -645,7 +646,7 @@ export default function TgCalculatorPage() {
     const blob = await quoteCardToPngBlob(canvas, {
       clientName,
       totalRub: formatRubles(result.total),
-      subtitle: `Монтаж ${capacity} кВт`,
+      subtitle: `Монтаж ${capacity} BTU`,
       lines,
     });
     if (!blob) {
@@ -708,78 +709,9 @@ export default function TgCalculatorPage() {
 
         {ready && inTelegram === true && showCalculatorForm ? (
           <>
-            <div style={{ ...card, marginBottom: 12, background: "#0f172a", color: "#fff" }}>
-              <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>
                 Быстрый расчёт на объекте
-              </div>
-              <p style={{ margin: "0 0 12px", fontSize: 14, opacity: 0.9, lineHeight: 1.45 }}>
-                Прайс, модели и тексты сметы настраиваются здесь же — как в веб-версии.
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <Link
-                  href="/tg/price"
-                  onClick={() => tgHapticButtonTap()}
-                  style={{
-                    ...btnSecondary,
-                    marginTop: 0,
-                    padding: "12px 10px",
-                    fontSize: 14,
-                    textAlign: "center",
-                    background: "#1e293b",
-                    color: "#fff",
-                    borderColor: "#334155",
-                  }}
-                >
-                  Редактировать прайс
-                </Link>
-                <Link
-                  href="/tg/models"
-                  onClick={() => tgHapticButtonTap()}
-                  style={{
-                    ...btnSecondary,
-                    marginTop: 0,
-                    padding: "12px 10px",
-                    fontSize: 14,
-                    textAlign: "center",
-                    background: "#1e293b",
-                    color: "#fff",
-                    borderColor: "#334155",
-                  }}
-                >
-                  Мои модели
-                </Link>
-                <Link
-                  href="/tg/history"
-                  onClick={() => tgHapticButtonTap()}
-                  style={{
-                    ...btnSecondary,
-                    marginTop: 0,
-                    padding: "12px 10px",
-                    fontSize: 14,
-                    textAlign: "center",
-                    background: "#1e293b",
-                    color: "#fff",
-                    borderColor: "#334155",
-                  }}
-                >
-                  История
-                </Link>
-                <Link
-                  href="/tg/settings"
-                  onClick={() => tgHapticButtonTap()}
-                  style={{
-                    ...btnSecondary,
-                    marginTop: 0,
-                    padding: "12px 10px",
-                    fontSize: 14,
-                    textAlign: "center",
-                    background: "#1e293b",
-                    color: "#fff",
-                    borderColor: "#334155",
-                  }}
-                >
-                  Настройки
-                </Link>
               </div>
             </div>
 
@@ -821,7 +753,7 @@ export default function TgCalculatorPage() {
                   ×
                 </button>
                 <p style={{ margin: "0 28px 0 0", fontSize: 14, color: "#1e3a5f", lineHeight: 1.5 }}>
-                  Перед первым расчётом проверьте личный прайс и модели кондиционеров.
+                  Проверьте личный прайс и модели во вкладках сверху перед первым расчётом.
                 </p>
               </div>
             ) : null}
@@ -940,19 +872,20 @@ export default function TgCalculatorPage() {
             {showCalculatorForm ? (
               <>
                 <div style={card}>
-                  <span style={label}>Мощность, кВт</span>
+                  <span style={label}>Типоразмер (мощность BTU)</span>
                   <select
                     style={input}
                     value={capacity}
                     onChange={(e) => setCapacity(e.target.value)}
+                    aria-label="Выберите типоразмер кондиционера"
                   >
-                    <option value="7">7</option>
-                    <option value="9">9</option>
-                    <option value="12">12</option>
-                    <option value="18">18</option>
-                    <option value="24">24</option>
-                    <option value="30">30</option>
-                    <option value="36">36</option>
+                    <option value="7">7 BTU</option>
+                    <option value="9">9 BTU</option>
+                    <option value="12">12 BTU</option>
+                    <option value="18">18 BTU</option>
+                    <option value="24">24 BTU</option>
+                    <option value="30">30 BTU</option>
+                    <option value="36">36 BTU</option>
                   </select>
 
                   <span style={label}>Тип монтажа</span>

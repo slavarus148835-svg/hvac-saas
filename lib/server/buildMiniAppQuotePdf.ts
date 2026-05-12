@@ -48,7 +48,7 @@ export async function buildMiniAppQuotePdfBytes(params: {
   const cc = params.clientContact.trim();
   if (cn) drawLine(`Клиент: ${cn}`, 11);
   if (cc) drawLine(`Контакт: ${cc}`, 11);
-  drawLine(`Мощность: ${params.capacity} кВт. Монтаж: ${params.mountTypeLabel}`, 11);
+  drawLine(`Мощность: ${params.capacity} BTU. Монтаж: ${params.mountTypeLabel}`, 11);
   y -= 8;
 
   drawLine("Позиции", 12, true);

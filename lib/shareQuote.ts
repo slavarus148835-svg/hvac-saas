@@ -13,6 +13,11 @@ export type BuildClientQuoteTextParams = {
   mountType: "standard" | "existing";
   items: QuoteLineItem[];
   total: number;
+  /**
+   * По умолчанию — кВт (основной сайт).
+   * `btu_typical` — для Telegram Mini App: числа 7…36 показываются как BTU.
+   */
+  capacityDisplay?: "kw" | "btu_typical";
 };
 
 function mountLabel(mountType: "standard" | "existing"): string {
@@ -25,10 +30,14 @@ function mountLabel(mountType: "standard" | "existing"): string {
 export function buildClientQuoteText(params: BuildClientQuoteTextParams): string {
   const name = (params.clientName ?? "").trim();
   const contact = (params.clientContact ?? "").trim();
+  const cap =
+    params.capacityDisplay === "btu_typical"
+      ? `${params.capacity} BTU`
+      : `${params.capacity} кВт`;
   const lines: string[] = [
     "📋 Смета HVAC-SaaS",
     "",
-    `Монтаж ${mountLabel(params.mountType)}, ${params.capacity} кВт`,
+    `Монтаж ${mountLabel(params.mountType)}, ${cap}`,
     "",
     "Позиции:",
   ];

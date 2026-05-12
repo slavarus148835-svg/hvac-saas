@@ -254,10 +254,10 @@ export default function TgModelsPage() {
                 value={draftCap}
                 onChange={(e) => setDraftCap(e.target.value)}
               >
-                <option value="">Мощность (необязательно)</option>
+                <option value="">Типоразмер BTU (необязательно)</option>
                 {CAP_OPTS.filter(Boolean).map((c) => (
                   <option key={c} value={c}>
-                    {c} кВт
+                    {c} BTU
                   </option>
                 ))}
               </select>
@@ -291,7 +291,7 @@ export default function TgModelsPage() {
                 <div key={m.id} style={card}>
                   <div style={{ fontWeight: 800, marginBottom: 6 }}>{m.name}</div>
                   <div style={{ color: "#475569", marginBottom: 8 }}>
-                    {m.capacityKw ? `${m.capacityKw} кВт · ` : null}
+                    {m.capacityKw ? `модель ${m.capacityKw} BTU · ` : null}
                     {new Intl.NumberFormat("ru-RU").format(m.price)} ₽
                   </div>
                   {m.comment ? (
@@ -309,10 +309,10 @@ export default function TgModelsPage() {
                         value={editCap}
                         onChange={(e) => setEditCap(e.target.value)}
                       >
-                        <option value="">Мощность</option>
+                        <option value="">Типоразмер BTU</option>
                         {CAP_OPTS.filter(Boolean).map((c) => (
                           <option key={c} value={c}>
-                            {c} кВт
+                            {c} BTU
                           </option>
                         ))}
                       </select>

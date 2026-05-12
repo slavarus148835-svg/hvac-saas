@@ -257,26 +257,9 @@ export default function TgCabinetPage() {
         ) : null}
 
         {authUi === "profile" ? (
-          <>
-            <Link href="/tg/price" style={btn}>
-              Редактировать прайс
-            </Link>
-            <Link href="/tg/models" style={btnSecondary}>
-              Мои модели
-            </Link>
-            <Link href="/tg/history" style={btnSecondary}>
-              История расчётов
-            </Link>
-            <Link href="/tg/settings" style={btnSecondary}>
-              Настройки расчёта
-            </Link>
-            <Link href="/tg/calculator" style={btnSecondary}>
-              Калькулятор
-            </Link>
-            <Link href="/dashboard" style={btnSecondary}>
-              Открыть веб-кабинет
-            </Link>
-          </>
+          <Link href="/dashboard" style={btn}>
+            Открыть веб-кабинет
+          </Link>
         ) : null}
         {authUi === "need_registration" ? (
           <>
