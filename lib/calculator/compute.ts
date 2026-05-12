@@ -8,6 +8,8 @@ import {
   MAX_ROUTE_METERS,
   MAX_STROBA_METERS,
 } from "./constants";
+import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
+import { formatCapacityBtu } from "./capacityDisplay";
 import { formatRubles } from "./format";
 import {
   capacityKey,
@@ -94,11 +96,12 @@ function computeLineItems(
 
   const items: CalculatorLineItem[] = [];
 
+  const capBtu = formatCapacityBtu(input.capacity);
   items.push({
     title:
       input.mountType === "standard"
-        ? `Монтаж на нашу трассу ${input.capacity}`
-        : `Монтаж на чужую трассу ${input.capacity}`,
+        ? `Монтаж на нашу трассу, ${capBtu}`
+        : `Монтаж на чужую трассу, ${capBtu}`,
     amount: basePrice,
     note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
   });
@@ -305,19 +308,11 @@ export function computeCalculatorEstimate(
   const totalRaw = items.reduce((sum, item) => sum + item.amount, 0);
   const total = Number.isFinite(totalRaw) ? Math.max(0, totalRaw) : 0;
 
-  const autoClientText = [
-    "Здравствуйте. Подготовили расчёт по вашему объекту.",
-    "",
-    `Расчёт монтажа кондиционера ${input.capacity}:`,
-    ...items.map((item) => {
-      const amountText = `${item.amount < 0 ? "-" : ""}${fmt(Math.abs(item.amount))}`;
-      return item.note
-        ? `— ${item.title}: ${amountText}\n  ${item.note}`
-        : `— ${item.title}: ${amountText}`;
-    }),
-    "",
-    `Итого: ${fmt(total)}`,
-  ].join("\n");
+  const autoClientText = buildStructuredClientQuoteMessage({
+    items: items.map((item) => ({ title: item.title, amount: item.amount })),
+    total,
+    formatMoney: fmt,
+  });
 
   return {
     items,

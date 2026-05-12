@@ -7,6 +7,7 @@ import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import {
   computeCalculatorEstimate,
   DEFAULT_CALCULATOR_PRICES,
+  formatCapacityBtu,
   formatRubles,
   MAX_BLOCKS,
   MAX_CABLE_METERS,
@@ -432,7 +433,6 @@ export default function TgCalculatorPage() {
         amount: i.amount,
       })),
       total: result.total,
-      capacityDisplay: "btu_typical",
     });
     const tail: string[] = [];
     if (textSettings.guaranteeText.trim()) tail.push(textSettings.guaranteeText.trim());
@@ -767,7 +767,7 @@ export default function TgCalculatorPage() {
     const blob = await quoteCardToPngBlob(canvas, {
       clientName,
       totalRub: formatRubles(result.total),
-      subtitle: `Монтаж ${capacity} BTU`,
+      subtitle: `Монтаж ${formatCapacityBtu(capacity)}`,
       lines,
     });
     if (!blob) {
@@ -1000,20 +1000,18 @@ export default function TgCalculatorPage() {
             {showCalculatorForm ? (
               <>
                 <div style={card}>
-                  <span style={label}>Типоразмер (мощность BTU)</span>
+                  <span style={label}>Мощность BTU</span>
                   <select
                     style={input}
                     value={capacity}
                     onChange={(e) => setCapacity(e.target.value)}
-                    aria-label="Выберите типоразмер кондиционера"
+                    aria-label="Выберите мощность BTU"
                   >
-                    <option value="7">7 BTU</option>
-                    <option value="9">9 BTU</option>
-                    <option value="12">12 BTU</option>
-                    <option value="18">18 BTU</option>
-                    <option value="24">24 BTU</option>
-                    <option value="30">30 BTU</option>
-                    <option value="36">36 BTU</option>
+                    {BTU_MODEL_OPTIONS.map((v) => (
+                      <option key={v} value={v}>
+                        {formatCapacityBtu(v)}
+                      </option>
+                    ))}
                   </select>
 
                   <span style={label}>Тип монтажа</span>
@@ -1327,7 +1325,7 @@ export default function TgCalculatorPage() {
                         value={newMdlName}
                         onChange={(e) => setNewMdlName(e.target.value)}
                       />
-                      <span style={label}>Типоразмер BTU</span>
+                      <span style={label}>Мощность BTU</span>
                       <select
                         style={input}
                         value={newMdlBtu}
@@ -1335,7 +1333,7 @@ export default function TgCalculatorPage() {
                       >
                         {BTU_MODEL_OPTIONS.map((c) => (
                           <option key={c} value={c}>
-                            {c} BTU
+                            {formatCapacityBtu(c)}
                           </option>
                         ))}
                       </select>

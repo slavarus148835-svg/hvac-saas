@@ -15,6 +15,11 @@ export {
   WARN_ROUTE_METERS,
   WARN_STROBA_METERS,
 } from "./constants";
+export {
+  capacityToBtuNumber,
+  formatCapacityBtu,
+  formatCapacityLabel,
+} from "./capacityDisplay";
 export { computeCalculatorEstimate } from "./compute";
 export { DEFAULT_CALCULATOR_PRICES } from "./defaultPrices";
 export { formatRubles } from "./format";

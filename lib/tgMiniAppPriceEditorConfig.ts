@@ -1,4 +1,9 @@
 import type { CalculatorPriceList } from "@/lib/calculator";
+import { formatCapacityBtu } from "@/lib/calculator/capacityDisplay";
+
+function capLabel(k: string): string {
+  return formatCapacityBtu(k);
+}
 
 /** Секции редактора прайса Mini App — те же поля, что и веб `priceLists/{uid}`. */
 export const TG_MINI_APP_PRICE_SECTIONS: {
@@ -84,27 +89,27 @@ export const TG_MINI_APP_PRICE_SECTIONS: {
 
 const LABELS: Partial<Record<keyof CalculatorPriceList, { label: string; hint?: string; suffix?: string }>> =
   {
-    standard_7: { label: "Монтаж, типоразмер 7 BTU", hint: "Цена за 1 монтаж" },
-    standard_9: { label: "Монтаж, типоразмер 9 BTU", hint: "Цена за 1 монтаж" },
-    standard_12: { label: "Монтаж, типоразмер 12 BTU", hint: "Цена за 1 монтаж" },
-    standard_18: { label: "Монтаж, типоразмер 18 BTU", hint: "Цена за 1 монтаж" },
-    standard_24: { label: "Монтаж, типоразмер 24 BTU", hint: "Цена за 1 монтаж" },
-    standard_30: { label: "Монтаж, типоразмер 30 BTU", hint: "Цена за 1 монтаж" },
-    standard_36: { label: "Монтаж, типоразмер 36 BTU", hint: "Цена за 1 монтаж" },
-    existing_7: { label: "Монтаж на чужую трассу, 7 BTU", hint: "Цена за 1 монтаж" },
-    existing_9: { label: "Монтаж на чужую трассу, 9 BTU", hint: "Цена за 1 монтаж" },
-    existing_12: { label: "Монтаж на чужую трассу, 12 BTU", hint: "Цена за 1 монтаж" },
-    existing_18: { label: "Монтаж на чужую трассу, 18 BTU", hint: "Цена за 1 монтаж" },
-    existing_24: { label: "Монтаж на чужую трассу, 24 BTU", hint: "Цена за 1 монтаж" },
-    existing_30: { label: "Монтаж на чужую трассу, 30 BTU", hint: "Цена за 1 монтаж" },
-    existing_36: { label: "Монтаж на чужую трассу, 36 BTU", hint: "Цена за 1 монтаж" },
-    route_7: { label: "Трасса, типоразмер 7 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_9: { label: "Трасса, типоразмер 9 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_12: { label: "Трасса, типоразмер 12 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_18: { label: "Трасса, типоразмер 18 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_24: { label: "Трасса, типоразмер 24 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_30: { label: "Трасса, типоразмер 30 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
-    route_36: { label: "Трасса, типоразмер 36 BTU", hint: "Цена за 1 м", suffix: "₽/м" },
+    standard_7: { label: `Монтаж, типоразмер ${capLabel("7")}`, hint: "Цена за 1 монтаж" },
+    standard_9: { label: `Монтаж, типоразмер ${capLabel("9")}`, hint: "Цена за 1 монтаж" },
+    standard_12: { label: `Монтаж, типоразмер ${capLabel("12")}`, hint: "Цена за 1 монтаж" },
+    standard_18: { label: `Монтаж, типоразмер ${capLabel("18")}`, hint: "Цена за 1 монтаж" },
+    standard_24: { label: `Монтаж, типоразмер ${capLabel("24")}`, hint: "Цена за 1 монтаж" },
+    standard_30: { label: `Монтаж, типоразмер ${capLabel("30")}`, hint: "Цена за 1 монтаж" },
+    standard_36: { label: `Монтаж, типоразмер ${capLabel("36")}`, hint: "Цена за 1 монтаж" },
+    existing_7: { label: `Монтаж на чужую трассу, ${capLabel("7")}`, hint: "Цена за 1 монтаж" },
+    existing_9: { label: `Монтаж на чужую трассу, ${capLabel("9")}`, hint: "Цена за 1 монтаж" },
+    existing_12: { label: `Монтаж на чужую трассу, ${capLabel("12")}`, hint: "Цена за 1 монтаж" },
+    existing_18: { label: `Монтаж на чужую трассу, ${capLabel("18")}`, hint: "Цена за 1 монтаж" },
+    existing_24: { label: `Монтаж на чужую трассу, ${capLabel("24")}`, hint: "Цена за 1 монтаж" },
+    existing_30: { label: `Монтаж на чужую трассу, ${capLabel("30")}`, hint: "Цена за 1 монтаж" },
+    existing_36: { label: `Монтаж на чужую трассу, ${capLabel("36")}`, hint: "Цена за 1 монтаж" },
+    route_7: { label: `Трасса, типоразмер ${capLabel("7")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_9: { label: `Трасса, типоразмер ${capLabel("9")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_12: { label: `Трасса, типоразмер ${capLabel("12")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_18: { label: `Трасса, типоразмер ${capLabel("18")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_24: { label: `Трасса, типоразмер ${capLabel("24")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_30: { label: `Трасса, типоразмер ${capLabel("30")}`, hint: "Цена за 1 м", suffix: "₽/м" },
+    route_36: { label: `Трасса, типоразмер ${capLabel("36")}`, hint: "Цена за 1 м", suffix: "₽/м" },
     baseArmConcreteSurcharge: {
       label: "Основное отверстие в армированном бетоне",
       hint: "Цена за 1 отверстие",
@@ -112,22 +117,22 @@ const LABELS: Partial<Record<keyof CalculatorPriceList, { label: string; hint?: 
     extraHoleNormal: { label: "Доп. отверстие обычное", hint: "Цена за 1 отверстие" },
     extraHoleArm: { label: "Доп. отверстие арм. бетон", hint: "Цена за 1 отверстие" },
     stroba_brick_small: {
-      label: "Штроба кирпич / газоблок до типоразмера 24 BTU",
+      label: `Штроба кирпич / газоблок до типоразмера ${capLabel("24")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_brick_big: {
-      label: "Штроба кирпич / газоблок от типоразмера 30 BTU",
+      label: `Штроба кирпич / газоблок от типоразмера ${capLabel("30")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_concrete_small: {
-      label: "Штроба бетон до типоразмера 24 BTU",
+      label: `Штроба бетон до типоразмера ${capLabel("24")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_concrete_big: {
-      label: "Штроба бетон от типоразмера 30 BTU",
+      label: `Штроба бетон от типоразмера ${capLabel("30")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },

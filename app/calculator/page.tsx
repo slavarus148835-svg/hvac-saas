@@ -32,6 +32,7 @@ import {
   buildCalculatorClosingText,
   computeCalculatorEstimate,
   DEFAULT_CALCULATOR_PRICES,
+  formatCapacityBtu,
   formatRubles,
   MAX_BLOCKS,
   MAX_CABLE_METERS,
@@ -1137,19 +1138,17 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
-        <Label text="Мощность" note="кВт (модель ряда)">
+        <Label text="Мощность BTU" note="типоразмер ряда кондиционера">
             <select
               value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
               style={inputStyle}
             >
-              <option value="7">7</option>
-              <option value="9">9</option>
-              <option value="12">12</option>
-              <option value="18">18</option>
-              <option value="24">24</option>
-              <option value="30">30</option>
-              <option value="36">36</option>
+              {(["7", "9", "12", "18", "24", "30", "36"] as const).map((v) => (
+                <option key={v} value={v}>
+                  {formatCapacityBtu(v)}
+                </option>
+              ))}
             </select>
           </Label>
 

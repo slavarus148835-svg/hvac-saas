@@ -11,6 +11,7 @@ import {
   updateMiniAppModel,
   type MiniAppModelRow,
 } from "@/lib/telegramMiniAppCalculatorApi";
+import { formatCapacityBtu } from "@/lib/calculator";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
@@ -254,10 +255,10 @@ export default function TgModelsPage() {
                 value={draftCap}
                 onChange={(e) => setDraftCap(e.target.value)}
               >
-                <option value="">Типоразмер BTU (необязательно)</option>
+                <option value="">Мощность BTU (необязательно)</option>
                 {CAP_OPTS.filter(Boolean).map((c) => (
                   <option key={c} value={c}>
-                    {c} BTU
+                    {formatCapacityBtu(c)}
                   </option>
                 ))}
               </select>
@@ -291,7 +292,7 @@ export default function TgModelsPage() {
                 <div key={m.id} style={card}>
                   <div style={{ fontWeight: 800, marginBottom: 6 }}>{m.name}</div>
                   <div style={{ color: "#475569", marginBottom: 8 }}>
-                    {m.capacityKw ? `модель ${m.capacityKw} BTU · ` : null}
+                    {m.capacityKw ? `модель ${formatCapacityBtu(String(m.capacityKw))} · ` : null}
                     {new Intl.NumberFormat("ru-RU").format(m.price)} ₽
                   </div>
                   {m.comment ? (
@@ -309,10 +310,10 @@ export default function TgModelsPage() {
                         value={editCap}
                         onChange={(e) => setEditCap(e.target.value)}
                       >
-                        <option value="">Типоразмер BTU</option>
+                        <option value="">Мощность BTU</option>
                         {CAP_OPTS.filter(Boolean).map((c) => (
                           <option key={c} value={c}>
-                            {c} BTU
+                            {formatCapacityBtu(c)}
                           </option>
                         ))}
                       </select>

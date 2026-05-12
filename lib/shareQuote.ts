@@ -1,4 +1,5 @@
 import { formatRubles } from "@/lib/calculator/format";
+import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
 
 export type QuoteLineItem = {
   title: string;
@@ -14,54 +15,24 @@ export type BuildClientQuoteTextParams = {
   items: QuoteLineItem[];
   total: number;
   /**
-   * По умолчанию — кВт (основной сайт).
-   * `btu_typical` — для Telegram Mini App: числа 7…36 показываются как BTU.
+   * @deprecated Раньше различали кВт и BTU; теперь везде полные BTU (7000 BTU и т.д.).
+   * Параметр оставлен для обратной совместимости вызовов.
    */
   capacityDisplay?: "kw" | "btu_typical";
 };
 
-function mountLabel(mountType: "standard" | "existing"): string {
-  return mountType === "standard" ? "на нашу трассу" : "на чужую трассу";
-}
-
 /**
- * Аккуратный текст сметы для мессенджеров и Telegram share.
+ * Текст сметы для мессенджеров и share (единый формат с основным калькулятором).
+ * Заголовки позиций должны уже содержать полные BTU, если там указана мощность.
  */
 export function buildClientQuoteText(params: BuildClientQuoteTextParams): string {
-  const name = (params.clientName ?? "").trim();
-  const contact = (params.clientContact ?? "").trim();
-  const cap =
-    params.capacityDisplay === "btu_typical"
-      ? `${params.capacity} BTU`
-      : `${params.capacity} кВт`;
-  const lines: string[] = [
-    "📋 Смета HVAC-SaaS",
-    "",
-    `Монтаж ${mountLabel(params.mountType)}, ${cap}`,
-    "",
-    "Позиции:",
-  ];
-
-  for (const it of params.items) {
-    const sign = it.amount < 0 ? "−" : "";
-    const amt = formatRubles(Math.abs(it.amount));
-    lines.push(`• ${it.title} — ${sign}${amt}`);
-    if (it.note?.trim()) {
-      lines.push(`  (${it.note.trim()})`);
-    }
-  }
-
-  lines.push("");
-  lines.push(`💰 Итого: ${formatRubles(params.total)}`);
-  lines.push("");
-
-  if (name) lines.push(`Клиент: ${name}`);
-  if (contact) lines.push(`Контакт: ${contact}`);
-
-  lines.push("");
-  lines.push("Монтаж с гарантией. Оплата по договору / на расчётный счёт.");
-
-  return lines.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n").trim();
+  return buildStructuredClientQuoteMessage({
+    items: params.items.map((i) => ({ title: i.title, amount: i.amount })),
+    total: params.total,
+    clientName: params.clientName,
+    clientContact: params.clientContact,
+    formatMoney: formatRubles,
+  });
 }
 
 function encode(text: string): string {

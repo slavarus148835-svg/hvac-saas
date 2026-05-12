@@ -1,4 +1,6 @@
 import { PDFDocument, rgb } from "pdf-lib";
+import { formatCapacityBtu } from "@/lib/calculator/capacityDisplay";
+import { CLIENT_QUOTE_GREETING, CLIENT_QUOTE_MATERIALS_BLOCK } from "@/lib/clientQuoteStandard";
 import { mapMiniAppQuoteItemTitle } from "@/lib/telegramMiniAppQuoteText";
 
 export type MiniAppQuotePdfLine = { title: string; amount: number };
@@ -27,6 +29,22 @@ async function loadNotoFontBytes(): Promise<{ regular: Uint8Array; bold: Uint8Ar
     })();
   }
   return notoFontBytesPromise;
+}
+
+function wrapPlainTextToLines(text: string, maxLen: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length <= maxLen) cur = next;
+    else {
+      if (cur) lines.push(cur);
+      cur = w.length > maxLen ? `${w.slice(0, maxLen - 1)}…` : w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }
 
 function truncateDisplayLine(text: string, maxChars: number): string {
@@ -78,11 +96,15 @@ export async function buildMiniAppQuotePdfBytes(params: {
   drawLine("Смета монтажа кондиционера", 13, true);
   y -= 6;
 
+  drawLine(CLIENT_QUOTE_GREETING, 10);
+  y -= 4;
+
   const cn = params.clientName.trim();
   const cc = params.clientContact.trim();
   if (cn) drawLine(`Клиент: ${cn}`, 11);
   if (cc) drawLine(`Контакт: ${cc}`, 11);
-  drawLine(`Мощность: ${params.capacity} BTU. Монтаж: ${params.mountTypeLabel}`, 11);
+  const capShown = formatCapacityBtu(params.capacity);
+  drawLine(`Мощность BTU: ${capShown}. Монтаж: ${params.mountTypeLabel}`, 11);
   y -= 8;
 
   drawLine("Позиции", 12, true);
@@ -97,7 +119,12 @@ export async function buildMiniAppQuotePdfBytes(params: {
   const totalRub = new Intl.NumberFormat("ru-RU").format(Math.round(params.total));
   drawLine(`Итого: ${totalRub} ₽`, 14, true, rgb(0.05, 0.22, 0.12));
 
-  y -= 12;
+  y -= 10;
+  for (const ln of wrapPlainTextToLines(CLIENT_QUOTE_MATERIALS_BLOCK, 78)) {
+    drawLine(ln, 9, false, rgb(0.22, 0.24, 0.28));
+  }
+
+  y -= 8;
   drawLine(
     "Гарантия на монтаж по договору. Оплата возможна на расчётный счёт.",
     9,

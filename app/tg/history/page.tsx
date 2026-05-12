@@ -4,6 +4,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
+import { formatCapacityBtu } from "@/lib/calculator";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import {
   fetchMiniAppHistoryList,
@@ -213,7 +214,7 @@ export default function TgHistoryPage() {
                   <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.5 }}>
                     <div>{formatWhen(row.createdAt)}</div>
                     <div>
-                      {mountLabel(row.mountType)} · типоразмер {row.capacity} BTU
+                      {mountLabel(row.mountType)} · {formatCapacityBtu(row.capacity)}
                     </div>
                     <div style={{ fontWeight: 800, marginTop: 8, color: "#0f172a" }}>
                       {new Intl.NumberFormat("ru-RU").format(Math.round(row.total))} ₽
