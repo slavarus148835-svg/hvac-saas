@@ -83,7 +83,7 @@ export default function VerifyEmailCodePage() {
         const data = snap.exists() ? snap.data() : null;
         if (!needsEmailCodeVerification(user, data)) {
           sessionStorage.setItem(SESSION_EMAIL_JUST_VERIFIED_KEY, "1");
-          router.replace(getSafePostLoginPath("/dashboard"));
+          router.replace(getSafePostLoginPath(undefined));
           return;
         }
         setEmail(user.email ?? null);
@@ -289,7 +289,7 @@ export default function VerifyEmailCodePage() {
       setStatusLabel("код подтвержден");
       setStatus({ kind: "ok", text: "Готово. Переходим в кабинет…" });
       await loadRegistrationStatus(idTokenAfterVerify);
-      router.replace(getSafePostLoginPath("/dashboard"));
+      router.replace(getSafePostLoginPath(undefined));
     } catch (e) {
       console.log("[verify-email-code] verify fail", e);
       setStatus({ kind: "err", text: firebaseAuthErrorMessageWithCode(e) });

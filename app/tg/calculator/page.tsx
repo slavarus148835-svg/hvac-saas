@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import { getTelegramWebApp, isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -45,23 +45,42 @@ const btn: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-export default function TgCalculatorPage() {
-  useEffect(() => {
-    const wa = getTelegramWebApp();
-    try {
-      wa?.ready();
-    } catch {
-      /* */
-    }
-  }, []);
+const tgLine: React.CSSProperties = {
+  fontSize: 13,
+  color: "#64748b",
+  margin: "0 0 8px",
+};
 
-  const [line, setLine] = useState("…");
+export default function TgCalculatorPage() {
+  const [ready, setReady] = useState(false);
+  const [inTelegram, setInTelegram] = useState<boolean | null>(null);
+
   useEffect(() => {
-    setLine(
-      isTelegramMiniApp()
-        ? "Telegram Mini App подключён"
-        : "Откройте из Telegram для полного режима Mini App"
-    );
+    let cancelled = false;
+
+    void (async () => {
+      const wa = await waitForTelegramWebApp({
+        intervalMs: 200,
+        maxAttempts: 10,
+      });
+      if (cancelled) return;
+
+      if (wa) {
+        try {
+          wa.ready();
+        } catch {
+          /* */
+        }
+        setInTelegram(true);
+      } else {
+        setInTelegram(false);
+      }
+      setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -69,10 +88,37 @@ export default function TgCalculatorPage() {
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="afterInteractive"
+        onLoad={() => {
+          const wa = window.Telegram?.WebApp;
+          if (wa) {
+            try {
+              wa.ready();
+            } catch {
+              /* */
+            }
+          }
+        }}
       />
       <div style={page}>
         <h1 style={title}>Калькулятор монтажника</h1>
-        <p style={text}>{line}</p>
+        {!ready ? (
+          <p style={text}>Проверка окружения…</p>
+        ) : (
+          <>
+            <p style={tgLine}>
+              {inTelegram === true
+                ? "Внутри Telegram WebApp: да"
+                : inTelegram === false
+                  ? "Внутри Telegram WebApp: нет"
+                  : "Проверка…"}
+            </p>
+            <p style={text}>
+              {inTelegram
+                ? "Telegram Mini App подключён"
+                : "Откройте из Telegram для полного режима Mini App"}
+            </p>
+          </>
+        )}
         <Link href="/calculator" style={btn}>
           Открыть обычный калькулятор
         </Link>

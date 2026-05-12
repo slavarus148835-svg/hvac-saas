@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import { getTelegramWebApp, isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -50,29 +50,49 @@ const btn: React.CSSProperties = {
 };
 
 export default function TgCabinetPage() {
-  useEffect(() => {
-    const wa = getTelegramWebApp();
-    try {
-      wa?.ready();
-    } catch {
-      /* */
-    }
-  }, []);
+  const [ready, setReady] = useState(false);
+  const [inTelegram, setInTelegram] = useState<boolean | null>(null);
+  const [detail, setDetail] = useState("");
 
-  const [status, setStatus] = useState("…");
   useEffect(() => {
-    const wa = getTelegramWebApp();
-    setStatus(
-      isTelegramMiniApp()
-        ? [
+    let cancelled = false;
+
+    void (async () => {
+      const wa = await waitForTelegramWebApp({
+        intervalMs: 200,
+        maxAttempts: 10,
+      });
+      if (cancelled) return;
+
+      if (wa) {
+        try {
+          wa.ready();
+        } catch {
+          /* */
+        }
+        setInTelegram(true);
+        setDetail(
+          [
             "Telegram WebApp активен",
-            wa?.version ? `SDK: ${wa.version}` : null,
-            wa?.platform ? `Платформа: ${wa.platform}` : null,
+            wa.version ? `SDK: ${wa.version}` : null,
+            wa.platform ? `Платформа: ${wa.platform}` : null,
+            wa.initData ? "initData получен" : null,
           ]
             .filter(Boolean)
             .join("\n")
-        : "Вне Telegram Mini App — откройте из бота для режима WebApp."
-    );
+        );
+      } else {
+        setInTelegram(false);
+        setDetail(
+          "Вне Telegram Mini App — откройте из бота для режима WebApp."
+        );
+      }
+      setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -80,6 +100,16 @@ export default function TgCabinetPage() {
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="afterInteractive"
+        onLoad={() => {
+          const wa = window.Telegram?.WebApp;
+          if (wa) {
+            try {
+              wa.ready();
+            } catch {
+              /* */
+            }
+          }
+        }}
       />
       <div style={page}>
         <h1 style={title}>Кабинет</h1>
@@ -87,7 +117,20 @@ export default function TgCabinetPage() {
           <strong>Подключение Telegram</strong>
           <br />
           <br />
-          {status}
+          {!ready ? (
+            "…"
+          ) : (
+            <>
+              {inTelegram === true
+                ? "Внутри Telegram WebApp: да"
+                : inTelegram === false
+                  ? "Внутри Telegram WebApp: нет"
+                  : "Проверка…"}
+              <br />
+              <br />
+              {detail}
+            </>
+          )}
         </div>
         <Link href="/dashboard" style={btn}>
           Открыть обычный кабинет

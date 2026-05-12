@@ -198,6 +198,13 @@ export async function provisionOrUpdateTelegramUser(params: {
       lastName: profile.lastName ?? null,
       photoUrl: profile.photoUrl ?? null,
       hasPaid: false,
+      referrerId: null,
+      referralCode: null,
+      partnerBalance: 0,
+      partnerTotalEarned: 0,
+      partnerPaidCount: 0,
+      partnerRegisteredCount: 0,
+      partnerCreatedAt: null,
     },
     { merge: true }
   );

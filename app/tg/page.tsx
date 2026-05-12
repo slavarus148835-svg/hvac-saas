@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import { getTelegramWebApp, isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -59,41 +59,65 @@ const btn: React.CSSProperties = {
 
 export default function TgMiniAppHomePage() {
   const [ready, setReady] = useState(false);
+  const [inTelegram, setInTelegram] = useState<boolean | null>(null);
   const [status, setStatus] = useState("Проверка окружения…");
 
   useEffect(() => {
-    const wa = getTelegramWebApp();
-    if (wa) {
-      try {
-        wa.ready();
-      } catch {
-        /* */
-      }
-      setStatus(
-        [
-          "Telegram WebApp доступен",
-          wa.version ? `Версия SDK: ${wa.version}` : null,
-          wa.platform ? `Платформа: ${wa.platform}` : null,
-          wa.initData ? "initData получен" : "initData пуст (откройте из Telegram)",
-        ]
-          .filter(Boolean)
-          .join("\n")
-      );
-    } else {
-      setStatus(
-        "Открыто вне Telegram или скрипт ещё не загрузился. Для Mini App откройте страницу из бота."
-      );
-    }
-    setReady(true);
-  }, []);
+    let cancelled = false;
 
-  const inTg = isTelegramMiniApp();
+    void (async () => {
+      const wa = await waitForTelegramWebApp({
+        intervalMs: 200,
+        maxAttempts: 10,
+      });
+      if (cancelled) return;
+
+      if (wa) {
+        try {
+          wa.ready();
+        } catch {
+          /* */
+        }
+        setInTelegram(true);
+        setStatus(
+          [
+            "Telegram WebApp доступен",
+            wa.version ? `Версия SDK: ${wa.version}` : null,
+            wa.platform ? `Платформа: ${wa.platform}` : null,
+            wa.initData ? "initData получен" : "initData пуст (откройте из Telegram)",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        );
+      } else {
+        setInTelegram(false);
+        setStatus(
+          "Открыто вне Telegram или скрипт не загрузился. Для Mini App откройте страницу из бота."
+        );
+      }
+      setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="afterInteractive"
+        onLoad={() => {
+          const wa = window.Telegram?.WebApp;
+          if (wa) {
+            try {
+              wa.ready();
+            } catch {
+              /* */
+            }
+          }
+        }}
       />
       <div style={page}>
         <h1 style={title}>HVAC SaaS</h1>
@@ -104,7 +128,11 @@ export default function TgMiniAppHomePage() {
           <br />
           {ready ? (
             <>
-              {inTg ? "Внутри Telegram WebApp: да" : "Внутри Telegram WebApp: нет"}
+              {inTelegram === true
+                ? "Внутри Telegram WebApp: да"
+                : inTelegram === false
+                  ? "Внутри Telegram WebApp: нет"
+                  : "Проверка…"}
               <br />
               <br />
               {status}

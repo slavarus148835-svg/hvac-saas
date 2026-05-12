@@ -1,4 +1,4 @@
-const DEFAULT_AFTER_LOGIN = "/dashboard";
+const DEFAULT_AFTER_LOGIN = "/calculator";
 
 const AUTH_ONLY_PATHS = new Set([
   "/login",

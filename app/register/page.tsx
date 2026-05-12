@@ -20,6 +20,7 @@ import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
+import { tryAttachReferralFromStorage } from "@/lib/partner/clientAttachReferral";
 
 const TEMP_OVERLOAD_MESSAGE = "Сервис временно перегружен. Повтори попытку через несколько секунд.";
 const TG_SESSION_STORAGE_KEY = "tg_login_session_id";
@@ -82,7 +83,7 @@ export default function RegisterPage() {
         router.replace(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
         return;
       }
-      router.replace(getSafePostLoginPath("/dashboard"));
+      router.replace(getSafePostLoginPath(undefined));
     });
     return () => {
       cancelled = true;
@@ -191,6 +192,10 @@ export default function RegisterPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionId: tgSessionId }),
           }).catch(() => null);
+          const afterTg = auth.currentUser;
+          if (afterTg) {
+            void tryAttachReferralFromStorage(afterTg.uid, () => afterTg.getIdToken());
+          }
           try {
             localStorage.removeItem(TG_SESSION_STORAGE_KEY);
             localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
@@ -425,9 +430,18 @@ export default function RegisterPage() {
           lastLoginAt: now,
           lastLoginUserAgent: ua,
           hasPaid: false,
+          referrerId: null,
+          referralCode: null,
+          partnerBalance: 0,
+          partnerTotalEarned: 0,
+          partnerPaidCount: 0,
+          partnerRegisteredCount: 0,
+          partnerCreatedAt: null,
         },
         { merge: true }
       );
+
+      void tryAttachReferralFromStorage(user.uid, () => user.getIdToken());
 
       await setDoc(doc(db, PRICING_FS.priceLists, user.uid), {
         standard_7: 5900,

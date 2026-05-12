@@ -3,7 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { doc, getDoc, getDocFromServer, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocFromServer,
+  limit,
+  onSnapshot,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 import {
@@ -42,6 +53,8 @@ import {
   trialEndsMs,
   type UserTrialFields,
 } from "@/lib/trialSubscription";
+import { canShowReferral } from "@/lib/partner/canShowReferral";
+import { tryAttachReferralFromStorage } from "@/lib/partner/clientAttachReferral";
 
 type ProfileData = UserTrialFields & {
   uid?: string;
@@ -72,6 +85,7 @@ export default function DashboardPage() {
   const [verifiedWelcome, setVerifiedWelcome] = useState(false);
   const [showPaymentReturnBanner, setShowPaymentReturnBanner] = useState(false);
   const [paymentVerifyMessage, setPaymentVerifyMessage] = useState<string | null>(null);
+  const [hasSavedCalculation, setHasSavedCalculation] = useState<boolean | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -246,6 +260,32 @@ export default function DashboardPage() {
       setVerifiedWelcome(true);
     }
   }, [user]);
+
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) return;
+    const u = auth.currentUser;
+    if (!u || u.uid !== uid) return;
+    void tryAttachReferralFromStorage(uid, () => u.getIdToken());
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setHasSavedCalculation(null);
+      return;
+    }
+    const q = query(
+      collection(db, "calculationHistory"),
+      where("uid", "==", user.uid),
+      limit(1)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => setHasSavedCalculation(!snap.empty),
+      () => setHasSavedCalculation(null)
+    );
+    return () => unsub();
+  }, [user?.uid]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
@@ -615,6 +655,37 @@ export default function DashboardPage() {
           </button>
         </div>
       ) : null}
+
+      {profile &&
+      hasFeatureAccess(profile, "calculator") &&
+      hasSavedCalculation === false ? (
+        <div
+          style={{
+            marginBottom: "16px",
+            padding: "20px 18px",
+            borderRadius: "18px",
+            background: "linear-gradient(135deg,#eff6ff 0%,#fff 55%)",
+            border: "1px solid #93c5fd",
+            boxShadow: "0 10px 28px rgba(37,99,235,0.12)",
+          }}
+        >
+          <div style={{ fontSize: "20px", fontWeight: 800, color: "#1e3a8a", marginBottom: "8px", lineHeight: 1.25 }}>
+            Сделайте первый расчёт за 1 минуту
+          </div>
+          <div style={{ fontSize: "15px", color: "#374151", marginBottom: "16px", lineHeight: 1.45 }}>
+            Откройте калькулятор, задайте мощность и тип монтажа — расчёт сохранится сам, когда укажете имя клиента или
+            контакт.
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/calculator")}
+            style={activationCalculatorCtaBtn}
+          >
+            Открыть калькулятор
+          </button>
+        </div>
+      ) : null}
+
       <div style={topCard}>
         <div style={topHeader}>
           <div>
@@ -717,6 +788,42 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {profile && canShowReferral(profile) ? (
+        <div
+          style={{
+            marginBottom: "16px",
+            padding: "16px 18px",
+            borderRadius: "16px",
+            background: "linear-gradient(135deg,#f0fdf4 0%,#fff 50%)",
+            border: "1px solid #86efac",
+            boxShadow: "0 8px 22px rgba(22,101,52,0.08)",
+          }}
+        >
+          <div style={{ fontSize: "17px", fontWeight: 800, color: "#14532d", marginBottom: "8px" }}>
+            Хочешь зарабатывать на этом сервисе?
+          </div>
+          <div style={{ fontSize: "15px", color: "#166534", lineHeight: 1.5, marginBottom: "14px" }}>
+            Приглашай других мастеров и получай 30% с каждой оплаты.
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/partner")}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "10px",
+              border: "1px solid #15803d",
+              background: "#15803d",
+              color: "#fff",
+              fontWeight: 700,
+              cursor: "pointer",
+              fontSize: "15px",
+            }}
+          >
+            Получить ссылку
+          </button>
+        </div>
+      ) : null}
+
       <div style={gridStyle}>
         {visibleFeatureCards.map((item) => {
           const allowed = hasFeatureAccess(profile, item.key);
@@ -795,6 +902,21 @@ const dashChannelList: React.CSSProperties = {
   lineHeight: 1.5,
   color: "#15803d",
 };
+const activationCalculatorCtaBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "14px 22px",
+  borderRadius: "14px",
+  border: "none",
+  background: "#2563eb",
+  color: "#fff",
+  fontSize: "16px",
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 4px 14px rgba(37,99,235,0.35)",
+};
+
 const dashChannelBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
