@@ -918,7 +918,7 @@ function CalculatorPage() {
     if (text.length <= MAX_SHARE_URL_CHARS) return text;
     return (
       text.slice(0, MAX_SHARE_URL_CHARS) +
-      "\n\n[…текст обрезан из‑за лимита мессенджера — полный расчёт скопируйте кнопкой «Скопировать текст»]"
+      "\n\n[…текст обрезан из‑за лимита мессенджера — полный расчёт скопируйте кнопкой «Копировать»]"
     );
   }
 
@@ -1038,7 +1038,7 @@ function CalculatorPage() {
     if (url.length > 8190) {
       const shortBody = encodeURIComponent(
         finalClientText.slice(0, 1500) +
-          "\n\n[полный текст — скопируйте кнопкой «Скопировать текст»]"
+          "\n\n[полный текст — скопируйте кнопкой «Копировать»]"
       );
       url = `https://wa.me/${phone}?text=${shortBody}`;
     }
@@ -1950,14 +1950,28 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Клиент и отправка</h2>
 
-        <div className="calc-btn-grid" style={{ ...buttonGridStyle, marginBottom: 16 }}>
+        <div style={{ marginBottom: 16 }}>
           <button
             type="button"
             onClick={() => void saveCalculationToHistory()}
             disabled={saveBusy}
-            style={primaryButtonStyle}
+            style={{ ...primaryButtonStyle, width: "100%" }}
           >
             {saveBusy ? "Сохранение…" : "Сохранить расчёт"}
+          </button>
+        </div>
+
+        <h3 style={{ ...sectionTitle, fontSize: 17, marginTop: 0, marginBottom: 12 }}>
+          Отправить клиенту
+        </h3>
+
+        <div className="calc-btn-grid" style={{ ...buttonGridStyle, marginBottom: 16 }}>
+          <button type="button" onClick={sendToWhatsApp} style={primaryButtonStyle}>
+            WhatsApp
+          </button>
+
+          <button type="button" onClick={sendToTelegram} style={primaryButtonStyle}>
+            Отправить в Telegram
           </button>
 
           <button
@@ -1965,15 +1979,7 @@ function CalculatorPage() {
             onClick={() => void copyFinalText()}
             style={primaryButtonStyle}
           >
-            Скопировать текст
-          </button>
-
-          <button type="button" onClick={sendToWhatsApp} style={primaryButtonStyle}>
-            Отправить в WhatsApp
-          </button>
-
-          <button type="button" onClick={sendToTelegram} style={primaryButtonStyle}>
-            Отправить в Telegram
+            Копировать
           </button>
         </div>
 

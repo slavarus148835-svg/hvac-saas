@@ -121,8 +121,9 @@ export default function CalculatorHistoryEmbed() {
 
     try {
       await deleteDoc(doc(db, "calculationHistory", id));
-    } catch (error: any) {
-      alert("Ошибка удаления: " + error.message);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      alert("Не удалось удалить расчёт. " + msg);
     }
   };
 
@@ -233,7 +234,7 @@ export default function CalculatorHistoryEmbed() {
                   onClick={() => handleDelete(item.id)}
                   style={dangerButton}
                 >
-                  Удалить
+                  Удалить расчёт
                 </button>
               </div>
 

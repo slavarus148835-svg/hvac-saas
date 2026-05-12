@@ -122,6 +122,26 @@ export async function fetchMiniAppHistoryDocument(
   }
 }
 
+export async function deleteMiniAppCalculation(
+  historyId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const token = getMiniAppSessionToken();
+  if (!token) return { ok: false, error: "Нет сессии Mini App." };
+  try {
+    const res = await fetch(
+      `/api/telegram/miniapp-history?historyId=${encodeURIComponent(historyId)}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+    );
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!res.ok || data.ok !== true) {
+      return { ok: false, error: "Не удалось удалить расчёт." };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Нет соединения с сервером." };
+  }
+}
+
 export async function saveMiniAppCalculation(
   payload: Record<string, unknown>
 ): Promise<{ ok: true; id: string; total: number } | { ok: false; error: string }> {

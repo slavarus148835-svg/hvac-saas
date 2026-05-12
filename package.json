@@ -8,7 +8,7 @@
     "dev:next": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint app components lib",
     "bridge": "node bridge-server.js",
     "agent": "node cursor-agent.js",
     "telegram": "node telegram-bot.js",
@@ -30,7 +30,6 @@
     "next": "16.2.3",
     "node-fetch": "^2.7.0",
     "nodemailer": "^8.0.5",
-    "pdf-lib": "^1.17.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "uuid": "^13.0.0"

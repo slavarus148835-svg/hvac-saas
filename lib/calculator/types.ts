@@ -113,7 +113,7 @@ export type MultiRoomComputeResult = {
   discountByPercent: number;
   percentDiscountNum: number;
   total: number;
-  /** Плоский список для PDF/экрана (все позиции комнат подряд). */
+  /** Плоский список для экрана (все позиции комнат подряд). */
   flatItems: CalculatorLineItem[];
   autoClientText: string;
 };

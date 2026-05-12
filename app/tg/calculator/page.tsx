@@ -36,8 +36,7 @@ import {
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
 import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
-import { quoteCardToPngBlob } from "@/lib/quoteCardCanvas";
-import { buildSmsShareUrl, buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
+import { buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
 import {
   buildTelegramMiniAppClientQuoteText,
   mapMiniAppQuoteItemTitle,
@@ -70,7 +69,7 @@ const ONBOARDING_STEPS = [
   },
   {
     title: "Считайте и отправляйте смету клиенту",
-    body: "Сохраните расчёт, отправьте текст, PDF или сообщение в Telegram или WhatsApp.",
+    body: "Сохраните расчёт и отправьте текст клиенту в Telegram или WhatsApp.",
   },
 ] as const;
 
@@ -238,10 +237,8 @@ export default function TgCalculatorPage() {
   const [newMdlPrice, setNewMdlPrice] = useState("");
   const [newMdlComment, setNewMdlComment] = useState("");
   const [modelAddBusy, setModelAddBusy] = useState(false);
-  const [sendMenuOpen, setSendMenuOpen] = useState(false);
   const [clientQuoteUserEdited, setClientQuoteUserEdited] = useState(false);
   const [clientQuoteDraft, setClientQuoteDraft] = useState("");
-  const [pdfBusy, setPdfBusy] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [calcHelpVisible, setCalcHelpVisible] = useState(false);
@@ -253,11 +250,17 @@ export default function TgCalculatorPage() {
   const modelPickRef = useRef("");
   const modelPickByRoomRef = useRef<Record<string, string>>({});
   const expandedRoomIdRef = useRef<string | null>(null);
-  modelPickRef.current = modelPick;
-  modelPickByRoomRef.current = modelPickByRoom;
-  expandedRoomIdRef.current = expandedRoomId;
-  const cardCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const historyLoadedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    modelPickRef.current = modelPick;
+    modelPickByRoomRef.current = modelPickByRoom;
+    expandedRoomIdRef.current = expandedRoomId;
+  }, [modelPick, modelPickByRoom, expandedRoomId]);
+
+  useEffect(() => {
+    console.log("[TG_CALCULATOR_BUILD] tg-cleanup-v2");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,8 +358,10 @@ export default function TgCalculatorPage() {
     try {
       if (typeof localStorage === "undefined") return;
       if (localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1") return;
-      setOnboardingStep(0);
-      setOnboardingOpen(true);
+      queueMicrotask(() => {
+        setOnboardingStep(0);
+        setOnboardingOpen(true);
+      });
     } catch {
       /* */
     }
@@ -367,31 +372,18 @@ export default function TgCalculatorPage() {
     try {
       if (typeof localStorage === "undefined") return;
       if (localStorage.getItem(CALC_HELP_DISMISSED_KEY) === "1") return;
-      setCalcHelpVisible(true);
+      queueMicrotask(() => {
+        setCalcHelpVisible(true);
+      });
     } catch {
       /* */
     }
   }, [inTelegram, ready]);
 
   useEffect(() => {
-    setSelectedExtraServices((prev) => {
-      const next: SelectedExtraServiceMap = { ...prev };
-      for (const s of customServices) {
-        if (!next[s.id]) next[s.id] = { checked: false, qty: "1" };
-      }
-      const allowed = new Set(customServices.map((s) => s.id));
-      for (const k of Object.keys(next)) {
-        if (!allowed.has(k)) delete next[k];
-      }
-      return next;
-    });
-  }, [customServices]);
-
-  useEffect(() => {
-    if (!multiRoomEnabled) return;
-    setRoomDrafts((prev) =>
-      prev.map((r) => {
-        const next: SelectedExtraServiceMap = { ...r.selectedExtraServices };
+    queueMicrotask(() => {
+      setSelectedExtraServices((prev) => {
+        const next: SelectedExtraServiceMap = { ...prev };
         for (const s of customServices) {
           if (!next[s.id]) next[s.id] = { checked: false, qty: "1" };
         }
@@ -399,16 +391,37 @@ export default function TgCalculatorPage() {
         for (const k of Object.keys(next)) {
           if (!allowed.has(k)) delete next[k];
         }
-        return { ...r, selectedExtraServices: next };
-      })
-    );
+        return next;
+      });
+    });
+  }, [customServices]);
+
+  useEffect(() => {
+    if (!multiRoomEnabled) return;
+    queueMicrotask(() => {
+      setRoomDrafts((prev) =>
+        prev.map((r) => {
+          const next: SelectedExtraServiceMap = { ...r.selectedExtraServices };
+          for (const s of customServices) {
+            if (!next[s.id]) next[s.id] = { checked: false, qty: "1" };
+          }
+          const allowed = new Set(customServices.map((s) => s.id));
+          for (const k of Object.keys(next)) {
+            if (!allowed.has(k)) delete next[k];
+          }
+          return { ...r, selectedExtraServices: next };
+        })
+      );
+    });
   }, [customServices, multiRoomEnabled]);
 
   useEffect(() => {
     if (!multiRoomEnabled) return;
     if (!roomDrafts.length) return;
     if (!expandedRoomId || !roomDrafts.some((r) => r.id === expandedRoomId)) {
-      setExpandedRoomId(roomDrafts[0]!.id);
+      queueMicrotask(() => {
+        setExpandedRoomId(roomDrafts[0]!.id);
+      });
     }
   }, [multiRoomEnabled, roomDrafts, expandedRoomId]);
 
@@ -1019,116 +1032,11 @@ export default function TgCalculatorPage() {
     }
   }
 
-  async function downloadQuotePdf() {
-    tgHapticButtonTap();
-    if (!canOperate) {
-      tgHapticNotification("error");
-      setSaveToast("Нет сессии для PDF");
-      return;
-    }
-    const token = getMiniAppSessionToken();
-    if (!token?.trim()) {
-      tgHapticNotification("error");
-      setSaveToast("Нет сессии для PDF");
-      return;
-    }
-    setPdfBusy(true);
-    try {
-      const headRoom = multiRoomEnabled && roomDrafts[0] ? roomDrafts[0] : null;
-      const res = await fetch("/api/telegram/miniapp-quote-pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token.trim()}`,
-        },
-        body: JSON.stringify({
-          clientName,
-          clientContact,
-          capacity: headRoom?.capacity ?? capacity,
-          mountType: headRoom?.mountType ?? mountType,
-          lines: displayResult.items.map((i) => ({
-            title: mapMiniAppQuoteItemTitle(i.title),
-            amount: i.amount,
-          })),
-          total: displayResult.total,
-        }),
-      });
-      if (!res.ok) {
-        tgHapticNotification("error");
-        setSaveToast("Не удалось сделать PDF");
-        setPdfBusy(false);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "hvac-saas-smeta.pdf";
-      a.click();
-      URL.revokeObjectURL(url);
-      tgHapticNotification("success");
-    } catch {
-      tgHapticNotification("error");
-      setSaveToast("Ошибка PDF");
-    }
-    setPdfBusy(false);
-    window.setTimeout(() => setSaveToast(null), 3000);
-  }
-
-  async function sharePngCard() {
-    tgHapticButtonTap();
-    const canvas = cardCanvasRef.current;
-    if (!canvas) return;
-    const lines = displayResult.items.map(
-      (i) => `${mapMiniAppQuoteItemTitle(i.title)} — ${formatRubles(i.amount)}`
-    );
-    const blob = await quoteCardToPngBlob(canvas, {
-      clientName,
-      totalRub: formatRubles(displayResult.total),
-      subtitle: multiRoomEnabled
-        ? `${roomDrafts.length} комн.`
-        : `Монтаж ${formatCapacityBtu(capacity)}`,
-      lines,
-    });
-    if (!blob) {
-      tgHapticNotification("error");
-      return;
-    }
-    const file = new File([blob], "hvac-smeta.png", { type: "image/png" });
-    const nav = navigator as Navigator & {
-      share?: (data: ShareData) => Promise<void>;
-      canShare?: (data: ShareData) => boolean;
-    };
-    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      try {
-        await nav.share({ files: [file], title: "Смета HVAC-SaaS" });
-        tgHapticNotification("success");
-        return;
-      } catch {
-        /* */
-      }
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "hvac-saas-smeta.png";
-    a.click();
-    URL.revokeObjectURL(url);
-    tgHapticNotification("success");
-  }
-
   function scrollToTotalBlock() {
     tgHapticButtonTap();
     document.getElementById("tg-calc-total-anchor")?.scrollIntoView({
       behavior: "smooth",
       block: "center",
-    });
-  }
-
-  function scrollToClientTextBlock() {
-    document.getElementById("tg-calc-client-text")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
     });
   }
 
@@ -2011,17 +1919,7 @@ export default function TgCalculatorPage() {
                     </button>
                     <button
                       type="button"
-                      style={{ ...btn, padding: "14px", fontSize: 15 }}
-                      onClick={() => {
-                        tgHapticButtonTap();
-                        window.location.href = buildSmsShareUrl(effectiveClientQuoteText);
-                      }}
-                    >
-                      SMS
-                    </button>
-                    <button
-                      type="button"
-                      style={{ ...btnSecondary, padding: "14px", fontSize: 15, marginTop: 0 }}
+                      style={{ ...btnSecondary, padding: "14px", fontSize: 15, marginTop: 0, gridColumn: "1 / -1" }}
                       onClick={async () => {
                         tgHapticButtonTap();
                         try {
@@ -2039,22 +1937,9 @@ export default function TgCalculatorPage() {
                   </div>
                 </div>
 
-                <div style={card}>
-                  <p style={{ margin: "0 0 12px", fontWeight: 700 }}>Карточка (PNG)</p>
-                  <button type="button" style={btnSecondary} onClick={() => void sharePngCard()}>
-                    Сохранить / поделиться PNG
-                  </button>
-                </div>
-
-                <canvas ref={cardCanvasRef} width={720} height={480} style={{ display: "none" }} />
-
                 {saveToast ? (
                   <p style={{ ...text, textAlign: "center", marginTop: 8 }}>{saveToast}</p>
                 ) : null}
-
-                <Link href="/calculator" style={{ ...btnSecondary, marginBottom: 24 }}>
-                  Открыть полный калькулятор
-                </Link>
               </>
             ) : null}
 
@@ -2123,71 +2008,26 @@ export default function TgCalculatorPage() {
                 <button
                   type="button"
                   style={{ ...btnSecondary, padding: "12px 8px", fontSize: 14, marginTop: 0 }}
-                  onClick={() => {
-                    tgHapticButtonTap();
-                    setSendMenuOpen((v) => !v);
-                    scrollToClientTextBlock();
-                  }}
-                >
-                  Отправить
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    ...btn,
-                    padding: "12px 8px",
-                    fontSize: 14,
-                    opacity: canOperate ? 1 : 0.45,
-                  }}
-                  disabled={pdfBusy || !canOperate}
-                  onClick={() => void downloadQuotePdf()}
-                >
-                  {pdfBusy ? "…" : "PDF"}
-                </button>
-                <button
-                  type="button"
-                  style={{ ...btnSecondary, padding: "12px 8px", fontSize: 14, marginTop: 0 }}
                   onClick={scrollToTotalBlock}
                 >
                   Итог
                 </button>
               </div>
-              {sendMenuOpen ? (
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    style={{ ...btnSecondary, marginTop: 0, padding: "12px", fontSize: 14 }}
-                    onClick={() => shareTelegramNative()}
-                  >
-                    Отправить в Telegram
-                  </button>
-                  <button
-                    type="button"
-                    style={{ ...btnSecondary, marginTop: 0, padding: "12px", fontSize: 14 }}
-                    onClick={async () => {
-                      tgHapticButtonTap();
-                      try {
-                        await navigator.clipboard.writeText(effectiveClientQuoteText);
-                        tgHapticNotification("success");
-                      } catch {
-                        tgHapticNotification("error");
-                      }
-                    }}
-                  >
-                    Копировать
-                  </button>
-                </div>
-              ) : null}
             </div>
           </div>
         ) : null}
+        <p
+          style={{
+            fontSize: 10,
+            color: "#94a3b8",
+            textAlign: "center",
+            margin: "8px 8px max(32px, env(safe-area-inset-bottom))",
+            fontFamily: "ui-monospace, monospace",
+            letterSpacing: "0.02em",
+          }}
+        >
+          UI_BUILD_MARKER: tg-cleanup-v2
+        </p>
       </div>
 
       {onboardingOpen ? (

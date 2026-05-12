@@ -7,6 +7,7 @@ import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { formatCapacityBtu } from "@/lib/calculator";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import {
+  deleteMiniAppCalculation,
   fetchMiniAppHistoryList,
   type MiniAppHistoryListItem,
 } from "@/lib/telegramMiniAppCalculatorApi";
@@ -81,6 +82,8 @@ export default function TgHistoryPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [items, setItems] = useState<MiniAppHistoryListItem[]>([]);
   const [listError, setListError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,15 +234,37 @@ export default function TgHistoryPage() {
                   >
                     Открыть расчёт
                   </Link>
-                  <Link
-                    href={`/tg/calculator?historyId=${encodeURIComponent(row.id)}&repeat=1`}
-                    style={btnSecondary}
+                  <button
+                    type="button"
+                    style={{
+                      ...btnSecondary,
+                      opacity: deletingId === row.id ? 0.65 : 1,
+                    }}
+                    disabled={deletingId !== null}
+                    onClick={() => {
+                      if (!window.confirm("Удалить этот расчёт?")) return;
+                      setDeleteError(null);
+                      setDeletingId(row.id);
+                      void (async () => {
+                        const r = await deleteMiniAppCalculation(row.id);
+                        if (r.ok) {
+                          setItems((prev) => prev.filter((x) => x.id !== row.id));
+                        } else {
+                          setDeleteError(r.error);
+                          alert(r.error);
+                        }
+                        setDeletingId(null);
+                      })();
+                    }}
                   >
-                    Повторить расчёт
-                  </Link>
+                    {deletingId === row.id ? "Удаление…" : "Удалить расчёт"}
+                  </button>
                 </div>
               ))
             )}
+            {deleteError ? (
+              <p style={{ color: "#b91c1c", marginTop: 10 }}>{deleteError}</p>
+            ) : null}
           </>
         )}
 

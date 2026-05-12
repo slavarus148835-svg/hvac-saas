@@ -572,7 +572,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
                 onDuplicate();
               }}
             >
-              Скопировать
+              Дублировать комнату
             </button>
             <button
               type="button"

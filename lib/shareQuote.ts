@@ -50,7 +50,3 @@ export function buildTelegramShareUrl(text: string, url?: string): string {
   const u = (url ?? "").trim();
   return `https://t.me/share/url?url=${encode(u)}&text=${encode(text)}`;
 }
-
-export function buildSmsShareUrl(text: string): string {
-  return `sms:?body=${encode(text)}`;
-}

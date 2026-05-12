@@ -6,7 +6,6 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import {
   collection,
   doc,
-  getDoc,
   getDocFromServer,
   limit,
   onSnapshot,
@@ -125,8 +124,10 @@ export default function DashboardPage() {
           /* */
         }
       }
-      setShowPaymentReturnBanner(true);
-      window.history.replaceState({}, "", "/dashboard");
+      queueMicrotask(() => {
+        setShowPaymentReturnBanner(true);
+        window.history.replaceState({}, "", "/dashboard");
+      });
     }
   }, []);
 
@@ -257,7 +258,9 @@ export default function DashboardPage() {
     if (typeof window === "undefined" || !user) return;
     if (sessionStorage.getItem(SESSION_EMAIL_JUST_VERIFIED_KEY) === "1") {
       sessionStorage.removeItem(SESSION_EMAIL_JUST_VERIFIED_KEY);
-      setVerifiedWelcome(true);
+      queueMicrotask(() => {
+        setVerifiedWelcome(true);
+      });
     }
   }, [user]);
 
@@ -271,7 +274,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user?.uid) {
-      setHasSavedCalculation(null);
+      queueMicrotask(() => {
+        setHasSavedCalculation(null);
+      });
       return;
     }
     const q = query(
@@ -340,7 +345,7 @@ export default function DashboardPage() {
           return;
         }
 
-        let data = userSnap.data() as ProfileData;
+        const data = userSnap.data() as ProfileData;
 
         const patch: Partial<ProfileData> = {};
         let needsPatch = false;
@@ -377,8 +382,9 @@ export default function DashboardPage() {
         } else {
           setProfile(data);
         }
-      } catch (error: any) {
-        alert("Ошибка загрузки кабинета: " + error.message);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        alert("Ошибка загрузки кабинета: " + msg);
       }
     });
 

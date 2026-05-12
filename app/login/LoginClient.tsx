@@ -167,10 +167,12 @@ export default function LoginClient() {
     const sid = String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
     const exp = Number(localStorage.getItem(TG_SESSION_EXPIRES_STORAGE_KEY) || 0);
     if (!sid || !exp || exp <= Date.now()) return;
-    setTgSessionId(sid);
-    setTgExpiresAtMs(exp);
-    setTgWaiting(true);
-    setTgStatusText("Ожидаем подтверждение в Telegram...");
+    queueMicrotask(() => {
+      setTgSessionId(sid);
+      setTgExpiresAtMs(exp);
+      setTgWaiting(true);
+      setTgStatusText("Ожидаем подтверждение в Telegram...");
+    });
   }, [tgWaiting, tgSessionId]);
 
   useEffect(() => {

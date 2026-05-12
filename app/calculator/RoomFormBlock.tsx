@@ -4,7 +4,6 @@ import type React from "react";
 import { useState } from "react";
 import {
   newQuickExtraId,
-  type QuickCalculationExtra,
   type UserCustomService,
 } from "@/lib/customServices";
 import type { CalculatorRoomDraft } from "@/lib/calculator/roomDraft";
@@ -282,7 +281,7 @@ export function RoomFormBlock({
           Комната {roomIndex + 1}
         </h2>
         <button type="button" style={secondaryButtonStyle} onClick={onDuplicate}>
-          Скопировать
+          Дублировать комнату
         </button>
         <button
           type="button"
@@ -294,7 +293,7 @@ export function RoomFormBlock({
         </button>
       </div>
 
-      <Label text="Название комнаты" note="Будет в тексте для клиента и PDF">
+      <Label text="Название комнаты" note="Будет в тексте для клиента">
         <input
           value={draft.roomName}
           onChange={(e) => onPatch({ roomName: e.target.value })}

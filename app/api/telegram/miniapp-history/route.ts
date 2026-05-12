@@ -90,3 +90,46 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "internal_error" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const token = bearerToken(req);
+    if (!token) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const db = getAdminDb();
+    if (!db) {
+      return NextResponse.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
+    }
+
+    const v = await verifyTelegramMiniAppSession(db, token);
+    if (!v.ok) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const url = new URL(req.url);
+    const historyId = url.searchParams.get("historyId")?.trim();
+    if (!historyId) {
+      return NextResponse.json({ ok: false, error: "historyId_required" }, { status: 400 });
+    }
+
+    const ref = db.collection("calculationHistory").doc(historyId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (String(data.uid || "") !== v.uid) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    await ref.delete();
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.log("TELEGRAM_MINIAPP_HISTORY_DELETE_FAILED", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return NextResponse.json({ ok: false, error: "internal_error" }, { status: 500 });
+  }
+}
