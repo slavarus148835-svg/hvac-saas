@@ -3,6 +3,10 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
+import {
+  authTelegramMiniApp,
+  type TelegramMiniAppProfile,
+} from "@/lib/telegramMiniAppAuth";
 import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
 const page: React.CSSProperties = {
@@ -27,22 +31,30 @@ const text: React.CSSProperties = {
   fontSize: 15,
   color: "#475569",
   lineHeight: 1.55,
-  margin: "0 0 20px",
+  margin: "0 0 16px",
 };
 
 const btn: React.CSSProperties = {
   display: "block",
   width: "100%",
   textAlign: "center",
-  padding: "14px 16px",
+  padding: "16px 18px",
   borderRadius: 14,
   border: "none",
   background: "#0f172a",
   color: "#fff",
-  fontSize: 16,
+  fontSize: 17,
   fontWeight: 700,
   textDecoration: "none",
   boxSizing: "border-box",
+};
+
+const btnSecondary: React.CSSProperties = {
+  ...btn,
+  background: "#ffffff",
+  color: "#0f172a",
+  border: "2px solid #e2e8f0",
+  marginTop: 12,
 };
 
 const tgLine: React.CSSProperties = {
@@ -51,9 +63,32 @@ const tgLine: React.CSSProperties = {
   margin: "0 0 8px",
 };
 
+const card: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  padding: "14px 16px",
+  marginBottom: 16,
+  fontSize: 14,
+  lineHeight: 1.5,
+  color: "#334155",
+};
+
+type AuthUi =
+  | "idle"
+  | "checking"
+  | "profile"
+  | "need_registration"
+  | "error"
+  | "no_tg"
+  | "no_init";
+
 export default function TgCalculatorPage() {
   const [ready, setReady] = useState(false);
   const [inTelegram, setInTelegram] = useState<boolean | null>(null);
+  const [authUi, setAuthUi] = useState<AuthUi>("idle");
+  const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,8 +107,26 @@ export default function TgCalculatorPage() {
           /* */
         }
         setInTelegram(true);
+        const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
+        if (initData) {
+          setAuthUi("checking");
+          const ar = await authTelegramMiniApp(initData);
+          if (cancelled) return;
+          if (ar.ok && ar.profile) {
+            setProfile(ar.profile);
+            setAuthUi("profile");
+          } else if (ar.ok && ar.need_registration) {
+            setAuthUi("need_registration");
+          } else {
+            setAuthUi("error");
+            setAuthError(ar.error ?? "Ошибка проверки аккаунта.");
+          }
+        } else {
+          setAuthUi("no_init");
+        }
       } else {
         setInTelegram(false);
+        setAuthUi("no_tg");
       }
       setReady(true);
     })();
@@ -117,11 +170,63 @@ export default function TgCalculatorPage() {
                 ? "Telegram Mini App подключён"
                 : "Откройте из Telegram для полного режима Mini App"}
             </p>
+
+            <div style={card}>
+              {authUi === "checking" ? (
+                <p style={{ margin: 0 }}>Проверяем Telegram-аккаунт…</p>
+              ) : null}
+              {authUi === "profile" && profile ? (
+                <p style={{ margin: "0 0 12px" }}>
+                  Вы вошли как {profile.email ?? profile.uid ?? "пользователь"}. Откройте
+                  полный калькулятор на сайте.
+                </p>
+              ) : null}
+              {authUi === "need_registration" ? (
+                <p style={{ margin: "0 0 12px" }}>
+                  Свяжите аккаунт Telegram с профилем HVAC-SaaS, чтобы пользоваться
+                  калькулятором.
+                </p>
+              ) : null}
+              {authUi === "error" && authError ? (
+                <p style={{ margin: "0 0 12px", color: "#b91c1c" }}>{authError}</p>
+              ) : null}
+              {authUi === "no_init" ? (
+                <p style={{ margin: "0 0 12px", color: "#64748b" }}>
+                  Нет initData — откройте страницу из бота.
+                </p>
+              ) : null}
+              {authUi === "no_tg" ? (
+                <p style={{ margin: "0 0 12px", color: "#64748b" }}>
+                  Вне Telegram можно перейти на обычный калькулятор (потребуется вход на
+                  сайте).
+                </p>
+              ) : null}
+            </div>
+
+            {authUi === "profile" ? (
+              <Link href="/calculator" style={btn}>
+                Открыть полный калькулятор
+              </Link>
+            ) : null}
+            {authUi === "need_registration" ? (
+              <>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={btnSecondary}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
+            {(authUi === "no_tg" ||
+              authUi === "no_init" ||
+              authUi === "error") && (
+              <Link href="/calculator" style={btn}>
+                Открыть калькулятор на сайте
+              </Link>
+            )}
           </>
         )}
-        <Link href="/calculator" style={btn}>
-          Открыть обычный калькулятор
-        </Link>
       </div>
     </>
   );
