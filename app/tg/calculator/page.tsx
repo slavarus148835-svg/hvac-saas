@@ -807,20 +807,8 @@ export default function TgCalculatorPage() {
   }
 
   function addModel() {
-    if (multiRoomEnabled) {
-      const rid = expandedRoomIdRef.current ?? roomDrafts[0]?.id;
-      const pick = rid ? modelPickByRoomRef.current[rid] ?? "" : "";
-      if (!rid || !pick) return;
-      setRoomDrafts((prev) =>
-        prev.map((r) => {
-          if (r.id !== rid) return r;
-          if (r.selectedAcModelIds.includes(pick)) return r;
-          return { ...r, selectedAcModelIds: [...r.selectedAcModelIds, pick] };
-        })
-      );
-      setModelPickByRoom((m) => ({ ...m, [rid]: "" }));
-      return;
-    }
+    tgHapticButtonTap();
+    if (multiRoomEnabled) return;
     const pick = modelPickRef.current;
     if (!pick || selectedAcModelIds.includes(pick)) return;
     setSelectedAcModelIds((x) => [...x, pick]);
@@ -1234,58 +1222,42 @@ export default function TgCalculatorPage() {
                       Пока нет моделей — добавьте кнопкой ниже.
                     </p>
                   ) : null}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <select
-                      style={{ ...input, flex: 1, marginBottom: 0 }}
-                      value={
-                        multiRoomEnabled
-                          ? modelPickByRoom[expandedRoomId ?? roomDrafts[0]?.id ?? ""] ?? ""
-                          : modelPick
-                      }
-                      onChange={(e) => {
-                        const rid = expandedRoomId ?? roomDrafts[0]?.id;
-                        if (multiRoomEnabled && rid) {
-                          setModelPickByRoom((m) => ({ ...m, [rid]: e.target.value }));
-                        } else {
-                          setModelPick(e.target.value);
-                        }
-                      }}
-                      disabled={models.length === 0}
-                    >
-                      <option value="">Выберите</option>
-                      {models.map((m) => {
-                        const inRoom = multiRoomEnabled
-                          ? (
-                              roomDrafts.find((r) => r.id === (expandedRoomId ?? roomDrafts[0]?.id)) ??
-                              roomDrafts[0]
-                            )?.selectedAcModelIds.includes(m.id)
-                          : selectedAcModelIds.includes(m.id);
-                        return (
-                          <option key={m.id} value={m.id} disabled={Boolean(inRoom)}>
+                  {!multiRoomEnabled ? (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                      <select
+                        style={{ ...input, flex: 1, marginBottom: 0 }}
+                        value={modelPick}
+                        onChange={(e) => setModelPick(e.target.value)}
+                        disabled={models.length === 0}
+                      >
+                        <option value="">Выберите</option>
+                        {models.map((m) => (
+                          <option key={m.id} value={m.id} disabled={selectedAcModelIds.includes(m.id)}>
                             {m.name} — {formatRubles(m.price)}
                           </option>
-                        );
-                      })}
-                    </select>
-                    <button
-                      type="button"
-                      style={{ ...btn, width: "auto", padding: "12px 16px" }}
-                      onClick={addModel}
-                      disabled={
-                        models.length === 0 ||
-                        (multiRoomEnabled
-                          ? !(modelPickByRoom[expandedRoomId ?? roomDrafts[0]?.id ?? ""] ?? "").trim()
-                          : !modelPick)
-                      }
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        style={{ ...btn, width: "auto", padding: "12px 16px" }}
+                        onClick={addModel}
+                        disabled={models.length === 0 || !modelPick}
+                      >
+                        +
+                      </button>
+                    </div>
+                  ) : (
+                    <p
+                      style={{
+                        margin: "0 0 12px",
+                        fontSize: 13,
+                        color: "#64748b",
+                        lineHeight: 1.45,
+                      }}
                     >
-                      +
-                    </button>
-                  </div>
-                  {multiRoomEnabled ? (
-                    <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
-                      Модель добавляется в раскрытую комнату. Раскройте нужную комнату ниже.
+                      Модель кондиционера для сметы выбирается только в карточке каждой комнаты ниже.
                     </p>
-                  ) : null}
+                  )}
                   {!modelFormOpen ? (
                     <button
                       type="button"
