@@ -26,12 +26,11 @@ import {
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
 import { quoteCardToPngBlob } from "@/lib/quoteCardCanvas";
+import { buildSmsShareUrl, buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
 import {
-  buildClientQuoteText,
-  buildSmsShareUrl,
-  buildTelegramShareUrl,
-  buildWhatsAppShareUrl,
-} from "@/lib/shareQuote";
+  buildTelegramMiniAppClientQuoteText,
+  mapMiniAppQuoteItemTitle,
+} from "@/lib/telegramMiniAppQuoteText";
 import { hydrateTgCalculatorFromHistoryDoc } from "@/lib/tgCalculatorHistoryHydrate";
 import { tgHapticButtonTap, tgHapticNotification } from "@/lib/telegramHaptic";
 import {
@@ -219,6 +218,8 @@ export default function TgCalculatorPage() {
   const [newMdlComment, setNewMdlComment] = useState("");
   const [modelAddBusy, setModelAddBusy] = useState(false);
   const [sendMenuOpen, setSendMenuOpen] = useState(false);
+  const [clientQuoteUserEdited, setClientQuoteUserEdited] = useState(false);
+  const [clientQuoteDraft, setClientQuoteDraft] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -420,8 +421,8 @@ export default function TgCalculatorPage() {
     quickCalculationExtras,
   ]);
 
-  const quoteText = useMemo(() => {
-    let t = buildClientQuoteText({
+  const autoClientQuoteText = useMemo(() => {
+    let t = buildTelegramMiniAppClientQuoteText({
       clientName,
       clientContact,
       capacity,
@@ -429,7 +430,6 @@ export default function TgCalculatorPage() {
       items: result.items.map((i) => ({
         title: i.title,
         amount: i.amount,
-        note: i.note,
       })),
       total: result.total,
       capacityDisplay: "btu_typical",
@@ -455,6 +455,11 @@ export default function TgCalculatorPage() {
     textSettings.masterContact,
     textSettings.quoteFooterTemplate,
   ]);
+
+  const effectiveClientQuoteText = useMemo(() => {
+    if (!clientQuoteUserEdited) return autoClientQuoteText;
+    return clientQuoteDraft.trim() || autoClientQuoteText;
+  }, [clientQuoteUserEdited, clientQuoteDraft, autoClientQuoteText]);
 
   const showCalculatorForm =
     (inTelegram === true && ready) ||
@@ -507,6 +512,8 @@ export default function TgCalculatorPage() {
       if (h.quickCalculationExtras) setQuickCalculationExtras(h.quickCalculationExtras);
       if (h.clientName != null) setClientName(h.clientName);
       if (h.clientContact != null) setClientContact(h.clientContact);
+      setClientQuoteUserEdited(false);
+      setClientQuoteDraft("");
       tgHapticNotification("success");
     })();
     return () => {
@@ -676,9 +683,10 @@ export default function TgCalculatorPage() {
   function shareTelegramNative() {
     tgHapticButtonTap();
     const wa = window.Telegram?.WebApp;
-    const shareUrl = buildTelegramShareUrl(quoteText);
+    const body = effectiveClientQuoteText;
+    const shareUrl = buildTelegramShareUrl(body);
     try {
-      wa?.switchInlineQuery?.(quoteText.slice(0, 200), ["users", "groups", "channels"]);
+      wa?.switchInlineQuery?.(body.slice(0, 200), ["users", "groups", "channels"]);
     } catch {
       /* */
     }
@@ -721,7 +729,7 @@ export default function TgCalculatorPage() {
           capacity,
           mountType,
           lines: result.items.map((i) => ({
-            title: i.title,
+            title: mapMiniAppQuoteItemTitle(i.title),
             amount: i.amount,
           })),
           total: result.total,
@@ -754,7 +762,7 @@ export default function TgCalculatorPage() {
     const canvas = cardCanvasRef.current;
     if (!canvas) return;
     const lines = result.items.map(
-      (i) => `${i.title}: ${formatRubles(i.amount)}`
+      (i) => `${mapMiniAppQuoteItemTitle(i.title)} — ${formatRubles(i.amount)}`
     );
     const blob = await quoteCardToPngBlob(canvas, {
       clientName,
@@ -794,6 +802,13 @@ export default function TgCalculatorPage() {
     document.getElementById("tg-calc-total-anchor")?.scrollIntoView({
       behavior: "smooth",
       block: "center",
+    });
+  }
+
+  function scrollToClientTextBlock() {
+    document.getElementById("tg-calc-client-text")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
     });
   }
 
@@ -1147,27 +1162,15 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Скидка на весь расчёт, %</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={percentDiscount}
-                    onChange={(e) =>
-                      setPercentDiscount(
-                        sanitizeNonNegativeIntString(e.target.value, 100)
-                      )
-                    }
-                  />
-
                   {(
                     [
                       ["Кронштейны", includeBrackets, setIncludeBrackets],
-                      ["Стеклопакет", includeGlass, setIncludeGlass],
-                      ["Плитка фасад", includeTile, setIncludeTile],
-                      ["Дренаж в водосток", includeDrain, setIncludeDrain],
-                      ["Дренажная помпа", includePump, setIncludePump],
+                      ["Демонтаж и монтаж стеклопакета", includeGlass, setIncludeGlass],
+                      ["Демонтаж, резка и монтаж фасадной плитки", includeTile, setIncludeTile],
+                      ["Монтаж дренажа в водосток", includeDrain, setIncludeDrain],
+                      ["Установка и подключение дренажной помпы", includePump, setIncludePump],
                       [
-                        "Лестница, внешний блок",
+                        "Подключение внешнего блока на лестнице",
                         includeLadderConnection,
                         setIncludeLadderConnection,
                       ],
@@ -1263,7 +1266,7 @@ export default function TgCalculatorPage() {
                 </div>
 
                 <div style={card}>
-                  <span style={label}>Модели из прайса</span>
+                  <span style={label}>Модели кондиционеров из прайса</span>
                   {models.length === 0 ? (
                     <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
                       Пока нет моделей — добавьте кнопкой ниже.
@@ -1391,7 +1394,9 @@ export default function TgCalculatorPage() {
                               marginBottom: 8,
                             }}
                           >
-                            <span style={{ fontSize: 14 }}>{m.name}</span>
+                            <span style={{ fontSize: 14 }}>
+                              {m.name} — {formatRubles(m.price)}
+                            </span>
                             <button
                               type="button"
                               onClick={() => removeModel(id)}
@@ -1485,27 +1490,89 @@ export default function TgCalculatorPage() {
                   id="tg-calc-total-anchor"
                   style={{ ...card, background: "#0f172a", color: "#fff" }}
                 >
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>
-                    Итого: {formatRubles(result.total)}
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, opacity: 0.95 }}>
+                    Состав сметы
                   </div>
-                  <p style={{ margin: "10px 0 0", fontSize: 12, opacity: 0.85, lineHeight: 1.4 }}>
-                    Те же цены и формула, что в полном калькуляторе. Подарок по трассе: {giftRouteMeters}{" "}
-                    м.
-                  </p>
-                </div>
-
-                <div style={card}>
-                  <p style={{ margin: "0 0 12px", fontWeight: 700 }}>Поделиться в Telegram</p>
-                  <button
-                    type="button"
-                    style={btn}
-                    onClick={() => shareTelegramNative()}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                    {result.items.map((i, idx) => {
+                      const title = mapMiniAppQuoteItemTitle(i.title);
+                      const sign = i.amount < 0 ? "−" : "";
+                      return (
+                        <div
+                          key={`line-${idx}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            fontSize: 14,
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
+                          <span style={{ flexShrink: 0, fontWeight: 700 }}>
+                            {sign}
+                            {formatRubles(Math.abs(i.amount))} ₽
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div
+                    style={{
+                      borderTop: "1px solid rgba(255,255,255,0.2)",
+                      paddingTop: 14,
+                      marginBottom: 14,
+                    }}
                   >
-                    Поделиться в Telegram
-                  </button>
+                    <div style={{ fontSize: 20, fontWeight: 800 }}>
+                      Итого: {formatRubles(result.total)}
+                    </div>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
+                    <span style={{ ...label, color: "#e2e8f0", marginBottom: 8 }}>
+                      Скидка на весь расчёт, %
+                    </span>
+                    <input
+                      style={{
+                        ...input,
+                        marginBottom: 0,
+                        background: "#fff",
+                        color: "#0f172a",
+                      }}
+                      inputMode="numeric"
+                      value={percentDiscount}
+                      onChange={(e) =>
+                        setPercentDiscount(
+                          sanitizeNonNegativeIntString(e.target.value, 100)
+                        )
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div style={card}>
+                <div id="tg-calc-client-text" style={card}>
+                  <p style={{ margin: "0 0 8px", fontWeight: 700, color: "#0f172a" }}>
+                    Текст для клиента
+                  </p>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+                    Отредактируйте текст перед отправкой. Кнопки ниже используют именно этот текст.
+                  </p>
+                  <textarea
+                    value={clientQuoteUserEdited ? clientQuoteDraft : autoClientQuoteText}
+                    onChange={(e) => {
+                      setClientQuoteUserEdited(true);
+                      setClientQuoteDraft(e.target.value);
+                    }}
+                    rows={14}
+                    style={{
+                      ...input,
+                      marginBottom: 12,
+                      minHeight: 220,
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      lineHeight: 1.45,
+                    }}
+                  />
                   <p style={{ margin: "0 0 12px", fontWeight: 700 }}>Отправить клиенту</p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <button
@@ -1513,7 +1580,7 @@ export default function TgCalculatorPage() {
                       style={{ ...btn, padding: "14px", fontSize: 15 }}
                       onClick={() => {
                         tgHapticButtonTap();
-                        const u = buildWhatsAppShareUrl(clientContact, quoteText);
+                        const u = buildWhatsAppShareUrl(clientContact, effectiveClientQuoteText);
                         if (u) window.open(u, "_blank");
                         else {
                           tgHapticNotification("warning");
@@ -1528,14 +1595,14 @@ export default function TgCalculatorPage() {
                       style={{ ...btn, padding: "14px", fontSize: 15 }}
                       onClick={() => shareTelegramNative()}
                     >
-                      Telegram
+                      Отправить в Telegram
                     </button>
                     <button
                       type="button"
                       style={{ ...btn, padding: "14px", fontSize: 15 }}
                       onClick={() => {
                         tgHapticButtonTap();
-                        window.location.href = buildSmsShareUrl(quoteText);
+                        window.location.href = buildSmsShareUrl(effectiveClientQuoteText);
                       }}
                     >
                       SMS
@@ -1546,7 +1613,7 @@ export default function TgCalculatorPage() {
                       onClick={async () => {
                         tgHapticButtonTap();
                         try {
-                          await navigator.clipboard.writeText(quoteText);
+                          await navigator.clipboard.writeText(effectiveClientQuoteText);
                           tgHapticNotification("success");
                           setSaveToast("Текст скопирован");
                         } catch {
@@ -1647,6 +1714,7 @@ export default function TgCalculatorPage() {
                   onClick={() => {
                     tgHapticButtonTap();
                     setSendMenuOpen((v) => !v);
+                    scrollToClientTextBlock();
                   }}
                 >
                   Отправить
@@ -1686,7 +1754,7 @@ export default function TgCalculatorPage() {
                     style={{ ...btnSecondary, marginTop: 0, padding: "12px", fontSize: 14 }}
                     onClick={() => shareTelegramNative()}
                   >
-                    Telegram
+                    Отправить в Telegram
                   </button>
                   <button
                     type="button"
@@ -1694,7 +1762,7 @@ export default function TgCalculatorPage() {
                     onClick={async () => {
                       tgHapticButtonTap();
                       try {
-                        await navigator.clipboard.writeText(quoteText);
+                        await navigator.clipboard.writeText(effectiveClientQuoteText);
                         tgHapticNotification("success");
                       } catch {
                         tgHapticNotification("error");
