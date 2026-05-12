@@ -28,64 +28,36 @@ import { resolveAuthUser } from "@/lib/resolveAuthUser";
 import { ensureTrialStartedOnFirstCalculation } from "@/lib/trialSubscription";
 import { withFeatureGuard } from "@/lib/withFeatureGuard";
 import { buildLoginRedirectUrl } from "@/lib/safeRedirect";
+import {
+  buildCalculatorClosingText,
+  computeCalculatorEstimate,
+  DEFAULT_CALCULATOR_PRICES,
+  formatRubles,
+  MAX_BLOCKS,
+  MAX_CABLE_METERS,
+  MAX_FLOORS,
+  MAX_HOLES,
+  MAX_MONEY,
+  MAX_ROUTE_METERS,
+  MAX_STROBA_METERS,
+  normalizePriceDocForSplitCapacity,
+  parseDecimalMetersInput,
+  sanitizeDecimalMetersString,
+  sanitizeNonNegativeIntString,
+  sanitizeNonNegativeMoneyString,
+  WARN_BLOCKS,
+  WARN_CABLE_METERS,
+  WARN_FLOORS,
+  WARN_HOLES,
+  WARN_MONEY,
+  WARN_ROUTE_METERS,
+  WARN_STROBA_METERS,
+} from "@/lib/calculator";
+import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
 import { mergeNumericPriceDocument } from "@/lib/mergeNumericPriceDocument";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
-type PriceList = {
-  standard_7: number;
-  standard_9: number;
-  standard_12: number;
-  standard_18: number;
-  standard_24: number;
-  standard_30: number;
-  standard_36: number;
-
-  existing_7: number;
-  existing_9: number;
-  existing_12: number;
-  existing_18: number;
-  existing_24: number;
-  existing_30: number;
-  existing_36: number;
-
-  route_7: number;
-  route_9: number;
-  route_12: number;
-  route_18: number;
-  route_24: number;
-  route_30: number;
-  route_36: number;
-
-  baseArmConcreteSurcharge: number;
-  extraHoleNormal: number;
-  extraHoleArm: number;
-
-  stroba_brick_small: number;
-  stroba_brick_big: number;
-  stroba_concrete_small: number;
-  stroba_concrete_big: number;
-
-  cable40: number;
-  cable16: number;
-
-  bracketsAndFasteners: number;
-  dismantlingOldUnit: number;
-  glassUnitWork: number;
-  facadeTileCut: number;
-  drainageToGutter: number;
-  drainPumpInstall: number;
-  outdoorConnectionLadder: number;
-  floorCarryTools: number;
-  outdoorBlockCarry: number;
-};
-
-type SelectedExtraServiceMap = Record<
-  string,
-  {
-    checked: boolean;
-    qty: string;
-  }
->;
+const fmt = formatRubles;
 
 type HistoryCalcDoc = {
   id?: string;
@@ -136,73 +108,6 @@ function omitUndefinedForFirestore<T>(input: T): T {
   return JSON.parse(JSON.stringify(input)) as T;
 }
 
-const defaultPrices: PriceList = {
-  standard_7: 5900,
-  standard_9: 5900,
-  standard_12: 6900,
-  standard_18: 7900,
-  standard_24: 9500,
-  standard_30: 10500,
-  standard_36: 11500,
-
-  existing_7: 6900,
-  existing_9: 6900,
-  existing_12: 7900,
-  existing_18: 8900,
-  existing_24: 10500,
-  existing_30: 11500,
-  existing_36: 12500,
-
-  route_7: 2000,
-  route_9: 2000,
-  route_12: 2200,
-  route_18: 2200,
-  route_24: 2700,
-  route_30: 2700,
-  route_36: 2900,
-
-  baseArmConcreteSurcharge: 4000,
-  extraHoleNormal: 1000,
-  extraHoleArm: 5000,
-
-  stroba_brick_small: 1000,
-  stroba_brick_big: 1200,
-  stroba_concrete_small: 1500,
-  stroba_concrete_big: 1600,
-
-  cable40: 600,
-  cable16: 200,
-
-  bracketsAndFasteners: 1000,
-  dismantlingOldUnit: 3500,
-  glassUnitWork: 1000,
-  facadeTileCut: 1300,
-  drainageToGutter: 200,
-  drainPumpInstall: 3000,
-  outdoorConnectionLadder: 500,
-  floorCarryTools: 500,
-  outdoorBlockCarry: 1000,
-};
-
-function fmt(n: number) {
-  return new Intl.NumberFormat("ru-RU").format(Number(n || 0)) + " ₽";
-}
-
-const MAX_ROUTE_METERS = 200;
-const MAX_HOLES = 50;
-const MAX_FLOORS = 60;
-const MAX_BLOCKS = 20;
-const MAX_MONEY = 5_000_000;
-const MAX_STROBA_METERS = 200;
-const MAX_CABLE_METERS = 500;
-const WARN_ROUTE_METERS = 80;
-const WARN_HOLES = 20;
-const WARN_FLOORS = 25;
-const WARN_BLOCKS = 8;
-const WARN_MONEY = 1_000_000;
-const WARN_STROBA_METERS = 80;
-const WARN_CABLE_METERS = 200;
-
 function normalizePhone(value: string) {
   return (value || "").replace(/[^\d]/g, "");
 }
@@ -224,103 +129,13 @@ function isMobileDevice() {
   return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
 }
 
-function minOneMeter(value: number) {
-  return value > 0 ? Math.max(1, value) : 0;
-}
-
-/** Парсинг метража (трасса, штроба): цифры и одна точка/запятая, верхняя граница max. */
-function parseDecimalMetersInput(raw: string, max: number): number {
-  const t = String(raw ?? "")
-    .trim()
-    .replace(",", ".")
-    .replace(/[^\d.]/g, "");
-  if (!t || t === ".") return 0;
-  const firstDot = t.indexOf(".");
-  const cleaned =
-    firstDot === -1 ? t : t.slice(0, firstDot + 1) + t.slice(firstDot + 1).replace(/\./g, "");
-  const n = parseFloat(cleaned);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(n, max);
-}
-
-function sanitizeDecimalMetersString(raw: string, max: number): string {
-  const t = String(raw ?? "")
-    .trim()
-    .replace(",", ".")
-    .replace(/[^\d.]/g, "");
-  if (!t) return "";
-  const firstDot = t.indexOf(".");
-  let cleaned =
-    firstDot === -1 ? t : t.slice(0, firstDot + 1) + t.slice(firstDot + 1).replace(/\./g, "");
-  const n = parseFloat(cleaned);
-  if (!Number.isFinite(n)) return cleaned === "." ? "0." : cleaned;
-  if (n > max) return String(max);
-  return cleaned;
-}
-
-/**
- * Метры (трасса, штроба) в расчёт: 0 → 0; (0,1) → 1; ≥ 1 → фактические метры (без округления вверх до целого).
- */
-function chargedMetersForBilling(meters: number): number {
-  if (meters <= 0) return 0;
-  if (meters < 1) return 1;
-  return meters;
-}
-
-function chargedFloorsFromSecond(value: number) {
-  return value >= 2 ? value - 1 : 0;
-}
-
-function capacityKey(value: string) {
-  if (value === "7-9") return "7";
-  return value;
-}
-
-function normalizePriceDocForSplitCapacity(data: Record<string, unknown>) {
-  const out: Record<string, unknown> = { ...data };
-  if (out.standard_7 == null && out.standard_7_9 != null) out.standard_7 = out.standard_7_9;
-  if (out.standard_9 == null && out.standard_7_9 != null) out.standard_9 = out.standard_7_9;
-  if (out.existing_7 == null && out.existing_7_9 != null) out.existing_7 = out.existing_7_9;
-  if (out.existing_9 == null && out.existing_7_9 != null) out.existing_9 = out.existing_7_9;
-  if (out.route_7 == null && out.route_7_9 != null) out.route_7 = out.route_7_9;
-  if (out.route_9 == null && out.route_7_9 != null) out.route_9 = out.route_7_9;
-  return out;
-}
-
-function buildClosingText(name: string) {
-  const clientLine = name.trim() ? `Клиент: ${name.trim()}` : "";
-  return [
-    clientLine,
-    "При необходимости возможно составление договора с гарантией на монтаж.",
-    "Оплата возможна через расчётный счёт.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function sanitizeNonNegativeIntString(raw: string, max: number) {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return "";
-  return String(Math.min(Math.max(0, Math.trunc(n)), max));
-}
-
-function sanitizeNonNegativeMoneyString(raw: string, max: number) {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return "";
-  return String(Math.min(Math.max(0, Math.trunc(n)), max));
-}
-
 function CalculatorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
-  const [prices, setPrices] = useState<PriceList>(defaultPrices);
+  const [prices, setPrices] = useState<CalculatorPriceList>(DEFAULT_CALCULATOR_PRICES);
   const [pricelistCustomServices, setPricelistCustomServices] = useState<UserCustomService[]>([]);
 
   const [capacity, setCapacity] = useState("12");
@@ -359,7 +174,7 @@ function CalculatorPage() {
 
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
-  const [editableTailText, setEditableTailText] = useState(buildClosingText(""));
+  const [editableTailText, setEditableTailText] = useState(buildCalculatorClosingText(""));
 
   const [selectedExtraServices, setSelectedExtraServices] =
     useState<SelectedExtraServiceMap>({});
@@ -465,7 +280,12 @@ function CalculatorPage() {
           const priceSnap = await getDocFromServer(doc(db, PRICING_FS.priceLists, uid));
           if (priceSnap.exists()) {
             const pdata = priceSnap.data() as Record<string, unknown>;
-            setPrices(mergeNumericPriceDocument(normalizePriceDocForSplitCapacity(pdata), defaultPrices));
+            setPrices(
+              mergeNumericPriceDocument(
+                normalizePriceDocForSplitCapacity(pdata),
+                DEFAULT_CALCULATOR_PRICES
+              )
+            );
             const parsed = parseCustomServicesFromPriceDoc(pdata.customServices);
             setPricelistCustomServices(parsed);
             const initialMap: SelectedExtraServiceMap = {};
@@ -474,13 +294,13 @@ function CalculatorPage() {
             });
             setSelectedExtraServices(initialMap);
           } else {
-            setPrices({ ...defaultPrices });
+            setPrices({ ...DEFAULT_CALCULATOR_PRICES });
             setPricelistCustomServices([]);
             setSelectedExtraServices({});
           }
         } catch (e) {
           console.error("[calculator] priceLists read failed", e);
-          setPrices({ ...defaultPrices });
+          setPrices({ ...DEFAULT_CALCULATOR_PRICES });
           setPricelistCustomServices([]);
           setSelectedExtraServices({});
         }
@@ -539,7 +359,7 @@ function CalculatorPage() {
             setClientName(data.clientName || "");
             setClientContact(data.clientContact || "");
             setEditableTailText(
-              data.editableTailText || buildClosingText(data.clientName || "")
+              data.editableTailText || buildCalculatorClosingText(data.clientName || "")
             );
 
             if (data.selectedExtraServices) {
@@ -681,283 +501,35 @@ function CalculatorPage() {
   }
 
   const result = useMemo(() => {
-    const routeMetersRaw = parseDecimalMetersInput(routeMeters, MAX_ROUTE_METERS);
-    const chargedRouteMeters = chargedMetersForBilling(routeMetersRaw);
-    const extraHolesNormalNum = Number(
-      sanitizeNonNegativeIntString(extraHolesNormal, MAX_HOLES) || 0
-    );
-    const extraHolesArmNum = Number(sanitizeNonNegativeIntString(extraHolesArm, MAX_HOLES) || 0);
-    const carryToolFloorsNum = Number(
-      sanitizeNonNegativeIntString(carryToolFloors, MAX_FLOORS) || 0
-    );
-    const carryBlockCountNum = Number(
-      sanitizeNonNegativeIntString(carryBlockCount, MAX_BLOCKS) || 0
-    );
-    const manualDismantlingCostNum = Number(
-      sanitizeNonNegativeMoneyString(manualDismantlingCost, MAX_MONEY) || 0
-    );
-    const strobaMetersNum = parseDecimalMetersInput(strobaMeters, MAX_STROBA_METERS);
-    const cable40MetersNum = Number(
-      sanitizeNonNegativeIntString(cable40Meters, MAX_CABLE_METERS) || 0
-    );
-    const cable16MetersNum = Number(
-      sanitizeNonNegativeIntString(cable16Meters, MAX_CABLE_METERS) || 0
-    );
-    const percentDiscountNum = Number(sanitizeNonNegativeIntString(percentDiscount, 100) || 0);
-
-    const giftM = Math.max(0, Math.floor(Number(giftRouteMeters) || 0));
-    const routePaidMeters = Math.max(0, chargedRouteMeters - giftM);
-
-    const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
-    const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
-    const chargedCable40Meters = minOneMeter(cable40MetersNum);
-    const chargedCable16Meters = minOneMeter(cable16MetersNum);
-
-    const capKey = capacityKey(capacity);
-
-    const basePrice =
-      mountType === "standard"
-        ? Number(prices[`standard_${capKey}` as keyof PriceList] || 0)
-        : Number(prices[`existing_${capKey}` as keyof PriceList] || 0);
-
-    const routePricePerMeter = Number(
-      prices[`route_${capKey}` as keyof PriceList] || 0
-    );
-
-    const isBigCapacity = capacity === "30" || capacity === "36";
-
-    let strobaPricePerMeter = 0;
-    if (strobaType === "brick") {
-      strobaPricePerMeter = isBigCapacity
-        ? prices.stroba_brick_big
-        : prices.stroba_brick_small;
-    }
-    if (strobaType === "concrete") {
-      strobaPricePerMeter = isBigCapacity
-        ? prices.stroba_concrete_big
-        : prices.stroba_concrete_small;
-    }
-
-    const items: { title: string; amount: number; note?: string }[] = [];
-
-    items.push({
-      title:
-        mountType === "standard"
-          ? `Монтаж на нашу трассу ${capacity}`
-          : `Монтаж на чужую трассу ${capacity}`,
-      amount: basePrice,
-      note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
+    return computeCalculatorEstimate(prices, {
+      capacity,
+      mountType,
+      routeMeters,
+      baseWallType,
+      extraHolesNormal,
+      extraHolesArm,
+      carryToolFloors,
+      carryBlockCount,
+      manualDismantlingCost,
+      strobaType,
+      strobaMeters,
+      cable40Meters,
+      cable16Meters,
+      buyAcAndRouteFromUs,
+      includeBrackets,
+      includeGlass,
+      includeTile,
+      includeDrain,
+      includePump,
+      includeLadderConnection,
+      percentDiscount,
+      giftRouteMeters,
+      acModels,
+      selectedAcModelIds,
+      pricelistCustomServices,
+      selectedExtraServices,
+      quickCalculationExtras,
     });
-
-    for (const modelId of selectedAcModelIds) {
-      const m = acModels.find((x) => x.id === modelId);
-      if (m && m.name && Number(m.price) > 0) {
-        items.push({
-          title: `Кондиционер: ${m.name}`,
-          amount: Number(m.price),
-          note: "Модель из личного прайса",
-        });
-      }
-    }
-
-    if (baseWallType === "arm") {
-      items.push({
-        title: "Доплата за основное отверстие в армированном бетоне",
-        amount: prices.baseArmConcreteSurcharge,
-        note: `Цена за 1 отверстие: ${fmt(prices.baseArmConcreteSurcharge)}`,
-      });
-    }
-
-    if (chargedRouteMeters > 0) {
-      items.push({
-        title: `Трасса × ${chargedRouteMeters} м`,
-        amount: routePaidMeters * routePricePerMeter,
-        note: `Цена за 1 м: ${fmt(routePricePerMeter)}. В подарок ${giftM} м, к оплате ${routePaidMeters} м`,
-      });
-    }
-
-    if (extraHolesNormalNum > 0) {
-      items.push({
-        title: `Доп. отверстия обычные × ${extraHolesNormalNum}`,
-        amount: extraHolesNormalNum * prices.extraHoleNormal,
-        note: `Цена за 1 отверстие: ${fmt(prices.extraHoleNormal)}`,
-      });
-    }
-
-    if (extraHolesArmNum > 0) {
-      items.push({
-        title: `Доп. отверстия армированный бетон × ${extraHolesArmNum}`,
-        amount: extraHolesArmNum * prices.extraHoleArm,
-        note: `Цена за 1 отверстие: ${fmt(prices.extraHoleArm)}`,
-      });
-    }
-
-    if (strobaType !== "none" && chargedStrobaMeters > 0) {
-      items.push({
-        title: `Штробление × ${chargedStrobaMeters} м`,
-        amount: chargedStrobaMeters * strobaPricePerMeter,
-        note: `Цена за 1 м: ${fmt(strobaPricePerMeter)}. От 0 до 1 м (не включая 1) — в расчёт 1 м; от 1 м — по введённым метрам`,
-      });
-    }
-
-    if (chargedCable40Meters > 0) {
-      items.push({
-        title: `Кабель-канал 40×40 × ${chargedCable40Meters} м`,
-        amount: chargedCable40Meters * prices.cable40,
-        note: `Цена за 1 м: ${fmt(prices.cable40)}. Кабель-канал считается минимум от 1 м`,
-      });
-    }
-
-    if (chargedCable16Meters > 0) {
-      items.push({
-        title: `Кабель-канал 16×16 × ${chargedCable16Meters} м`,
-        amount: chargedCable16Meters * prices.cable16,
-        note: `Цена за 1 м: ${fmt(prices.cable16)}. Кабель-канал считается минимум от 1 м`,
-      });
-    }
-
-    if (includeBrackets) {
-      items.push({
-        title: "Кронштейны и крепежи",
-        amount: prices.bracketsAndFasteners,
-        note: `Цена за 1 комплект: ${fmt(prices.bracketsAndFasteners)}`,
-      });
-    }
-
-    if (includeGlass) {
-      items.push({
-        title: "Демонтаж / монтаж стеклопакета",
-        amount: prices.glassUnitWork,
-        note: `Цена за 1 услугу: ${fmt(prices.glassUnitWork)}`,
-      });
-    }
-
-    if (includeTile) {
-      items.push({
-        title: "Резка фасадной плитки",
-        amount: prices.facadeTileCut,
-        note: `Цена за 1 услугу: ${fmt(prices.facadeTileCut)}`,
-      });
-    }
-
-    if (includeDrain) {
-      items.push({
-        title: "Монтаж дренажа в водосток",
-        amount: prices.drainageToGutter,
-        note: `Цена за 1 услугу: ${fmt(prices.drainageToGutter)}`,
-      });
-    }
-
-    if (includePump) {
-      items.push({
-        title: "Монтаж дренажной помпы",
-        amount: prices.drainPumpInstall,
-        note: `Цена за 1 услугу: ${fmt(prices.drainPumpInstall)}`,
-      });
-    }
-
-    if (includeLadderConnection) {
-      items.push({
-        title: "Подключение внешнего блока на лестнице",
-        amount: prices.outdoorConnectionLadder,
-        note: `Цена за 1 услугу: ${fmt(prices.outdoorConnectionLadder)}`,
-      });
-    }
-
-    if (chargedToolFloors > 0) {
-      items.push({
-        title: `Подъём инструмента пешком × ${chargedToolFloors} эт.`,
-        amount: chargedToolFloors * prices.floorCarryTools,
-        note: `Цена за 1 этаж: ${fmt(prices.floorCarryTools)}. Считается начиная со 2 этажа`,
-      });
-    }
-
-    if (carryBlockCountNum > 0) {
-      items.push({
-        title: `Подъём внешнего блока × ${carryBlockCountNum}`,
-        amount: carryBlockCountNum * prices.outdoorBlockCarry,
-        note: `Цена за 1 блок: ${fmt(prices.outdoorBlockCarry)}`,
-      });
-    }
-
-    if (manualDismantlingCostNum > 0) {
-      items.push({
-        title: "Демонтаж (ручной ввод)",
-        amount: manualDismantlingCostNum,
-        note: "Ручная сумма демонтажа",
-      });
-    }
-
-    if (buyAcAndRouteFromUs) {
-      items.push({
-        title: "Скидка при покупке кондиционера и трассы у нас",
-        amount: -1000,
-        note: "Фиксированная скидка: 1000 ₽",
-      });
-    }
-
-    pricelistCustomServices.forEach((service) => {
-      const state = selectedExtraServices[service.id];
-      if (!state?.checked) return;
-
-      const qty = Number(sanitizeNonNegativeIntString(state.qty, 999) || 0);
-      if (qty <= 0) return;
-
-      items.push({
-        title: `${service.name} × ${qty}`,
-        amount: qty * Number(service.price || 0),
-        note: `Цена за 1 ед.: ${fmt(service.price)}`,
-      });
-    });
-
-    quickCalculationExtras.forEach((line) => {
-      if (!line.name.trim() || line.price <= 0) return;
-      items.push({
-        title: line.name.trim(),
-        amount: line.price,
-        note: "Добавлено в расчёт вручную",
-      });
-    });
-
-    const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-
-    const discountByPercent =
-      percentDiscountNum > 0
-        ? Math.round((subtotal * percentDiscountNum) / 100)
-        : 0;
-
-    if (discountByPercent > 0) {
-      items.push({
-        title: `Скидка ${percentDiscountNum}% на весь расчёт`,
-        amount: -discountByPercent,
-        note: `Скидка от суммы ${fmt(subtotal)}`,
-      });
-    }
-
-    const totalRaw = items.reduce((sum, item) => sum + item.amount, 0);
-    const total = Number.isFinite(totalRaw) ? Math.max(0, totalRaw) : 0;
-
-    const autoClientText = [
-      "Здравствуйте. Подготовили расчёт по вашему объекту.",
-      "",
-      `Расчёт монтажа кондиционера ${capacity}:`,
-      ...items.map((item) => {
-        const amountText = `${item.amount < 0 ? "-" : ""}${fmt(
-          Math.abs(item.amount)
-        )}`;
-        return item.note
-          ? `— ${item.title}: ${amountText}\n  ${item.note}`
-          : `— ${item.title}: ${amountText}`;
-      }),
-      "",
-      `Итого: ${fmt(total)}`,
-    ].join("\n");
-
-    return {
-      items,
-      total,
-      autoClientText,
-    };
   }, [
     prices,
     capacity,
@@ -1069,7 +641,7 @@ function CalculatorPage() {
 
   useEffect(() => {
     if (!openedFromHistoryRef.current && !editableTailText.trim()) {
-      setEditableTailText(buildClosingText(clientName));
+      setEditableTailText(buildCalculatorClosingText(clientName));
     }
   }, [clientName, editableTailText]);
 

@@ -6,6 +6,12 @@ export type TelegramWebAppUser = {
   username?: string;
 };
 
+export type TelegramHapticFeedback = {
+  impactOccurred?: (style: "light" | "medium" | "heavy" | "rigid" | "soft") => void;
+  notificationOccurred?: (type: "error" | "success" | "warning") => void;
+  selectionChanged?: () => void;
+};
+
 export type TelegramWebApp = {
   initData: string;
   initDataUnsafe?: { user?: TelegramWebAppUser };
@@ -14,7 +20,26 @@ export type TelegramWebApp = {
   close?: () => void;
   version?: string;
   platform?: string;
+  HapticFeedback?: TelegramHapticFeedback;
+  /** Inline-режим бота; если недоступен — используйте buildTelegramShareUrl. */
+  switchInlineQuery?: (query: string, chatTypes?: string[]) => void;
+  openTelegramLink?: (url: string) => void;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
 };
+
+export function prepareTelegramMiniAppShell(wa: TelegramWebApp | null) {
+  if (!wa) return;
+  try {
+    wa.ready();
+  } catch {
+    /* */
+  }
+  try {
+    wa.expand?.();
+  } catch {
+    /* */
+  }
+}
 
 declare global {
   interface Window {

@@ -4,12 +4,12 @@ import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
-import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 
 const page: React.CSSProperties = {
-  minHeight: "100vh",
-  padding: "20px 16px 32px",
+  minHeight: "100dvh",
+  padding: "20px 16px max(32px, env(safe-area-inset-bottom))",
   maxWidth: 440,
   margin: "0 auto",
   fontFamily:
@@ -86,6 +86,8 @@ type AuthUi =
   | "error"
   | "no_init";
 
+const ONBOARDING_KEY = "hvac_tg_onboarding_seen";
+
 export default function TgMiniAppHomePage() {
   const [ready, setReady] = useState(false);
   const [inTelegram, setInTelegram] = useState<boolean | null>(null);
@@ -93,6 +95,8 @@ export default function TgMiniAppHomePage() {
   const [authUi, setAuthUi] = useState<AuthUi>("hidden");
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,11 +109,7 @@ export default function TgMiniAppHomePage() {
       if (cancelled) return;
 
       if (wa) {
-        try {
-          wa.ready();
-        } catch {
-          /* */
-        }
+        prepareTelegramMiniAppShell(wa);
         setInTelegram(true);
         setStatus(
           [
@@ -171,21 +171,34 @@ export default function TgMiniAppHomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem(ONBOARDING_KEY) === "1") {
+        setOnboardingDismissed(true);
+      }
+    } catch {
+      /* */
+    }
+  }, []);
+
+  function finishOnboarding() {
+    try {
+      localStorage.setItem(ONBOARDING_KEY, "1");
+    } catch {
+      /* */
+    }
+    setOnboardingDismissed(true);
+  }
+
+  const showOnboarding =
+    ready && inTelegram === true && !onboardingDismissed && onboardingStep < 3;
+
   return (
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="afterInteractive"
-        onLoad={() => {
-          const wa = window.Telegram?.WebApp;
-          if (wa) {
-            try {
-              wa.ready();
-            } catch {
-              /* */
-            }
-          }
-        }}
+        onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
       />
       <div style={page}>
         <h1 style={title}>HVAC SaaS</h1>
@@ -238,6 +251,9 @@ export default function TgMiniAppHomePage() {
                 <Link href="/tg/calculator" style={btn}>
                   Открыть калькулятор
                 </Link>
+                <Link href="/tg/history" style={btnSecondary}>
+                  Сохранённые расчёты
+                </Link>
               </>
             ) : null}
             {authUi === "need_registration" ? (
@@ -269,6 +285,64 @@ export default function TgMiniAppHomePage() {
           <Link href="/tg/calculator" style={{ ...btn, opacity: authUi === "checking" ? 0.65 : 1 }}>
             Калькулятор (Mini App)
           </Link>
+        ) : null}
+
+        {showOnboarding ? (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 100,
+              background: "rgba(15,23,42,0.92)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              padding: "24px max(20px, env(safe-area-inset-right)) 32px max(20px, env(safe-area-inset-left))",
+              paddingBottom: "max(32px, env(safe-area-inset-bottom))",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: 18,
+                padding: "28px 22px",
+                maxWidth: 400,
+                margin: "0 auto",
+                width: "100%",
+              }}
+            >
+              <p style={{ margin: "0 0 12px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>
+                {onboardingStep === 0
+                  ? "Расчёт кондиционера за 1 минуту"
+                  : onboardingStep === 1
+                    ? "Ничего не забудете в смете"
+                    : "Отправка клиенту прямо с объекта"}
+              </p>
+              <p style={{ margin: 0, fontSize: 15, color: "#475569", lineHeight: 1.55 }}>
+                {onboardingStep === 0
+                  ? "Мощность, трасса, опции и ваш прайс — всё в одном экране Mini App."
+                  : onboardingStep === 1
+                    ? "Штроба, кабель-каналы, подъёмы и услуги из прайса учитываются автоматически."
+                    : "WhatsApp, Telegram, SMS, PDF и копирование текста — без переключения в другие приложения."}
+              </p>
+              <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+                {onboardingStep < 2 ? (
+                  <button
+                    type="button"
+                    style={{ ...btn, flex: 1, marginTop: 0 }}
+                    onClick={() => setOnboardingStep((s) => s + 1)}
+                  >
+                    Далее
+                  </button>
+                ) : (
+                  <button type="button" style={{ ...btn, flex: 1, marginTop: 0 }} onClick={finishOnboarding}>
+                    Начать
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
     </>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
-import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 
 const page: React.CSSProperties = {
@@ -87,11 +87,7 @@ export default function TgCabinetPage() {
       if (cancelled) return;
 
       if (wa) {
-        try {
-          wa.ready();
-        } catch {
-          /* */
-        }
+        prepareTelegramMiniAppShell(wa);
         setInTelegram(true);
         setDetail(
           [
@@ -156,16 +152,7 @@ export default function TgCabinetPage() {
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="afterInteractive"
-        onLoad={() => {
-          const wa = window.Telegram?.WebApp;
-          if (wa) {
-            try {
-              wa.ready();
-            } catch {
-              /* */
-            }
-          }
-        }}
+        onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
       />
       <div style={page}>
         <h1 style={title}>Кабинет</h1>
