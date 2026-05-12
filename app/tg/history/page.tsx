@@ -271,9 +271,6 @@ export default function TgHistoryPage() {
         <Link href="/tg/calculator" style={{ ...btnSecondary, marginTop: 20 }}>
           К калькулятору
         </Link>
-        <Link href="/tg" style={{ ...btnSecondary }}>
-          На главную /tg
-        </Link>
       </div>
     </>
   );
