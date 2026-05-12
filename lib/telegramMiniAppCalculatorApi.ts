@@ -71,6 +71,7 @@ export type MiniAppHistoryListItem = {
   total: number;
   mountType: "standard" | "existing";
   capacity: string;
+  roomCount?: number;
 };
 
 export async function fetchMiniAppHistoryList(): Promise<

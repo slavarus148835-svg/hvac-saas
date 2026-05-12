@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import Script from "next/script";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import {
   computeCalculatorEstimate,
+  computeMultiRoomEstimate,
+  createDefaultRoomDraft,
   DEFAULT_CALCULATOR_PRICES,
+  flatCalculatorStateToRoomDraft,
   formatAmountRu,
   formatCapacityBtu,
   formatRubles,
@@ -16,16 +19,22 @@ import {
   MAX_MONEY,
   MAX_ROUTE_METERS,
   MAX_STROBA_METERS,
+  newRoomId,
+  roomDraftFromFirestoreEntry,
+  roomDraftToComputeInput,
+  roomDraftToFlatState,
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
 } from "@/lib/calculator";
+import type { CalculatorRoomDraft } from "@/lib/calculator";
 import {
   newQuickExtraId,
   type QuickCalculationExtra,
   type UserCustomService,
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
+import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
 import { quoteCardToPngBlob } from "@/lib/quoteCardCanvas";
 import { buildSmsShareUrl, buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
 import {
@@ -214,6 +223,12 @@ export default function TgCalculatorPage() {
   const [quickCalculationExtras, setQuickCalculationExtras] = useState<
     QuickCalculationExtra[]
   >([]);
+  const [multiRoomEnabled, setMultiRoomEnabled] = useState(false);
+  const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
+    createDefaultRoomDraft("Комната 1"),
+  ]);
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
+  const [modelPickByRoom, setModelPickByRoom] = useState<Record<string, string>>({});
   const [quickSvcName, setQuickSvcName] = useState("");
   const [quickSvcPrice, setQuickSvcPrice] = useState("");
   const [modelFormOpen, setModelFormOpen] = useState(false);
@@ -365,7 +380,32 @@ export default function TgCalculatorPage() {
     });
   }, [customServices]);
 
-  const result = useMemo(() => {
+  useEffect(() => {
+    if (!multiRoomEnabled) return;
+    setRoomDrafts((prev) =>
+      prev.map((r) => {
+        const next: SelectedExtraServiceMap = { ...r.selectedExtraServices };
+        for (const s of customServices) {
+          if (!next[s.id]) next[s.id] = { checked: false, qty: "1" };
+        }
+        const allowed = new Set(customServices.map((s) => s.id));
+        for (const k of Object.keys(next)) {
+          if (!allowed.has(k)) delete next[k];
+        }
+        return { ...r, selectedExtraServices: next };
+      })
+    );
+  }, [customServices, multiRoomEnabled]);
+
+  useEffect(() => {
+    if (!multiRoomEnabled) return;
+    if (!roomDrafts.length) return;
+    if (!expandedRoomId || !roomDrafts.some((r) => r.id === expandedRoomId)) {
+      setExpandedRoomId(roomDrafts[0]!.id);
+    }
+  }, [multiRoomEnabled, roomDrafts, expandedRoomId]);
+
+  const singleResult = useMemo(() => {
     return computeCalculatorEstimate(prices, {
       capacity,
       mountType,
@@ -426,18 +466,67 @@ export default function TgCalculatorPage() {
     quickCalculationExtras,
   ]);
 
-  const autoClientQuoteText = useMemo(() => {
-    let t = buildTelegramMiniAppClientQuoteText({
+  const multiEstimate = useMemo(() => {
+    if (!multiRoomEnabled || roomDrafts.length === 0) return null;
+    const rooms = roomDrafts.map((d) => ({
+      id: d.id,
+      roomName: d.roomName,
+      input: roomDraftToComputeInput(d, {
+        giftRouteMeters,
+        acModels: models,
+        pricelistCustomServices: customServices,
+      }),
+    }));
+    return computeMultiRoomEstimate(prices, rooms, percentDiscount, formatRubles, {
       clientName,
       clientContact,
-      capacity,
-      mountType,
-      items: result.items.map((i) => ({
-        title: i.title,
-        amount: i.amount,
-      })),
-      total: result.total,
     });
+  }, [
+    multiRoomEnabled,
+    roomDrafts,
+    prices,
+    percentDiscount,
+    giftRouteMeters,
+    models,
+    customServices,
+    clientName,
+    clientContact,
+  ]);
+
+  const displayResult = useMemo(() => {
+    if (multiRoomEnabled && multiEstimate) {
+      return { items: multiEstimate.flatItems, total: multiEstimate.total };
+    }
+    return singleResult;
+  }, [multiRoomEnabled, multiEstimate, singleResult]);
+
+  const roomSubtotalById = useMemo(() => {
+    const m = new Map<string, number>();
+    if (multiEstimate) {
+      for (const rr of multiEstimate.rooms) {
+        m.set(rr.id, rr.subtotal);
+      }
+    }
+    return m;
+  }, [multiEstimate]);
+
+  const autoClientQuoteText = useMemo(() => {
+    let t: string;
+    if (multiRoomEnabled && multiEstimate) {
+      t = multiEstimate.autoClientText;
+    } else {
+      t = buildTelegramMiniAppClientQuoteText({
+        clientName,
+        clientContact,
+        capacity,
+        mountType,
+        items: singleResult.items.map((i) => ({
+          title: i.title,
+          amount: i.amount,
+        })),
+        total: singleResult.total,
+      });
+    }
     const tail: string[] = [];
     if (textSettings.guaranteeText.trim()) tail.push(textSettings.guaranteeText.trim());
     if (textSettings.masterContact.trim()) {
@@ -449,12 +538,14 @@ export default function TgCalculatorPage() {
     if (tail.length) t = `${t}\n\n${tail.join("\n\n")}`;
     return t;
   }, [
+    multiRoomEnabled,
+    multiEstimate,
     clientName,
     clientContact,
     capacity,
     mountType,
-    result.items,
-    result.total,
+    singleResult.items,
+    singleResult.total,
     textSettings.guaranteeText,
     textSettings.masterContact,
     textSettings.quoteFooterTemplate,
@@ -492,10 +583,11 @@ export default function TgCalculatorPage() {
       const doc = { ...r.doc };
       delete doc.id;
       const docRaw = doc as Record<string, unknown>;
-      const isMulti =
-        docRaw.multiRoom === true &&
-        Array.isArray(docRaw.rooms) &&
-        docRaw.rooms.length > 1;
+      const roomsRaw = docRaw.multiRoom === true && Array.isArray(docRaw.rooms) ? docRaw.rooms : null;
+      const draftsFromHistory =
+        roomsRaw?.map(roomDraftFromFirestoreEntry).filter((x): x is CalculatorRoomDraft => Boolean(x)) ??
+        [];
+      const isMultiDoc = Boolean(draftsFromHistory.length);
       const savedClientText =
         typeof docRaw.clientText === "string" ? docRaw.clientText.trim() : "";
 
@@ -526,14 +618,27 @@ export default function TgCalculatorPage() {
       if (h.quickCalculationExtras) setQuickCalculationExtras(h.quickCalculationExtras);
       if (h.clientName != null) setClientName(h.clientName);
       if (h.clientContact != null) setClientContact(h.clientContact);
-      if (isMulti && savedClientText) {
-        setClientQuoteUserEdited(true);
-        setClientQuoteDraft(savedClientText);
-        setSaveToast("Несколько комнат: таблица — по первой комнате; полный текст в блоке ниже.");
-        window.setTimeout(() => setSaveToast(null), 5000);
+      if (isMultiDoc) {
+        setMultiRoomEnabled(true);
+        setRoomDrafts(draftsFromHistory);
+        setExpandedRoomId(draftsFromHistory[0]!.id);
+        setModelPickByRoom({});
+        if (savedClientText) {
+          setClientQuoteUserEdited(true);
+          setClientQuoteDraft(savedClientText);
+        } else {
+          setClientQuoteUserEdited(false);
+          setClientQuoteDraft("");
+        }
       } else {
-        setClientQuoteUserEdited(false);
-        setClientQuoteDraft("");
+        setMultiRoomEnabled(false);
+        if (savedClientText) {
+          setClientQuoteUserEdited(true);
+          setClientQuoteDraft(savedClientText);
+        } else {
+          setClientQuoteUserEdited(false);
+          setClientQuoteDraft("");
+        }
       }
       tgHapticNotification("success");
     })();
@@ -542,7 +647,155 @@ export default function TgCalculatorPage() {
     };
   }, [calcPhase, authUi]);
 
+  const patchRoom = useCallback((roomId: string, patch: Partial<CalculatorRoomDraft>) => {
+    setRoomDrafts((prev) => prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r)));
+  }, []);
+
+  function applyFirstRoomToFlatForm(d: CalculatorRoomDraft) {
+    const f = roomDraftToFlatState(d);
+    setCapacity(f.capacity);
+    setMountType(f.mountType);
+    setRouteMeters(f.routeMeters);
+    setBaseWallType(f.baseWallType);
+    setExtraHolesNormal(f.extraHolesNormal);
+    setExtraHolesArm(f.extraHolesArm);
+    setCarryToolFloors(f.carryToolFloors);
+    setCarryBlockCount(f.carryBlockCount);
+    setManualDismantlingCost(f.manualDismantlingCost);
+    setStrobaType(f.strobaType);
+    setStrobaMeters(f.strobaMeters);
+    setCable40Meters(f.cable40Meters);
+    setCable16Meters(f.cable16Meters);
+    setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
+    setIncludeBrackets(f.includeBrackets);
+    setIncludeGlass(f.includeGlass);
+    setIncludeTile(f.includeTile);
+    setIncludeDrain(f.includeDrain);
+    setIncludePump(f.includePump);
+    setIncludeLadderConnection(f.includeLadderConnection);
+    setSelectedAcModelIds([...f.selectedAcModelIds]);
+    setSelectedExtraServices(
+      JSON.parse(JSON.stringify(f.selectedExtraServices)) as SelectedExtraServiceMap
+    );
+    setQuickCalculationExtras(f.quickCalculationExtras.map((x) => ({ ...x })));
+  }
+
+  function setMultiRoomMode(next: boolean) {
+    tgHapticButtonTap();
+    if (next) {
+      const seed = flatCalculatorStateToRoomDraft({
+        roomName: "Комната 1",
+        capacity,
+        mountType,
+        routeMeters,
+        baseWallType,
+        extraHolesNormal,
+        extraHolesArm,
+        carryToolFloors,
+        carryBlockCount,
+        manualDismantlingCost,
+        strobaType,
+        strobaMeters,
+        cable40Meters,
+        cable16Meters,
+        buyAcAndRouteFromUs,
+        includeBrackets,
+        includeGlass,
+        includeTile,
+        includeDrain,
+        includePump,
+        includeLadderConnection,
+        selectedAcModelIds,
+        selectedExtraServices,
+        quickCalculationExtras,
+      });
+      setRoomDrafts([seed]);
+      setExpandedRoomId(seed.id);
+      setModelPickByRoom({});
+      setMultiRoomEnabled(true);
+    } else {
+      const first = roomDrafts[0];
+      if (first) applyFirstRoomToFlatForm(first);
+      setMultiRoomEnabled(false);
+    }
+  }
+
+  function addEmptyRoom() {
+    tgHapticButtonTap();
+    setRoomDrafts((prev) => {
+      const next = [...prev, createDefaultRoomDraft(`Комната ${prev.length + 1}`)];
+      setExpandedRoomId(next[next.length - 1]!.id);
+      return next;
+    });
+  }
+
+  function duplicateRoom(roomId: string) {
+    setRoomDrafts((prev) => {
+      const idx = prev.findIndex((r) => r.id === roomId);
+      const src = prev[idx];
+      if (!src) return prev;
+      const baseName = (src.roomName || "Комната").trim() || "Комната";
+      const copy: CalculatorRoomDraft = {
+        ...src,
+        id: newRoomId(),
+        roomName: `Копия ${baseName}`,
+        selectedAcModelIds: [...src.selectedAcModelIds],
+        selectedExtraServices: JSON.parse(JSON.stringify(src.selectedExtraServices)) as SelectedExtraServiceMap,
+        quickCalculationExtras: src.quickCalculationExtras.map((x) => ({
+          ...x,
+          id: newQuickExtraId(),
+        })),
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      setExpandedRoomId(copy.id);
+      return next;
+    });
+  }
+
+  function removeRoom(roomId: string) {
+    setRoomDrafts((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((r) => r.id !== roomId);
+    });
+  }
+
+  function removeModelFromRoom(roomId: string, modelId: string) {
+    tgHapticButtonTap();
+    setRoomDrafts((prev) =>
+      prev.map((r) =>
+        r.id === roomId
+          ? { ...r, selectedAcModelIds: r.selectedAcModelIds.filter((x) => x !== modelId) }
+          : r
+      )
+    );
+  }
+
+  function collapsedModelSummary(draft: CalculatorRoomDraft): string {
+    if (!draft.selectedAcModelIds.length) return "Модель не выбрана";
+    const parts: string[] = [];
+    for (const id of draft.selectedAcModelIds) {
+      const m = models.find((x) => x.id === id);
+      parts.push(m ? `${m.name} — ${formatRubles(m.price)}` : id);
+    }
+    return parts.join(" · ");
+  }
+
   function addModel() {
+    if (multiRoomEnabled) {
+      const rid = expandedRoomId ?? roomDrafts[0]?.id;
+      const pick = rid ? modelPickByRoom[rid] ?? "" : "";
+      if (!rid || !pick) return;
+      setRoomDrafts((prev) =>
+        prev.map((r) => {
+          if (r.id !== rid) return r;
+          if (r.selectedAcModelIds.includes(pick)) return r;
+          return { ...r, selectedAcModelIds: [...r.selectedAcModelIds, pick] };
+        })
+      );
+      setModelPickByRoom((m) => ({ ...m, [rid]: "" }));
+      return;
+    }
     if (!modelPick || selectedAcModelIds.includes(modelPick)) return;
     setSelectedAcModelIds((x) => [...x, modelPick]);
     setModelPick("");
@@ -640,7 +893,20 @@ export default function TgCalculatorPage() {
         a.name.localeCompare(b.name, "ru")
       )
     );
-    setSelectedAcModelIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    if (multiRoomEnabled) {
+      const rid = expandedRoomId ?? roomDrafts[0]?.id;
+      if (rid) {
+        setRoomDrafts((prev) =>
+          prev.map((r) =>
+            r.id === rid && !r.selectedAcModelIds.includes(id)
+              ? { ...r, selectedAcModelIds: [...r.selectedAcModelIds, id] }
+              : r
+          )
+        );
+      }
+    } else {
+      setSelectedAcModelIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    }
     setModelPick("");
     setNewMdlName("");
     setNewMdlPrice("");
@@ -683,12 +949,29 @@ export default function TgCalculatorPage() {
       includePump,
       includeLadderConnection,
       percentDiscount,
-      selectedAcModelIds,
-      selectedExtraServices,
-      quickCalculationExtras,
+      selectedAcModelIds: multiRoomEnabled
+        ? roomDrafts[0]?.selectedAcModelIds ?? []
+        : selectedAcModelIds,
+      selectedExtraServices: multiRoomEnabled
+        ? roomDrafts[0]?.selectedExtraServices ?? {}
+        : selectedExtraServices,
+      quickCalculationExtras: multiRoomEnabled
+        ? roomDrafts[0]?.quickCalculationExtras ?? []
+        : quickCalculationExtras,
       clientName,
       clientContact,
     };
+    if (multiRoomEnabled && roomDrafts.length > 0) {
+      payload.rooms = roomDrafts.map((d) => ({
+        id: d.id,
+        roomName: d.roomName,
+        input: roomDraftToComputeInput(d, {
+          giftRouteMeters,
+          acModels: models,
+          pricelistCustomServices: customServices,
+        }),
+      }));
+    }
     const r = await saveMiniAppCalculation(payload);
     setSaveBusy(false);
     if (r.ok) {
@@ -738,6 +1021,7 @@ export default function TgCalculatorPage() {
     }
     setPdfBusy(true);
     try {
+      const headRoom = multiRoomEnabled && roomDrafts[0] ? roomDrafts[0] : null;
       const res = await fetch("/api/telegram/miniapp-quote-pdf", {
         method: "POST",
         headers: {
@@ -747,13 +1031,13 @@ export default function TgCalculatorPage() {
         body: JSON.stringify({
           clientName,
           clientContact,
-          capacity,
-          mountType,
-          lines: result.items.map((i) => ({
+          capacity: headRoom?.capacity ?? capacity,
+          mountType: headRoom?.mountType ?? mountType,
+          lines: displayResult.items.map((i) => ({
             title: mapMiniAppQuoteItemTitle(i.title),
             amount: i.amount,
           })),
-          total: result.total,
+          total: displayResult.total,
         }),
       });
       if (!res.ok) {
@@ -782,13 +1066,15 @@ export default function TgCalculatorPage() {
     tgHapticButtonTap();
     const canvas = cardCanvasRef.current;
     if (!canvas) return;
-    const lines = result.items.map(
+    const lines = displayResult.items.map(
       (i) => `${mapMiniAppQuoteItemTitle(i.title)} — ${formatRubles(i.amount)}`
     );
     const blob = await quoteCardToPngBlob(canvas, {
       clientName,
-      totalRub: formatRubles(result.total),
-      subtitle: `Монтаж ${formatCapacityBtu(capacity)}`,
+      totalRub: formatRubles(displayResult.total),
+      subtitle: multiRoomEnabled
+        ? `${roomDrafts.length} комн.`
+        : `Монтаж ${formatCapacityBtu(capacity)}`,
       lines,
     });
     if (!blob) {
@@ -1030,30 +1316,55 @@ export default function TgCalculatorPage() {
                   <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                     <select
                       style={{ ...input, flex: 1, marginBottom: 0 }}
-                      value={modelPick}
-                      onChange={(e) => setModelPick(e.target.value)}
+                      value={
+                        multiRoomEnabled
+                          ? modelPickByRoom[expandedRoomId ?? roomDrafts[0]?.id ?? ""] ?? ""
+                          : modelPick
+                      }
+                      onChange={(e) => {
+                        const rid = expandedRoomId ?? roomDrafts[0]?.id;
+                        if (multiRoomEnabled && rid) {
+                          setModelPickByRoom((m) => ({ ...m, [rid]: e.target.value }));
+                        } else {
+                          setModelPick(e.target.value);
+                        }
+                      }}
                       disabled={models.length === 0}
                     >
                       <option value="">Выберите</option>
-                      {models.map((m) => (
-                        <option
-                          key={m.id}
-                          value={m.id}
-                          disabled={selectedAcModelIds.includes(m.id)}
-                        >
-                          {m.name} — {formatRubles(m.price)}
-                        </option>
-                      ))}
+                      {models.map((m) => {
+                        const inRoom = multiRoomEnabled
+                          ? (
+                              roomDrafts.find((r) => r.id === (expandedRoomId ?? roomDrafts[0]?.id)) ??
+                              roomDrafts[0]
+                            )?.selectedAcModelIds.includes(m.id)
+                          : selectedAcModelIds.includes(m.id);
+                        return (
+                          <option key={m.id} value={m.id} disabled={Boolean(inRoom)}>
+                            {m.name} — {formatRubles(m.price)}
+                          </option>
+                        );
+                      })}
                     </select>
                     <button
                       type="button"
                       style={{ ...btn, width: "auto", padding: "12px 16px" }}
                       onClick={addModel}
-                      disabled={!modelPick}
+                      disabled={
+                        models.length === 0 ||
+                        (multiRoomEnabled
+                          ? !(modelPickByRoom[expandedRoomId ?? roomDrafts[0]?.id ?? ""] ?? "").trim()
+                          : !modelPick)
+                      }
                     >
                       +
                     </button>
                   </div>
+                  {multiRoomEnabled ? (
+                    <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748b" }}>
+                      Модель добавляется в раскрытую комнату. Раскройте нужную комнату ниже.
+                    </p>
+                  ) : null}
                   {!modelFormOpen ? (
                     <button
                       type="button"
@@ -1134,7 +1445,7 @@ export default function TgCalculatorPage() {
                       ) : null}
                     </div>
                   )}
-                  {selectedAcModelIds.length > 0 ? (
+                  {!multiRoomEnabled && selectedAcModelIds.length > 0 ? (
                     <div style={{ marginTop: 12 }}>
                       {selectedAcModelIds.map((id) => {
                         const m = models.find((x) => x.id === id);
@@ -1173,6 +1484,75 @@ export default function TgCalculatorPage() {
                   ) : null}
                 </div>
 
+                <label
+                  style={{
+                    ...card,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    style={{ ...chk, width: 24, height: 24, flexShrink: 0 }}
+                    checked={multiRoomEnabled}
+                    onChange={(e) => setMultiRoomMode(e.target.checked)}
+                  />
+                  <span style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}>
+                    Расчёт по нескольким комнатам
+                  </span>
+                </label>
+
+                {multiRoomEnabled ? (
+                  <>
+                    {roomDrafts.map((d) => (
+                      <TgCalculatorRoomCardBound
+                        key={d.id}
+                        draft={d}
+                        expanded={expandedRoomId === d.id}
+                        roomSubtotal={roomSubtotalById.get(d.id) ?? 0}
+                        collapsedModelLine={collapsedModelSummary(d)}
+                        models={models}
+                        customServices={customServices}
+                        giftRouteMeters={giftRouteMeters}
+                        canRemove={roomDrafts.length > 1}
+                        modelPick={modelPickByRoom[d.id] ?? ""}
+                        onModelPickChange={(v) =>
+                          setModelPickByRoom((m) => ({ ...m, [d.id]: v }))
+                        }
+                        onAddPickedModel={() => {
+                          const pick = modelPickByRoom[d.id] ?? "";
+                          if (!pick || d.selectedAcModelIds.includes(pick)) return;
+                          tgHapticButtonTap();
+                          patchRoom(d.id, {
+                            selectedAcModelIds: [...d.selectedAcModelIds, pick],
+                          });
+                          setModelPickByRoom((m) => ({ ...m, [d.id]: "" }));
+                        }}
+                        onRemoveModelFromRoom={(modelId) => removeModelFromRoom(d.id, modelId)}
+                        onToggle={() => {
+                          tgHapticButtonTap();
+                          setExpandedRoomId(d.id);
+                        }}
+                        onPatchRoom={patchRoom}
+                        onDuplicate={() => duplicateRoom(d.id)}
+                        onRemoveRoom={() => removeRoom(d.id)}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      style={{ ...btnSecondary, marginBottom: 16 }}
+                      onClick={addEmptyRoom}
+                    >
+                      + Комната
+                    </button>
+                  </>
+                ) : null}
+
+                {!multiRoomEnabled ? (
+                  <>
                 <div style={card}>
                   <span style={label}>Мощность BTU</span>
                   <select
@@ -1486,6 +1866,8 @@ export default function TgCalculatorPage() {
                     })}
                   </div>
                 ) : null}
+                </>
+                ) : null}
 
                 <div style={card}>
                   <span style={label}>Клиент (для сохранения)</span>
@@ -1511,7 +1893,7 @@ export default function TgCalculatorPage() {
                     Состав сметы
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-                    {result.items.map((i, idx) => {
+                    {displayResult.items.map((i, idx) => {
                       const title = mapMiniAppQuoteItemTitle(i.title);
                       const sign = i.amount < 0 ? "−" : "";
                       return (
@@ -1542,7 +1924,7 @@ export default function TgCalculatorPage() {
                     }}
                   >
                     <div style={{ fontSize: 20, fontWeight: 800 }}>
-                      Итого: {formatRubles(result.total)}
+                      Итого: {formatRubles(displayResult.total)}
                     </div>
                   </div>
                   <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }}>
@@ -1703,7 +2085,7 @@ export default function TgCalculatorPage() {
                   marginBottom: 8,
                 }}
               >
-                {formatRubles(result.total)}
+                {multiRoomEnabled ? `Итого: ${formatRubles(displayResult.total)}` : formatRubles(displayResult.total)}
               </div>
               <div
                 style={{

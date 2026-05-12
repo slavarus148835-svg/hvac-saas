@@ -26,6 +26,7 @@ export {
   createDefaultRoomDraft,
   flatCalculatorStateToRoomDraft,
   newRoomId,
+  roomDraftFromFirestoreEntry,
   roomDraftToComputeInput,
   roomDraftToFlatState,
 } from "./roomDraft";

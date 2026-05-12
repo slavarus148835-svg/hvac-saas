@@ -216,6 +216,11 @@ export default function TgHistoryPage() {
                     <div>
                       {mountLabel(row.mountType)} · {formatCapacityBtu(row.capacity)}
                     </div>
+                    {typeof row.roomCount === "number" && row.roomCount > 1 ? (
+                      <div style={{ fontSize: 13, color: "#64748b" }}>
+                        Комнат: {row.roomCount}
+                      </div>
+                    ) : null}
                     <div style={{ fontWeight: 800, marginTop: 8, color: "#0f172a" }}>
                       {new Intl.NumberFormat("ru-RU").format(Math.round(row.total))} ₽
                     </div>

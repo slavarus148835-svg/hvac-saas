@@ -61,6 +61,14 @@ export async function GET(req: Request) {
 
     const items = q.docs.map((d) => {
       const data = d.data() as Record<string, unknown>;
+      const roomCountRaw = data.roomCount;
+      const roomsLen = Array.isArray(data.rooms) ? data.rooms.length : 0;
+      const roomCount =
+        typeof roomCountRaw === "number" && roomCountRaw > 0
+          ? roomCountRaw
+          : data.multiRoom === true && roomsLen > 0
+            ? roomsLen
+            : 1;
       return {
         id: d.id,
         createdAt: typeof data.createdAt === "string" ? data.createdAt : "",
@@ -68,6 +76,7 @@ export async function GET(req: Request) {
         total: typeof data.total === "number" ? data.total : 0,
         mountType: data.mountType === "existing" ? "existing" : "standard",
         capacity: typeof data.capacity === "string" ? data.capacity : "",
+        roomCount,
       };
     });
 

@@ -1,5 +1,5 @@
 import type { QuickCalculationExtra } from "@/lib/customServices";
-import type { CalculatorComputeInput, SelectedExtraServiceMap } from "@/lib/calculator/types";
+import type { CalculatorComputeInput, SelectedExtraServiceMap } from "./types";
 
 /** Локальное состояние одной комнаты (без глобальных полей прайса). */
 export type CalculatorRoomDraft = {
@@ -119,4 +119,71 @@ export function roomDraftToFlatState(
 ): Omit<CalculatorRoomDraft, "id" | "roomName"> {
   const { id: _i, roomName: _n, ...rest } = draft;
   return rest;
+}
+
+/** Восстановление черновика комнаты из Firestore (calculationHistory.rooms[]). */
+export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const o = entry as Record<string, unknown>;
+  const inp = o.input;
+  if (!inp || typeof inp !== "object" || Array.isArray(inp)) return null;
+  const input = inp as Record<string, unknown>;
+  const id =
+    typeof o.id === "string" && o.id.trim() ? String(o.id).trim() : newRoomId();
+  const roomName =
+    typeof o.roomName === "string" && o.roomName.trim()
+      ? String(o.roomName).trim()
+      : "Комната";
+  return {
+    id,
+    roomName,
+    capacity: typeof input.capacity === "string" ? input.capacity : "12",
+    mountType: input.mountType === "existing" ? "existing" : "standard",
+    routeMeters: typeof input.routeMeters === "string" ? input.routeMeters : "0",
+    baseWallType: input.baseWallType === "arm" ? "arm" : "normal",
+    extraHolesNormal:
+      typeof input.extraHolesNormal === "string"
+        ? input.extraHolesNormal
+        : String(input.extraHolesNormal ?? "0"),
+    extraHolesArm:
+      typeof input.extraHolesArm === "string"
+        ? input.extraHolesArm
+        : String(input.extraHolesArm ?? "0"),
+    carryToolFloors:
+      typeof input.carryToolFloors === "string"
+        ? input.carryToolFloors
+        : String(input.carryToolFloors ?? "0"),
+    carryBlockCount:
+      typeof input.carryBlockCount === "string"
+        ? input.carryBlockCount
+        : String(input.carryBlockCount ?? "0"),
+    manualDismantlingCost:
+      typeof input.manualDismantlingCost === "string"
+        ? input.manualDismantlingCost
+        : String(input.manualDismantlingCost ?? "0"),
+    strobaType:
+      input.strobaType === "brick" || input.strobaType === "concrete" ? input.strobaType : "none",
+    strobaMeters: typeof input.strobaMeters === "string" ? input.strobaMeters : "0",
+    cable40Meters: typeof input.cable40Meters === "string" ? input.cable40Meters : "0",
+    cable16Meters: typeof input.cable16Meters === "string" ? input.cable16Meters : "0",
+    buyAcAndRouteFromUs: Boolean(input.buyAcAndRouteFromUs),
+    includeBrackets: Boolean(input.includeBrackets),
+    includeGlass: Boolean(input.includeGlass),
+    includeTile: Boolean(input.includeTile),
+    includeDrain: Boolean(input.includeDrain),
+    includePump: Boolean(input.includePump),
+    includeLadderConnection: Boolean(input.includeLadderConnection),
+    selectedAcModelIds: Array.isArray(input.selectedAcModelIds)
+      ? input.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+      : [],
+    selectedExtraServices:
+      input.selectedExtraServices &&
+      typeof input.selectedExtraServices === "object" &&
+      !Array.isArray(input.selectedExtraServices)
+        ? (input.selectedExtraServices as SelectedExtraServiceMap)
+        : {},
+    quickCalculationExtras: Array.isArray(input.quickCalculationExtras)
+      ? (input.quickCalculationExtras as QuickCalculationExtra[])
+      : [],
+  };
 }
