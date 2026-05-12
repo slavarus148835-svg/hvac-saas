@@ -3,11 +3,9 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import {
-  authTelegramMiniApp,
-  type TelegramMiniAppProfile,
-} from "@/lib/telegramMiniAppAuth";
+import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -108,25 +106,42 @@ export default function TgCalculatorPage() {
         }
         setInTelegram(true);
         const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
-        if (initData) {
-          setAuthUi("checking");
-          const ar = await authTelegramMiniApp(initData);
-          if (cancelled) return;
-          if (ar.ok && ar.profile) {
-            setProfile(ar.profile);
-            setAuthUi("profile");
-          } else if (ar.ok && ar.need_registration) {
-            setAuthUi("need_registration");
-          } else {
-            setAuthUi("error");
-            setAuthError(ar.error ?? "Ошибка проверки аккаунта.");
-          }
+        setAuthUi("checking");
+        const resolved = await ensureTelegramMiniAppProfile(initData || null);
+        if (cancelled) return;
+        if (resolved.status === "profile") {
+          setProfile(resolved.profile);
+          setAuthUi("profile");
+          setAuthError(null);
+        } else if (resolved.status === "need_registration") {
+          setAuthUi("need_registration");
+          setAuthError(null);
+        } else if (resolved.status === "error") {
+          setAuthUi("error");
+          setAuthError(resolved.message);
         } else {
           setAuthUi("no_init");
+          setAuthError(null);
         }
       } else {
         setInTelegram(false);
-        setAuthUi("no_tg");
+        setAuthUi("checking");
+        const resolved = await ensureTelegramMiniAppProfile(null);
+        if (cancelled) return;
+        if (resolved.status === "profile") {
+          setProfile(resolved.profile);
+          setAuthUi("profile");
+          setAuthError(null);
+        } else if (resolved.status === "need_registration") {
+          setAuthUi("need_registration");
+          setAuthError(null);
+        } else if (resolved.status === "error") {
+          setAuthUi("error");
+          setAuthError(resolved.message);
+        } else {
+          setAuthUi("no_tg");
+          setAuthError(null);
+        }
       }
       setReady(true);
     })();
@@ -176,10 +191,23 @@ export default function TgCalculatorPage() {
                 <p style={{ margin: 0 }}>Проверяем Telegram-аккаунт…</p>
               ) : null}
               {authUi === "profile" && profile ? (
-                <p style={{ margin: "0 0 12px" }}>
-                  Вы вошли как {profile.email ?? profile.uid ?? "пользователь"}. Откройте
-                  полный калькулятор на сайте.
-                </p>
+                <>
+                  <p style={{ margin: "0 0 10px", fontWeight: 700, color: "#0f172a" }}>
+                    Вы вошли через Telegram
+                  </p>
+                  <ul
+                    style={{
+                      margin: "0 0 12px",
+                      paddingLeft: 18,
+                      fontSize: 14,
+                      color: "#475569",
+                    }}
+                  >
+                    {profile.email ? <li>Email: {profile.email}</li> : null}
+                    <li>План: {profile.plan ?? "—"}</li>
+                    <li>Оплата: {profile.hasPaid ? "да" : "нет"}</li>
+                  </ul>
+                </>
               ) : null}
               {authUi === "need_registration" ? (
                 <p style={{ margin: "0 0 12px" }}>

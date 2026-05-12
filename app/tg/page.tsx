@@ -3,11 +3,9 @@
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
-import {
-  authTelegramMiniApp,
-  type TelegramMiniAppProfile,
-} from "@/lib/telegramMiniAppAuth";
+import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -125,30 +123,45 @@ export default function TgMiniAppHomePage() {
         );
 
         const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
-        if (initData) {
-          setAuthUi("checking");
-          const ar = await authTelegramMiniApp(initData);
-          if (cancelled) return;
-          if (ar.ok && ar.profile) {
-            setProfile(ar.profile);
-            setAuthUi("profile");
-            setAuthError(null);
-          } else if (ar.ok && ar.need_registration) {
-            setAuthUi("need_registration");
-            setAuthError(null);
-          } else {
-            setAuthUi("error");
-            setAuthError(ar.error ?? "Не удалось проверить аккаунт.");
-          }
+        setAuthUi("checking");
+        const resolved = await ensureTelegramMiniAppProfile(initData || null);
+        if (cancelled) return;
+        if (resolved.status === "profile") {
+          setProfile(resolved.profile);
+          setAuthUi("profile");
+          setAuthError(null);
+        } else if (resolved.status === "need_registration") {
+          setAuthUi("need_registration");
+          setAuthError(null);
+        } else if (resolved.status === "error") {
+          setAuthUi("error");
+          setAuthError(resolved.message);
         } else {
           setAuthUi("no_init");
+          setAuthError(null);
         }
       } else {
         setInTelegram(false);
         setStatus(
           "Открыто вне Telegram или скрипт не загрузился. Для Mini App откройте страницу из бота."
         );
-        setAuthUi("hidden");
+        setAuthUi("checking");
+        const resolved = await ensureTelegramMiniAppProfile(null);
+        if (cancelled) return;
+        if (resolved.status === "profile") {
+          setProfile(resolved.profile);
+          setAuthUi("profile");
+          setAuthError(null);
+        } else if (resolved.status === "need_registration") {
+          setAuthUi("need_registration");
+          setAuthError(null);
+        } else if (resolved.status === "error") {
+          setAuthUi("error");
+          setAuthError(resolved.message);
+        } else {
+          setAuthUi("hidden");
+          setAuthError(null);
+        }
       }
       setReady(true);
     })();
@@ -197,7 +210,7 @@ export default function TgMiniAppHomePage() {
           )}
         </div>
 
-        {ready && inTelegram && authUi !== "hidden" ? (
+        {ready && authUi !== "hidden" ? (
           <div style={authBox}>
             {authUi === "checking" ? (
               <p style={{ margin: 0 }}>Проверяем Telegram-аккаунт…</p>
