@@ -38,9 +38,17 @@ import {
 import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
+const ONBOARDING_STORAGE_KEY = "hvac_tg_onboarding_seen";
+const ONBOARDING_SLIDES = [
+  "Расчёт кондиционера за 1 минуту",
+  "Ничего не забудете в смете",
+  "Отправка клиенту прямо с объекта",
+] as const;
+
 const page: React.CSSProperties = {
-  minHeight: "100vh",
-  padding: "20px 16px 160px",
+  minHeight: "100dvh",
+  padding:
+    "max(12px, env(safe-area-inset-top)) 16px calc(168px + env(safe-area-inset-bottom))",
   maxWidth: 440,
   margin: "0 auto",
   fontFamily:
@@ -184,6 +192,8 @@ export default function TgCalculatorPage() {
   >([]);
   const [sendMenuOpen, setSendMenuOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const cardCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const historyLoadedRef = useRef<string | null>(null);
 
@@ -193,13 +203,14 @@ export default function TgCalculatorPage() {
     void (async () => {
       const wa = await waitForTelegramWebApp({
         intervalMs: 200,
-        maxAttempts: 10,
+        maxAttempts: 12,
       });
       if (cancelled) return;
 
       if (wa) {
         prepareTelegramMiniAppShell(wa);
         setInTelegram(true);
+        setReady(true);
         const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
         setAuthUi("checking");
         const resolved = await ensureTelegramMiniAppProfile(initData || null);
@@ -225,12 +236,15 @@ export default function TgCalculatorPage() {
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
+          setCalcPhase("ready");
         } else if (resolved.status === "error") {
           setAuthUi("error");
           setAuthError(resolved.message);
+          setCalcPhase("ready");
         } else {
           setAuthUi("no_init");
           setAuthError(null);
+          setCalcPhase("ready");
         }
       } else {
         setInTelegram(false);
@@ -263,14 +277,26 @@ export default function TgCalculatorPage() {
         } else {
           setAuthUi("no_tg");
         }
+        setReady(true);
       }
-      setReady(true);
     })();
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (inTelegram !== true || !ready) return;
+    try {
+      if (typeof localStorage === "undefined") return;
+      if (localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1") return;
+      setOnboardingStep(0);
+      setOnboardingOpen(true);
+    } catch {
+      /* */
+    }
+  }, [inTelegram, ready]);
 
   useEffect(() => {
     setSelectedExtraServices((prev) => {
@@ -364,6 +390,18 @@ export default function TgCalculatorPage() {
     [clientName, clientContact, capacity, mountType, result.items, result.total]
   );
 
+  const showCalculatorForm =
+    (inTelegram === true && ready) ||
+    (inTelegram === false &&
+      authUi === "profile" &&
+      calcPhase === "ready" &&
+      Boolean(profile));
+
+  const canOperate = useMemo(() => {
+    if (authUi !== "profile" || calcPhase !== "ready" || !profile) return false;
+    return Boolean(getMiniAppSessionToken()?.trim());
+  }, [authUi, calcPhase, profile]);
+
   useEffect(() => {
     if (calcPhase !== "ready" || authUi !== "profile") return;
     if (typeof window === "undefined") return;
@@ -423,6 +461,12 @@ export default function TgCalculatorPage() {
   async function onSave() {
     if (saveBusy) return;
     tgHapticButtonTap();
+    if (!canOperate) {
+      tgHapticNotification("error");
+      setSaveToast("Войдите в аккаунт Mini App, чтобы сохранять расчёты");
+      window.setTimeout(() => setSaveToast(null), 4000);
+      return;
+    }
     setSaveBusy(true);
     setSaveToast(null);
     const payload: Record<string, unknown> = {
@@ -488,6 +532,11 @@ export default function TgCalculatorPage() {
 
   async function downloadQuotePdf() {
     tgHapticButtonTap();
+    if (!canOperate) {
+      tgHapticNotification("error");
+      setSaveToast("Нет сессии для PDF");
+      return;
+    }
     const token = getMiniAppSessionToken();
     if (!token?.trim()) {
       tgHapticNotification("error");
@@ -576,8 +625,23 @@ export default function TgCalculatorPage() {
     tgHapticNotification("success");
   }
 
-  const showCalc =
-    authUi === "profile" && calcPhase === "ready" && profile;
+  function scrollToTotalBlock() {
+    tgHapticButtonTap();
+    document.getElementById("tg-calc-total-anchor")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
+  function finishOnboarding() {
+    tgHapticButtonTap();
+    try {
+      localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    } catch {
+      /* */
+    }
+    setOnboardingOpen(false);
+  }
 
   return (
     <>
@@ -589,35 +653,72 @@ export default function TgCalculatorPage() {
         }}
       />
       <div style={page}>
-        <h1 style={title}>Калькулятор монтажника</h1>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
+          <h1 style={{ ...title, margin: 0, flex: 1, minWidth: 0 }}>Калькулятор монтажника</h1>
+          {ready ? (
+            <Link
+              href="/tg/history"
+              onClick={() => tgHapticButtonTap()}
+              style={{
+                flexShrink: 0,
+                padding: "10px 14px",
+                borderRadius: 12,
+                background: "#fff",
+                border: "1px solid #e2e8f0",
+                color: "#0f172a",
+                fontSize: 14,
+                fontWeight: 700,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              История
+            </Link>
+          ) : null}
+        </div>
 
         {!ready ? (
           <p style={text}>Проверка окружения…</p>
         ) : (
           <>
-            <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 8px" }}>
-              {inTelegram === true
-                ? "Telegram Mini App"
-                : inTelegram === false
-                  ? "Браузер"
-                  : "…"}
-            </p>
+            {inTelegram === false ? (
+              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 8px" }}>Браузер</p>
+            ) : null}
 
-            {authUi === "checking" || calcPhase === "loading_context" ? (
+            {inTelegram === true &&
+            (authUi === "checking" || calcPhase === "loading_context") ? (
+              <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 10px" }}>
+                Синхронизация с аккаунтом…
+              </p>
+            ) : null}
+
+            {inTelegram === false &&
+            (authUi === "checking" || calcPhase === "loading_context") ? (
               <div style={card}>
                 <p style={{ margin: 0 }}>Загрузка…</p>
               </div>
             ) : null}
 
             {authUi === "profile" && calcPhase === "context_error" ? (
-              <div style={card}>
+              <div style={{ ...card, marginBottom: 12 }}>
                 <p style={{ margin: 0, color: "#b91c1c" }}>
                   {contextError ?? "Не удалось загрузить прайс"}
                 </p>
               </div>
             ) : null}
 
-            {authUi === "profile" && profile && calcPhase === "ready" ? (
+            {inTelegram === false &&
+            authUi === "profile" &&
+            profile &&
+            calcPhase === "ready" ? (
               <div style={card}>
                 <p style={{ margin: "0 0 10px", fontWeight: 700, color: "#0f172a" }}>
                   Вы вошли через Telegram
@@ -637,7 +738,34 @@ export default function TgCalculatorPage() {
               </div>
             ) : null}
 
-            {authUi === "need_registration" ? (
+            {inTelegram === true && authUi === "need_registration" ? (
+              <div
+                style={{
+                  ...card,
+                  marginBottom: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <p style={{ margin: 0, fontSize: 14 }}>
+                  Подключите Telegram к профилю HVAC-SaaS — подтянем ваш прайс и сохранение расчётов.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Link href="/login" style={{ ...btn, flex: 1, padding: "12px", fontSize: 15 }}>
+                    Войти
+                  </Link>
+                  <Link
+                    href="/register"
+                    style={{ ...btnSecondary, flex: 1, padding: "12px", fontSize: 15, marginTop: 0 }}
+                  >
+                    Регистрация
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            {inTelegram === false && authUi === "need_registration" ? (
               <div style={card}>
                 <p style={{ margin: "0 0 12px" }}>
                   Свяжите Telegram с профилем HVAC-SaaS, чтобы пользоваться калькулятором с вашим
@@ -653,20 +781,20 @@ export default function TgCalculatorPage() {
             ) : null}
 
             {authUi === "error" && authError ? (
-              <div style={card}>
+              <div style={{ ...card, marginBottom: 12 }}>
                 <p style={{ margin: 0, color: "#b91c1c" }}>{authError}</p>
               </div>
             ) : null}
 
             {authUi === "no_init" ? (
-              <div style={card}>
+              <div style={{ ...card, marginBottom: 12 }}>
                 <p style={{ margin: 0, color: "#64748b" }}>
                   Нет initData — откройте страницу из бота или войдите с сохранённой сессией.
                 </p>
               </div>
             ) : null}
 
-            {showCalc ? (
+            {showCalculatorForm ? (
               <>
                 <div style={card}>
                   <span style={label}>Мощность, кВт</span>
@@ -1004,7 +1132,10 @@ export default function TgCalculatorPage() {
                   />
                 </div>
 
-                <div style={{ ...card, background: "#0f172a", color: "#fff" }}>
+                <div
+                  id="tg-calc-total-anchor"
+                  style={{ ...card, background: "#0f172a", color: "#fff" }}
+                >
                   <div style={{ fontSize: 18, fontWeight: 800 }}>
                     Итого: {formatRubles(result.total)}
                   </div>
@@ -1096,13 +1227,11 @@ export default function TgCalculatorPage() {
                 <Link href="/calculator" style={{ ...btnSecondary, marginBottom: 24 }}>
                   Открыть полный калькулятор
                 </Link>
-                <Link href="/tg/history" style={{ ...btnSecondary, marginBottom: 8 }}>
-                  Сохранённые расчёты
-                </Link>
               </>
             ) : null}
 
-            {authUi !== "profile" || calcPhase !== "ready" ? (
+            {inTelegram !== true &&
+            (authUi !== "profile" || calcPhase !== "ready") ? (
               <>
                 {(authUi === "no_tg" || authUi === "no_init" || authUi === "error") && (
                   <Link href="/calculator" style={btn}>
@@ -1114,7 +1243,7 @@ export default function TgCalculatorPage() {
           </>
         )}
 
-        {showCalc ? (
+        {showCalculatorForm ? (
           <div
             style={{
               position: "fixed",
@@ -1125,6 +1254,8 @@ export default function TgCalculatorPage() {
               paddingBottom: "max(12px, env(safe-area-inset-bottom))",
               paddingTop: 10,
               background: "rgba(248,250,252,0.97)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
               borderTop: "1px solid #e2e8f0",
               boxShadow: "0 -8px 24px rgba(15,23,42,0.08)",
             }}
@@ -1144,14 +1275,19 @@ export default function TgCalculatorPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: 8,
                 }}
               >
                 <button
                   type="button"
-                  style={{ ...btn, padding: "12px 8px", fontSize: 14 }}
-                  disabled={saveBusy}
+                  style={{
+                    ...btn,
+                    padding: "12px 8px",
+                    fontSize: 14,
+                    opacity: canOperate ? 1 : 0.45,
+                  }}
+                  disabled={saveBusy || !canOperate}
                   onClick={() => void onSave()}
                 >
                   {saveBusy ? "…" : "Сохранить"}
@@ -1168,11 +1304,23 @@ export default function TgCalculatorPage() {
                 </button>
                 <button
                   type="button"
-                  style={{ ...btn, padding: "12px 8px", fontSize: 14 }}
-                  disabled={pdfBusy}
+                  style={{
+                    ...btn,
+                    padding: "12px 8px",
+                    fontSize: 14,
+                    opacity: canOperate ? 1 : 0.45,
+                  }}
+                  disabled={pdfBusy || !canOperate}
                   onClick={() => void downloadQuotePdf()}
                 >
                   {pdfBusy ? "…" : "PDF"}
+                </button>
+                <button
+                  type="button"
+                  style={{ ...btnSecondary, padding: "12px 8px", fontSize: 14, marginTop: 0 }}
+                  onClick={scrollToTotalBlock}
+                >
+                  Итог
                 </button>
               </div>
               {sendMenuOpen ? (
@@ -1212,6 +1360,67 @@ export default function TgCalculatorPage() {
           </div>
         ) : null}
       </div>
+
+      {onboardingOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 120,
+            background: "rgba(15,23,42,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding:
+              "max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom))",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 360,
+              background: "#fff",
+              borderRadius: 20,
+              padding: "28px 22px 22px",
+              boxShadow: "0 20px 60px rgba(15,23,42,0.25)",
+              textAlign: "center",
+              boxSizing: "border-box",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 8px",
+                fontSize: 22,
+                fontWeight: 800,
+                lineHeight: 1.25,
+                color: "#0f172a",
+              }}
+            >
+              {ONBOARDING_SLIDES[onboardingStep]}
+            </p>
+            <p style={{ margin: "0 0 22px", fontSize: 14, color: "#64748b" }}>
+              {onboardingStep + 1} / {ONBOARDING_SLIDES.length}
+            </p>
+            {onboardingStep < ONBOARDING_SLIDES.length - 1 ? (
+              <button
+                type="button"
+                style={btn}
+                onClick={() => {
+                  tgHapticButtonTap();
+                  setOnboardingStep((s) => s + 1);
+                }}
+              >
+                Далее
+              </button>
+            ) : (
+              <button type="button" style={btn} onClick={finishOnboarding}>
+                Начать
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
