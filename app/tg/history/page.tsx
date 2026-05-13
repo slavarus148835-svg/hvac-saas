@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { formatCapacityBtu } from "@/lib/calculator";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { CONFIRM_DELETE_CALCULATION_MESSAGE } from "@/lib/calculationHistoryShared";
 import {
   deleteMiniAppCalculation,
   fetchMiniAppHistoryList,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/telegramMiniAppCalculatorApi";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -75,33 +77,53 @@ function mountLabel(m: string) {
 
 export default function TgHistoryPage() {
   const [ready, setReady] = useState(false);
+  const [inTelegram, setInTelegram] = useState(false);
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
-  const [authUi, setAuthUi] = useState<"checking" | "profile" | "need" | "error" | "no">(
-    "checking"
-  );
+  const [authUi, setAuthUi] = useState<
+    "checking" | "profile" | "need" | "need_email_linking" | "error" | "no_init" | "no_tg"
+  >("checking");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [emailLinkInitData, setEmailLinkInitData] = useState("");
   const [items, setItems] = useState<MiniAppHistoryListItem[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const loadHistoryList = async () => {
+    const h = await fetchMiniAppHistoryList();
+    if (h.ok) {
+      setItems(h.items);
+      setListError(null);
+    } else {
+      setListError(h.error);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const wa = await waitForTelegramWebApp({ intervalMs: 200, maxAttempts: 10 });
-      if (wa) prepareTelegramMiniAppShell(wa);
+      const tg = Boolean(wa);
+      if (wa) {
+        prepareTelegramMiniAppShell(wa);
+        setInTelegram(true);
+      } else {
+        setInTelegram(false);
+      }
       const initData = typeof wa?.initData === "string" ? wa.initData.trim() : "";
       const resolved = await ensureTelegramMiniAppProfile(initData || null);
       if (cancelled) return;
       if (resolved.status === "profile") {
         setProfile(resolved.profile);
         setAuthUi("profile");
-        const h = await fetchMiniAppHistoryList();
-        if (h.ok) {
-          setItems(h.items);
-          setListError(null);
+        if (!cancelled) await loadHistoryList();
+      } else if (resolved.status === "need_email_linking") {
+        if (resolved.initData) {
+          setAuthUi("need_email_linking");
+          setEmailLinkInitData(resolved.initData);
         } else {
-          setListError(h.error);
+          setAuthUi("need");
+          setEmailLinkInitData("");
         }
       } else if (resolved.status === "need_registration") {
         setAuthUi("need");
@@ -109,21 +131,7 @@ export default function TgHistoryPage() {
         setAuthUi("error");
         setAuthError(resolved.message);
       } else {
-        const r2 = await ensureTelegramMiniAppProfile(null);
-        if (cancelled) return;
-        if (r2.status === "profile") {
-          setProfile(r2.profile);
-          setAuthUi("profile");
-          const h = await fetchMiniAppHistoryList();
-          if (h.ok) {
-            setItems(h.items);
-            setListError(null);
-          } else {
-            setListError(h.error);
-          }
-        } else {
-          setAuthUi("no");
-        }
+        setAuthUi(tg ? "no_init" : "no_tg");
       }
       setReady(true);
     })();
@@ -154,9 +162,30 @@ export default function TgHistoryPage() {
               padding: 16,
             }}
           >
-            {authUi === "need" ? (
+            {authUi === "need_email_linking" && inTelegram && emailLinkInitData ? (
               <>
-                <p style={{ margin: "0 0 16px" }}>Войдите в аккаунт HVAC-SaaS.</p>
+                <TgMiniAppEmailLink
+                  initData={emailLinkInitData}
+                  onLinked={async (p) => {
+                    setProfile(p);
+                    setAuthUi("profile");
+                    setAuthError(null);
+                    await loadHistoryList();
+                  }}
+                />
+                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
+                  Нет аккаунта?{" "}
+                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                    Регистрация на сайте
+                  </Link>
+                </p>
+              </>
+            ) : null}
+            {authUi === "need" && inTelegram ? (
+              <>
+                <p style={{ margin: "0 0 16px" }}>
+                  Подключите Telegram к профилю HVAC-SaaS — тогда здесь появятся сохранённые расчёты.
+                </p>
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
@@ -165,11 +194,39 @@ export default function TgHistoryPage() {
                 </Link>
               </>
             ) : null}
+            {!inTelegram && (authUi === "need" || authUi === "need_email_linking") ? (
+              <>
+                <p style={{ margin: "0 0 12px" }}>
+                  Свяжите Telegram с профилем HVAC-SaaS, чтобы видеть историю расчётов в Mini App.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={btnSecondary}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
             {authUi === "error" && authError ? (
               <p style={{ color: "#b91c1c", margin: 0 }}>{authError}</p>
             ) : null}
-            {authUi === "no" ? (
-              <p style={{ margin: 0, color: "#64748b" }}>Нет сессии Mini App.</p>
+            {authUi === "no_init" ? (
+              <p style={{ margin: 0, color: "#64748b" }}>
+                Нет initData — откройте Mini App из бота или войдите с сохранённой сессией.
+              </p>
+            ) : null}
+            {authUi === "no_tg" ? (
+              <>
+                <p style={{ margin: "0 0 12px", color: "#64748b" }}>
+                  Нет сессии Mini App. Войдите на сайте или откройте приложение из бота.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={btnSecondary}>
+                  Регистрация
+                </Link>
+              </>
             ) : null}
           </div>
         ) : (
@@ -242,7 +299,7 @@ export default function TgHistoryPage() {
                     }}
                     disabled={deletingId !== null}
                     onClick={() => {
-                      if (!window.confirm("Удалить этот расчёт?")) return;
+                      if (!window.confirm(CONFIRM_DELETE_CALCULATION_MESSAGE)) return;
                       setDeleteError(null);
                       setDeletingId(row.id);
                       void (async () => {

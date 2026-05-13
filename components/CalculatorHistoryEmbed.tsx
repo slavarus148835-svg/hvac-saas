@@ -3,15 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import {
+  CONFIRM_DELETE_CALCULATION_MESSAGE,
+  deleteCalculationHistoryDocument,
+} from "@/lib/calculationHistoryShared";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 
 type SavedCalculation = {
@@ -116,14 +113,11 @@ export default function CalculatorHistoryEmbed() {
   }, [items, search]);
 
   const handleDelete = async (id: string) => {
-    const ok = window.confirm("Удалить этот расчёт?");
-    if (!ok) return;
+    if (!window.confirm(CONFIRM_DELETE_CALCULATION_MESSAGE)) return;
 
-    try {
-      await deleteDoc(doc(db, "calculationHistory", id));
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      alert("Не удалось удалить расчёт. " + msg);
+    const r = await deleteCalculationHistoryDocument(db, id);
+    if (!r.ok) {
+      alert("Не удалось удалить расчёт. " + r.error);
     }
   };
 

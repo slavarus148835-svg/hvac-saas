@@ -246,7 +246,7 @@ function CalculatorPage() {
 
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
-  const [editableTailText, setEditableTailText] = useState(buildCalculatorClosingText(""));
+  const [editableTailText, setEditableTailText] = useState(buildCalculatorClosingText());
 
   const [selectedExtraServices, setSelectedExtraServices] =
     useState<SelectedExtraServiceMap>({});
@@ -436,7 +436,7 @@ function CalculatorPage() {
             setClientName(data.clientName || "");
             setClientContact(data.clientContact || "");
             setEditableTailText(
-              data.editableTailText || buildCalculatorClosingText(data.clientName || "")
+              data.editableTailText || buildCalculatorClosingText()
             );
 
             if (data.selectedExtraServices) {
@@ -814,9 +814,9 @@ function CalculatorPage() {
 
   useEffect(() => {
     if (!openedFromHistoryRef.current && !editableTailText.trim()) {
-      setEditableTailText(buildCalculatorClosingText(clientName));
+      setEditableTailText(buildCalculatorClosingText());
     }
-  }, [clientName, editableTailText]);
+  }, [editableTailText]);
 
   useEffect(() => {
     if (!uid) return;
@@ -1906,7 +1906,6 @@ function CalculatorPage() {
             >
               <span style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>{item.title}</span>
               <span style={calcBreakdownAmountStyle}>
-                {item.amount < 0 ? "−" : ""}
                 {fmt(Math.abs(item.amount))}
               </span>
             </div>

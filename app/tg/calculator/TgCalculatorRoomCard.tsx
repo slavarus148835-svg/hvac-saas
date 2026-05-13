@@ -437,7 +437,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
               checked={draft.buyAcAndRouteFromUs}
               onChange={(e) => onPatch({ buyAcAndRouteFromUs: e.target.checked })}
             />
-            <span>Скидка при покупке кондиционера и трассы у нас (−1000 ₽)</span>
+            <span>Скидка при покупке кондиционера и трассы у нас (1000 ₽)</span>
           </label>
 
           {customServices.length > 0 ? (

@@ -4,6 +4,8 @@ import Link from "next/link";
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
+import { auth } from "@/lib/firebase";
+import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
 import {
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
@@ -53,6 +55,7 @@ import {
 import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import type { MiniAppCalculatorTextSettings } from "@/lib/telegramMiniAppCalculatorApi";
 
 const ONBOARDING_STORAGE_KEY = "hvac_tg_onboarding_seen";
@@ -173,6 +176,7 @@ type AuthUi =
   | "checking"
   | "profile"
   | "need_registration"
+  | "need_email_linking"
   | "error"
   | "no_tg"
   | "no_init";
@@ -185,6 +189,7 @@ export default function TgCalculatorPage() {
   const [authUi, setAuthUi] = useState<AuthUi>("idle");
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [emailLinkInitData, setEmailLinkInitData] = useState("");
 
   const [calcPhase, setCalcPhase] = useState<CalcPhase>("idle");
   const [contextError, setContextError] = useState<string | null>(null);
@@ -301,6 +306,16 @@ export default function TgCalculatorPage() {
             setCalcPhase("context_error");
             setContextError(ctx.error);
           }
+        } else if (resolved.status === "need_email_linking") {
+          if (resolved.initData) {
+            setAuthUi("need_email_linking");
+            setEmailLinkInitData(resolved.initData);
+          } else {
+            setAuthUi("need_registration");
+            setEmailLinkInitData("");
+          }
+          setAuthError(null);
+          setCalcPhase("ready");
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
@@ -338,6 +353,14 @@ export default function TgCalculatorPage() {
             setCalcPhase("context_error");
             setContextError(ctx.error);
           }
+        } else if (resolved.status === "need_email_linking") {
+          if (resolved.initData) {
+            setAuthUi("need_email_linking");
+            setEmailLinkInitData(resolved.initData);
+          } else {
+            setAuthUi("need_registration");
+            setEmailLinkInitData("");
+          }
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
         } else if (resolved.status === "error") {
@@ -354,6 +377,22 @@ export default function TgCalculatorPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (authUi !== "profile" || !profile?.uid) return;
+    const uid = profile.uid;
+    void tryAttachPartnerManagerFromStorage(
+      uid,
+      async () => {
+        const m = getMiniAppSessionToken();
+        if (m?.trim()) return m.trim();
+        const u = auth.currentUser;
+        if (!u) return "";
+        return u.getIdToken();
+      },
+      "telegram_miniapp"
+    );
+  }, [authUi, profile?.uid]);
 
   useEffect(() => {
     if (inTelegram !== true || !ready) return;
@@ -504,10 +543,7 @@ export default function TgCalculatorPage() {
         })
       ),
     }));
-    return computeMultiRoomEstimate(prices, rooms, percentDiscount, formatRubles, {
-      clientName,
-      clientContact,
-    });
+    return computeMultiRoomEstimate(prices, rooms, percentDiscount, formatRubles);
   }, [
     multiRoomEnabled,
     roomDrafts,
@@ -516,8 +552,6 @@ export default function TgCalculatorPage() {
     giftRouteMeters,
     models,
     customServices,
-    clientName,
-    clientContact,
   ]);
 
   const displayResult = useMemo(() => {
@@ -1030,6 +1064,14 @@ export default function TgCalculatorPage() {
     });
   }
 
+  function scrollToSendBlock() {
+    tgHapticButtonTap();
+    document.getElementById("tg-calc-send-anchor")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
   function finishOnboarding() {
     tgHapticButtonTap();
     try {
@@ -1159,6 +1201,39 @@ export default function TgCalculatorPage() {
               </div>
             ) : null}
 
+            {inTelegram === true && authUi === "need_email_linking" && emailLinkInitData ? (
+              <div style={{ ...card, marginBottom: 12 }}>
+                <TgMiniAppEmailLink
+                  initData={emailLinkInitData}
+                  onLinked={async (p) => {
+                    setProfile(p);
+                    setAuthUi("profile");
+                    setAuthError(null);
+                    setCalcPhase("loading_context");
+                    const ctx = await fetchMiniAppCalculatorContext();
+                    if (ctx.ok) {
+                      setPrices(ctx.prices);
+                      setGiftRouteMeters(ctx.giftRouteMeters);
+                      setModels(ctx.models);
+                      setCustomServices(ctx.customServices);
+                      setTextSettings(ctx.textSettings);
+                      setCalcPhase("ready");
+                      setContextError(null);
+                    } else {
+                      setCalcPhase("context_error");
+                      setContextError(ctx.error);
+                    }
+                  }}
+                />
+                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
+                  Нет аккаунта?{" "}
+                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                    Регистрация на сайте
+                  </Link>
+                </p>
+              </div>
+            ) : null}
+
             {inTelegram === true && authUi === "need_registration" ? (
               <div
                 style={{
@@ -1186,7 +1261,8 @@ export default function TgCalculatorPage() {
               </div>
             ) : null}
 
-            {inTelegram === false && authUi === "need_registration" ? (
+            {inTelegram === false &&
+            (authUi === "need_registration" || authUi === "need_email_linking") ? (
               <div style={card}>
                 <p style={{ margin: "0 0 12px" }}>
                   Свяжите Telegram с профилем HVAC-SaaS, чтобы пользоваться калькулятором с вашим
@@ -1639,7 +1715,7 @@ export default function TgCalculatorPage() {
                       checked={buyAcAndRouteFromUs}
                       onChange={(e) => setBuyAcAndRouteFromUs(e.target.checked)}
                     />
-                    <span>Скидка при покупке кондиционера и трассы у нас (−1000 ₽)</span>
+                    <span>Скидка при покупке кондиционера и трассы у нас (1000 ₽)</span>
                   </label>
                 </div>
 
@@ -1790,7 +1866,6 @@ export default function TgCalculatorPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
                     {displayResult.items.map((i, idx) => {
                       const title = mapMiniAppQuoteItemTitle(i.title);
-                      const sign = i.amount < 0 ? "−" : "";
                       return (
                         <div
                           key={`line-${idx}`}
@@ -1804,7 +1879,6 @@ export default function TgCalculatorPage() {
                         >
                           <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
                           <span style={{ flexShrink: 0, fontWeight: 700 }}>
-                            {sign}
                             {formatAmountRu(Math.abs(i.amount))} ₽
                           </span>
                         </div>
@@ -1867,8 +1941,9 @@ export default function TgCalculatorPage() {
                       lineHeight: 1.45,
                     }}
                   />
-                  <p style={{ margin: "0 0 12px", fontWeight: 700 }}>Отправить клиенту</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div id="tg-calc-send-anchor">
+                    <p style={{ margin: "0 0 12px", fontWeight: 700 }}>Отправить клиенту</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <button
                       type="button"
                       style={{ ...btn, padding: "14px", fontSize: 15 }}
@@ -1908,6 +1983,7 @@ export default function TgCalculatorPage() {
                     >
                       Копировать
                     </button>
+                  </div>
                   </div>
                 </div>
 
@@ -1962,7 +2038,7 @@ export default function TgCalculatorPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr 1fr",
                   gap: 8,
                 }}
               >
@@ -1970,8 +2046,8 @@ export default function TgCalculatorPage() {
                   type="button"
                   style={{
                     ...btn,
-                    padding: "12px 8px",
-                    fontSize: 14,
+                    padding: "12px 6px",
+                    fontSize: 13,
                     opacity: canOperate ? 1 : 0.45,
                   }}
                   disabled={saveBusy || !canOperate}
@@ -1981,7 +2057,14 @@ export default function TgCalculatorPage() {
                 </button>
                 <button
                   type="button"
-                  style={{ ...btnSecondary, padding: "12px 8px", fontSize: 14, marginTop: 0 }}
+                  style={{ ...btnSecondary, padding: "12px 6px", fontSize: 13, marginTop: 0 }}
+                  onClick={scrollToSendBlock}
+                >
+                  Отправить
+                </button>
+                <button
+                  type="button"
+                  style={{ ...btnSecondary, padding: "12px 6px", fontSize: 13, marginTop: 0 }}
                   onClick={scrollToTotalBlock}
                 >
                   Итог

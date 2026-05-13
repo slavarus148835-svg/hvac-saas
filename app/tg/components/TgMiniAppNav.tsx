@@ -10,7 +10,6 @@ const ITEMS = [
   { href: "/tg/history", label: "История" },
   { href: "/tg/price", label: "Прайс" },
   { href: "/tg/models", label: "Модели кондиционеров" },
-  { href: "/tg/settings", label: "Настройки" },
   { href: "/tg/cabinet", label: "Кабинет" },
 ] as const;
 

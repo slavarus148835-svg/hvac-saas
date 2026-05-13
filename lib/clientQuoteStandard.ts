@@ -17,7 +17,9 @@ export type ClientQuoteRoomBlock = {
 };
 
 /**
- * Основной блок сообщения клиенту: приветствие, позиции с суммами, итого, опционально контакты, блок про материалы.
+ * Основной блок сообщения клиенту: приветствие, позиции с суммами, итого, блок про материалы.
+ * Имя и контакт клиента в текст не включаются (WhatsApp / Telegram / копирование).
+ * Поля clientName / clientContact оставлены для совместимости вызовов и игнорируются.
  * Примечания к позициям (технические) не включаются.
  */
 export function buildStructuredClientQuoteMessage(params: {
@@ -29,21 +31,17 @@ export function buildStructuredClientQuoteMessage(params: {
 }): string {
   const fmtNum = (n: number) => formatAmountRu(Math.abs(n));
   const map = params.mapTitle ?? ((t: string) => t);
-  const name = (params.clientName ?? "").trim();
-  const contact = (params.clientContact ?? "").trim();
+  void params.clientName;
+  void params.clientContact;
 
   const lines: string[] = [CLIENT_QUOTE_GREETING, ""];
 
   for (const it of params.items) {
     const title = map(it.title);
-    const sign = it.amount < 0 ? "−" : "";
-    lines.push(`• ${title} — ${sign}${fmtNum(it.amount)} ₽`);
+    lines.push(`• ${title} — ${fmtNum(it.amount)} ₽`);
   }
 
   lines.push("", `Итого: ${fmtNum(params.total)} ₽`);
-
-  if (name) lines.push("", `Клиент: ${name}`);
-  if (contact) lines.push(`Контакт: ${contact}`);
 
   lines.push("", CLIENT_QUOTE_MATERIALS_BLOCK);
 
@@ -52,6 +50,7 @@ export function buildStructuredClientQuoteMessage(params: {
 
 /**
  * Смета по нескольким комнатам: заголовок комнаты, позиции, итого по комнате; затем общий итог и блок про материалы.
+ * Имя и контакт клиента в текст не включаются.
  */
 export function buildMultiRoomClientQuoteMessage(params: {
   rooms: ClientQuoteRoomBlock[];
@@ -63,8 +62,8 @@ export function buildMultiRoomClientQuoteMessage(params: {
 }): string {
   const fmtNum = (n: number) => formatAmountRu(Math.abs(n));
   const map = params.mapTitle ?? ((t: string) => t);
-  const name = (params.clientName ?? "").trim();
-  const contact = (params.clientContact ?? "").trim();
+  void params.clientName;
+  void params.clientContact;
 
   const lines: string[] = [CLIENT_QUOTE_GREETING, ""];
 
@@ -73,22 +72,17 @@ export function buildMultiRoomClientQuoteMessage(params: {
     lines.push(`${label}:`, "");
     for (const it of room.items) {
       const title = map(it.title);
-      const sign = it.amount < 0 ? "−" : "";
-      lines.push(`• ${title} — ${sign}${fmtNum(it.amount)} ₽`);
+      lines.push(`• ${title} — ${fmtNum(it.amount)} ₽`);
     }
     lines.push("", `Итого по комнате: ${fmtNum(room.subtotal)} ₽`, "");
   }
 
   if (params.discountLine && params.discountLine.amount !== 0) {
     const t = map(params.discountLine.title);
-    const sign = params.discountLine.amount < 0 ? "−" : "";
-    lines.push(`• ${t} — ${sign}${fmtNum(params.discountLine.amount)} ₽`, "");
+    lines.push(`• ${t} — ${fmtNum(params.discountLine.amount)} ₽`, "");
   }
 
   lines.push(`Итого по всем комнатам: ${fmtNum(params.total)} ₽`);
-
-  if (name) lines.push("", `Клиент: ${name}`);
-  if (contact) lines.push(`Контакт: ${contact}`);
 
   lines.push("", CLIENT_QUOTE_MATERIALS_BLOCK);
 

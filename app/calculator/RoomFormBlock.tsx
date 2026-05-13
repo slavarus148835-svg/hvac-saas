@@ -531,7 +531,7 @@ export function RoomFormBlock({
       </Label>
 
       <Check
-        label="Клиент покупает кондиционер и трассу у вас (−1000 ₽)"
+        label="Клиент покупает кондиционер и трассу у вас (1000 ₽)"
         checked={draft.buyAcAndRouteFromUs}
         onChange={(v) => onPatch({ buyAcAndRouteFromUs: v })}
       />
