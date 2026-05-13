@@ -206,6 +206,7 @@ export async function POST(req: Request) {
           amount: paymentOrder.amount,
           paidUntil: newPaidUntil,
           confirmedAt: new Date().toISOString(),
+          source: "webhook",
         },
         updatedAt: new Date().toISOString(),
       },

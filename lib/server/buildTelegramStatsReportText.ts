@@ -1,22 +1,22 @@
-import type { StatsReport, StatsReportPeriod } from "@/lib/server/getStatsReport";
-
-function periodTitleRu(period: StatsReportPeriod): string {
-  if (period === "today") return "📊 Отчёт за сегодня";
-  if (period === "yesterday") return "📊 Отчёт за вчера";
-  if (period === "week") return "📊 Отчёт за неделю";
-  return "📊 Отчёт за месяц";
-}
+import {
+  type StatsReport,
+  type StatsReportPeriod,
+  statsReportPeriodSuffixRu,
+  statsReportPeriodTitleRu,
+} from "@/lib/server/getStatsReport";
 
 export function buildTelegramStatsReportText(
   period: StatsReportPeriod,
   stats: StatsReport
 ): string {
-  const { registrations, paid, conversion } = stats;
+  const { registrations, paid, conversion, activePaidAccess } = stats;
+  const suf = statsReportPeriodSuffixRu(period);
   return [
-    periodTitleRu(period),
+    statsReportPeriodTitleRu(period),
     "",
-    `👥 Регистрации: ${registrations}`,
-    `💰 Оплатили: ${paid}`,
-    `📈 Конверсия: ${conversion}%`,
+    `👥 Регистрации ${suf}: ${registrations}`,
+    `💰 Оплаты ${suf}: ${paid}`,
+    `🔓 Имеют доступ (сейчас): ${activePaidAccess}`,
+    `📈 Конверсия ${suf}: ${conversion}%`,
   ].join("\n");
 }

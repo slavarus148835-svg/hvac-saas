@@ -2,8 +2,11 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
 import {
-  getPaidEventMsForStats,
+  getConfirmedBankPaymentEventMs,
   isPaidUserForStatsTotals,
+  MONTHLY_SUBSCRIPTION_PRICE_RUB,
+  userHasActiveConfirmedBankSubscription,
+  userHasConfirmedBankPayment,
   type UserRecord,
 } from "@/lib/server/statsPaidUser";
 
@@ -16,13 +19,24 @@ export type FunnelStats = {
   totalUsers: number;
   usersWithCalculation: number;
   endedTrialUsers: number;
+  /** Подтверждённые оплаты Т-Банка (см. `userHasConfirmedBankPayment`). */
   paidUsers: number;
+  /** Широкий «платный доступ» (`isPaidUserForStatsTotals`). */
+  accessPaidUsers: number;
+  /** Среди пользователей с истёкшим триалом — с подтверждённой банковской оплатой. */
+  endedTrialConfirmedBankPaidUsers: number;
+  /** Активные подписки: банк + paidUntil в будущем (без legacy/debug-доступа). */
+  activeConfirmedBankSubscriptions: number;
+  /** MRR ≈ активные подписки × фиксированная цена месяца (₽). */
+  mrrRub: number;
+  /** ARPU = MRR / активные подписки; при 0 подписок — 0. */
+  arpuRub: number;
   conversionSignupToCalc: number;
-  conversionCalcToTrialEnd: number;
   conversionTrialEndToPaid: number;
   last7Days: {
     newUsers: number;
     usersWithCalculation: number;
+    /** Подтверждённые оплаты Т-Банка за 7 дней по дате события. */
     paidUsers: number;
   };
 };
@@ -59,8 +73,12 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
       usersWithCalculation: 0,
       endedTrialUsers: 0,
       paidUsers: 0,
+      accessPaidUsers: 0,
+      endedTrialConfirmedBankPaidUsers: 0,
+      activeConfirmedBankSubscriptions: 0,
+      mrrRub: 0,
+      arpuRub: 0,
       conversionSignupToCalc: 0,
-      conversionCalcToTrialEnd: 0,
       conversionTrialEndToPaid: 0,
       last7Days: {
         newUsers: 0,
@@ -100,6 +118,9 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
   let totalUsers = 0;
   let endedTrialUsers = 0;
   let paidUsers = 0;
+  let accessPaidUsers = 0;
+  let endedTrialConfirmedBankPaidUsers = 0;
+  let activeConfirmedBankSubscriptions = 0;
   let newUsers7d = 0;
   let paidUsers7d = 0;
 
@@ -110,14 +131,21 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
     if (createdAtMs >= sinceMs) newUsers7d++;
 
     if (isPaidUserForStatsTotals(user, nowMs)) {
+      accessPaidUsers++;
+    }
+    if (userHasConfirmedBankPayment(user)) {
       paidUsers++;
-      const paidAtMs = getPaidEventMsForStats(user);
+      const paidAtMs = getConfirmedBankPaymentEventMs(user);
       if (paidAtMs >= sinceMs && paidAtMs <= nowMs) paidUsers7d++;
+    }
+    if (userHasActiveConfirmedBankSubscription(user, nowMs)) {
+      activeConfirmedBankSubscriptions++;
     }
 
     const trialStartMs = resolveTrialStartMs(user);
     if (trialStartMs > 0 && trialStartMs + TRIAL_MS <= nowMs) {
       endedTrialUsers++;
+      if (userHasConfirmedBankPayment(user)) endedTrialConfirmedBankPaidUsers++;
     }
 
     bumpEarliestCalculationMs(firstCalculationAtMsByUser, uid, firestoreTimeToMs(user.firstCalculationAt));
@@ -129,14 +157,22 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
     if (calcMs >= sinceMs) usersWithCalculation7d++;
   }
 
+  const mrrRub = activeConfirmedBankSubscriptions * MONTHLY_SUBSCRIPTION_PRICE_RUB;
+  const arpuRub =
+    activeConfirmedBankSubscriptions === 0 ? 0 : mrrRub / activeConfirmedBankSubscriptions;
+
   return {
     totalUsers,
     usersWithCalculation,
     endedTrialUsers,
     paidUsers,
+    accessPaidUsers,
+    endedTrialConfirmedBankPaidUsers,
+    activeConfirmedBankSubscriptions,
+    mrrRub,
+    arpuRub,
     conversionSignupToCalc: percent(usersWithCalculation, totalUsers),
-    conversionCalcToTrialEnd: percent(endedTrialUsers, usersWithCalculation),
-    conversionTrialEndToPaid: percent(paidUsers, endedTrialUsers),
+    conversionTrialEndToPaid: percent(endedTrialConfirmedBankPaidUsers, endedTrialUsers),
     last7Days: {
       newUsers: newUsers7d,
       usersWithCalculation: usersWithCalculation7d,
@@ -148,21 +184,16 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
 export function buildFunnelTelegramBlock(stats: FunnelStats): string {
   const p = (n: number) => n.toFixed(2);
   return [
-    "📊 Воронка",
+    "📊 Воронка — всего по базе",
     `• Всего пользователей: ${stats.totalUsers}`,
     `• Сделали расчёт: ${stats.usersWithCalculation}`,
     `• Дошли до конца триала: ${stats.endedTrialUsers}`,
-    `• Оплатили: ${stats.paidUsers}`,
+    `• Реально оплатили: ${stats.paidUsers}`,
+    `• Имеют доступ: ${stats.accessPaidUsers}`,
     "",
     "Конверсии:",
     `• Регистрация → Расчёт: ${p(stats.conversionSignupToCalc)}%`,
-    `• Расчёт → Конец триала: ${p(stats.conversionCalcToTrialEnd)}%`,
     `• Конец триала → Оплата: ${p(stats.conversionTrialEndToPaid)}%`,
     `• Активация: ${p(stats.conversionSignupToCalc)}% сделали первый расчёт`,
-    "",
-    "Динамика (7 дней):",
-    `• Новые пользователи: ${stats.last7Days.newUsers}`,
-    `• Сделали расчёт: ${stats.last7Days.usersWithCalculation}`,
-    `• Оплатили: ${stats.last7Days.paidUsers}`,
   ].join("\n");
 }
