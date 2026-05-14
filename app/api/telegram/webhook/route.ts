@@ -121,6 +121,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    console.log("TELEGRAM_WEBHOOK_UPDATE_RECEIVED", {
+      keys: Object.keys(update),
+      hasMessage: Boolean(update.message),
+      hasCallbackQuery: Boolean(update.callback_query),
+      textPreview: update.message?.text?.slice(0, 120) ?? null,
+      callbackData: update.callback_query?.data ?? null,
+    });
+
     const dbPartner = getAdminDb();
 
     if (update.callback_query) {
@@ -178,6 +186,13 @@ export async function POST(req: Request) {
     const textRaw = String(msg.text ?? "");
     const normalized = textRaw.trim().toLowerCase();
     const cmd0 = normalizeBotCommandToken(textRaw);
+    if (cmd0 === "/manager") {
+      console.log("TELEGRAM_MANAGER_COMMAND_RECEIVED", {
+        chatId,
+        fromId: msg.from?.id,
+        hasDb: Boolean(dbPartner),
+      });
+    }
     const sessionIdFromStart = parseStartSessionId(textRaw);
     const dbForSync = getAdminDb();
     const identity = extractTelegramIdentityFromWebhook(msg);
