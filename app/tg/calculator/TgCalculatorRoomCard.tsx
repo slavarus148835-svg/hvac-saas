@@ -4,8 +4,11 @@ import type React from "react";
 import { memo, useCallback, useState } from "react";
 import type { CalculatorRoomDraft, SelectedExtraServiceMap } from "@/lib/calculator";
 import {
+  CALCULATOR_CAPACITY_SELECT_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
   formatCapacityBtu,
   formatRubles,
+  isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -22,8 +25,6 @@ import {
   type UserCustomService,
 } from "@/lib/customServices";
 import { tgHapticButtonTap } from "@/lib/telegramHaptic";
-
-const BTU_OPTS = ["7", "9", "12", "18", "24", "30", "36"] as const;
 
 const card: React.CSSProperties = {
   background: "#fff",
@@ -188,6 +189,11 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
           />
 
           <span style={label}>Модель кондиционера</span>
+          {isCalculatorRoughInCapacity(draft.capacity) ? (
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+              При закладке трасс модель не обязательна и не попадает в смету.
+            </p>
+          ) : null}
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <select
               style={{ ...input, flex: 1, marginBottom: 0 }}
@@ -259,9 +265,16 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
           <select
             style={input}
             value={draft.capacity}
-            onChange={(e) => onPatch({ capacity: e.target.value })}
+            onChange={(e) => {
+              const v = e.target.value;
+              onPatch(
+                v === CALCULATOR_ROUGH_IN_CAPACITY
+                  ? { capacity: v, selectedAcModelIds: [] }
+                  : { capacity: v }
+              );
+            }}
           >
-            {BTU_OPTS.map((v) => (
+            {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
               <option key={v} value={v}>
                 {formatCapacityBtu(v)}
               </option>

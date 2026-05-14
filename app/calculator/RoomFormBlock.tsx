@@ -8,7 +8,10 @@ import {
 } from "@/lib/customServices";
 import type { CalculatorRoomDraft } from "@/lib/calculator/roomDraft";
 import {
+  CALCULATOR_CAPACITY_SELECT_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
   formatCapacityBtu,
+  isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -304,7 +307,14 @@ export function RoomFormBlock({
 
       {acModels.length > 0 ? (
         <div style={{ marginBottom: 16 }}>
-          <Label text="Модель кондиционера" note="Сначала выберите модель из прайса">
+          <Label
+            text="Модель кондиционера"
+            note={
+              isCalculatorRoughInCapacity(draft.capacity)
+                ? "При закладке трасс модель не обязательна и не попадает в смету"
+                : "Сначала выберите модель из прайса"
+            }
+          >
             <div className="calc-model-row" style={modelPickerRowStyle}>
               <select
                 value={modelPick}
@@ -354,13 +364,27 @@ export function RoomFormBlock({
         </div>
       ) : null}
 
-      <Label text="Мощность BTU" note="Если модель не выбрана — цена монтажа по типоразмеру">
+      <Label
+        text="Мощность BTU"
+        note={
+          isCalculatorRoughInCapacity(draft.capacity)
+            ? "Закладка трасс: базовый монтаж блока не считается; остальные позиции — как обычно"
+            : "Если модель не выбрана — цена монтажа по типоразмеру"
+        }
+      >
         <select
           value={draft.capacity}
-          onChange={(e) => onPatch({ capacity: e.target.value })}
+          onChange={(e) => {
+            const v = e.target.value;
+            onPatch(
+              v === CALCULATOR_ROUGH_IN_CAPACITY
+                ? { capacity: v, selectedAcModelIds: [] }
+                : { capacity: v }
+            );
+          }}
           style={inputStyle}
         >
-          {(["7", "9", "12", "18", "24", "30", "36"] as const).map((v) => (
+          {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
             <option key={v} value={v}>
               {formatCapacityBtu(v)}
             </option>

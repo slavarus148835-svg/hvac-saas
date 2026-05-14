@@ -20,6 +20,13 @@ export {
   formatCapacityBtu,
   formatCapacityLabel,
 } from "./capacityDisplay";
+export {
+  CALCULATOR_BTU_ONLY_OPTIONS,
+  CALCULATOR_CAPACITY_SELECT_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
+  CALCULATOR_ROUGH_IN_LABEL_RU,
+  isCalculatorRoughInCapacity,
+} from "./roughInMode";
 export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
 export { computeMultiRoomEstimate } from "./computeMultiRoomEstimate";
 export {
@@ -35,6 +42,7 @@ export { DEFAULT_CALCULATOR_PRICES } from "./defaultPrices";
 export { formatAmountRu, formatRubles } from "./format";
 export { normalizePriceDocForSplitCapacity } from "./normalizePriceDoc";
 export {
+  calculatorCapacityTierKeyForPricelist,
   capacityKey,
   chargedFloorsFromSecond,
   chargedMetersForBilling,

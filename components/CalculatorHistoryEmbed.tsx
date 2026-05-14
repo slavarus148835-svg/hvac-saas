@@ -10,6 +10,10 @@ import {
   deleteCalculationHistoryDocument,
 } from "@/lib/calculationHistoryShared";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
+import {
+  CALCULATOR_ROUGH_IN_CAPACITY,
+  CALCULATOR_ROUGH_IN_LABEL_RU,
+} from "@/lib/calculator";
 
 type SavedCalculation = {
   id: string;
@@ -99,14 +103,18 @@ export default function CalculatorHistoryEmbed() {
       const name = normalizeSearch(item.clientName || "");
       const contact = normalizeSearch(item.clientContact || "");
       const text = normalizeSearch(item.clientText || "");
-      const capacity = normalizeSearch(item.capacity || "");
+      const capNorm =
+        item.capacity === CALCULATOR_ROUGH_IN_CAPACITY
+          ? `${CALCULATOR_ROUGH_IN_CAPACITY} ${CALCULATOR_ROUGH_IN_LABEL_RU.toLowerCase()}`
+          : item.capacity || "";
+      const capacityHay = normalizeSearch(capNorm);
       const total = String(item.total || "");
 
       return (
         name.includes(q) ||
         contact.includes(q) ||
         text.includes(q) ||
-        capacity.includes(q) ||
+        capacityHay.includes(q) ||
         total.includes(q)
       );
     });
@@ -187,7 +195,10 @@ export default function CalculatorHistoryEmbed() {
                     {item.clientName?.trim()
                       ? item.clientName
                       : "Клиент без имени"}{" "}
-                    — кондиционер {item.capacity}
+                    —{" "}
+                    {item.capacity === CALCULATOR_ROUGH_IN_CAPACITY
+                      ? CALCULATOR_ROUGH_IN_LABEL_RU
+                      : `кондиционер ${item.capacity}`}
                   </div>
 
                   <div style={smallText}>

@@ -1,5 +1,6 @@
 import type { QuickCalculationExtra } from "@/lib/customServices";
 import type { CalculatorComputeInput, SelectedExtraServiceMap } from "./types";
+import { CALCULATOR_ROUGH_IN_CAPACITY } from "./roughInMode";
 
 /** Локальное состояние одной комнаты (без глобальных полей прайса). */
 export type CalculatorRoomDraft = {
@@ -134,10 +135,12 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
     typeof o.roomName === "string" && o.roomName.trim()
       ? String(o.roomName).trim()
       : "Комната";
+  const capRaw = typeof input.capacity === "string" ? input.capacity : "12";
+  const capacity = capRaw === "7-9" ? "7" : capRaw;
   return {
     id,
     roomName,
-    capacity: typeof input.capacity === "string" ? input.capacity : "12",
+    capacity,
     mountType: input.mountType === "existing" ? "existing" : "standard",
     routeMeters: typeof input.routeMeters === "string" ? input.routeMeters : "0",
     baseWallType: input.baseWallType === "arm" ? "arm" : "normal",
@@ -173,9 +176,12 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
     includeDrain: Boolean(input.includeDrain),
     includePump: Boolean(input.includePump),
     includeLadderConnection: Boolean(input.includeLadderConnection),
-    selectedAcModelIds: Array.isArray(input.selectedAcModelIds)
-      ? input.selectedAcModelIds.filter((x): x is string => typeof x === "string")
-      : [],
+    selectedAcModelIds:
+      capacity === CALCULATOR_ROUGH_IN_CAPACITY
+        ? []
+        : Array.isArray(input.selectedAcModelIds)
+          ? input.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+          : [],
     selectedExtraServices:
       input.selectedExtraServices &&
       typeof input.selectedExtraServices === "object" &&

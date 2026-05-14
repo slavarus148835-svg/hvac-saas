@@ -12,13 +12,17 @@ import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
 import { formatCapacityBtu } from "./capacityDisplay";
 import { formatRubles } from "./format";
 import {
-  capacityKey,
+  calculatorCapacityTierKeyForPricelist,
   chargedFloorsFromSecond,
   chargedMetersForBilling,
   parseDecimalMetersInput,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
 } from "./parse";
+import {
+  CALCULATOR_ROUGH_IN_LABEL_RU,
+  isCalculatorRoughInCapacity,
+} from "./roughInMode";
 import type {
   CalculatorComputeInput,
   CalculatorComputeResult,
@@ -81,18 +85,20 @@ export function computeCalculatorLineItems(
   const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
   const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
 
-  const capKey = capacityKey(input.capacity);
+  const roughIn = isCalculatorRoughInCapacity(input.capacity);
+  const tierKey = calculatorCapacityTierKeyForPricelist(input.capacity);
 
-  const basePrice =
-    input.mountType === "standard"
-      ? Number(prices[`standard_${capKey}` as keyof CalculatorPriceList] || 0)
-      : Number(prices[`existing_${capKey}` as keyof CalculatorPriceList] || 0);
+  const basePrice = roughIn
+    ? 0
+    : input.mountType === "standard"
+      ? Number(prices[`standard_${tierKey}` as keyof CalculatorPriceList] || 0)
+      : Number(prices[`existing_${tierKey}` as keyof CalculatorPriceList] || 0);
 
   const routePricePerMeter = Number(
-    prices[`route_${capKey}` as keyof CalculatorPriceList] || 0
+    prices[`route_${tierKey}` as keyof CalculatorPriceList] || 0
   );
 
-  const isBigCapacity = input.capacity === "30" || input.capacity === "36";
+  const isBigCapacity = tierKey === "30" || tierKey === "36";
 
   let strobaPricePerMeter = 0;
   if (input.strobaType === "brick") {
@@ -108,32 +114,39 @@ export function computeCalculatorLineItems(
 
   const items: CalculatorLineItem[] = [];
 
-  for (const modelId of input.selectedAcModelIds) {
-    const m = input.acModels.find((x) => x.id === modelId);
-    const priceVal =
-      m && typeof m.price === "number"
-        ? m.price
-        : m
-          ? Number(m.price)
-          : NaN;
-    if (m && m.name && Number.isFinite(priceVal) && priceVal > 0) {
-      items.push({
-        title: `Кондиционер: ${m.name}`,
-        amount: Math.floor(priceVal),
-        note: "Модель из личного прайса",
-      });
+  if (roughIn) {
+    items.push({
+      title: CALCULATOR_ROUGH_IN_LABEL_RU,
+      amount: 0,
+    });
+  } else {
+    for (const modelId of input.selectedAcModelIds) {
+      const m = input.acModels.find((x) => x.id === modelId);
+      const priceVal =
+        m && typeof m.price === "number"
+          ? m.price
+          : m
+            ? Number(m.price)
+            : NaN;
+      if (m && m.name && Number.isFinite(priceVal) && priceVal > 0) {
+        items.push({
+          title: `Кондиционер: ${m.name}`,
+          amount: Math.floor(priceVal),
+          note: "Модель из личного прайса",
+        });
+      }
     }
-  }
 
-  const capBtu = formatCapacityBtu(input.capacity);
-  items.push({
-    title:
-      input.mountType === "standard"
-        ? `Монтаж на нашу трассу, ${capBtu}`
-        : `Монтаж на чужую трассу, ${capBtu}`,
-    amount: basePrice,
-    note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
-  });
+    const capBtu = formatCapacityBtu(input.capacity);
+    items.push({
+      title:
+        input.mountType === "standard"
+          ? `Монтаж на нашу трассу, ${capBtu}`
+          : `Монтаж на чужую трассу, ${capBtu}`,
+      amount: basePrice,
+      note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
+    });
+  }
 
   if (input.baseWallType === "arm") {
     items.push({

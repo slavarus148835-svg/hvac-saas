@@ -10,11 +10,15 @@ import {
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
   createDefaultRoomDraft,
+  CALCULATOR_BTU_ONLY_OPTIONS,
+  CALCULATOR_CAPACITY_SELECT_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
   DEFAULT_CALCULATOR_PRICES,
   flatCalculatorStateToRoomDraft,
   formatAmountRu,
   formatCapacityBtu,
   formatRubles,
+  isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -76,8 +80,6 @@ const ONBOARDING_STEPS = [
     body: "Сохраните расчёт и отправьте текст клиенту в Telegram или WhatsApp.",
   },
 ] as const;
-
-const BTU_MODEL_OPTIONS = ["7", "9", "12", "18", "24", "30", "36"] as const;
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
@@ -711,7 +713,16 @@ export default function TgCalculatorPage() {
   }, [calcPhase, authUi]);
 
   const patchRoom = useCallback((roomId: string, patch: Partial<CalculatorRoomDraft>) => {
-    setRoomDrafts((prev) => prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r)));
+    setRoomDrafts((prev) =>
+      prev.map((r) => {
+        if (r.id !== roomId) return r;
+        const merged = { ...r, ...patch };
+        if (patch.capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
+          merged.selectedAcModelIds = [];
+        }
+        return merged;
+      })
+    );
   }, []);
 
   function applyFirstRoomToFlatForm(d: CalculatorRoomDraft) {
@@ -835,6 +846,9 @@ export default function TgCalculatorPage() {
   }
 
   function collapsedModelSummary(draft: CalculatorRoomDraft): string {
+    if (isCalculatorRoughInCapacity(draft.capacity)) {
+      if (!draft.selectedAcModelIds.length) return "Закладка трасс";
+    }
     if (!draft.selectedAcModelIds.length) return "Модель не выбрана";
     const parts: string[] = [];
     for (const id of draft.selectedAcModelIds) {
@@ -1372,7 +1386,7 @@ export default function TgCalculatorPage() {
                         value={newMdlBtu}
                         onChange={(e) => setNewMdlBtu(e.target.value)}
                       >
-                        {BTU_MODEL_OPTIONS.map((c) => (
+                        {CALCULATOR_BTU_ONLY_OPTIONS.map((c) => (
                           <option key={c} value={c}>
                             {formatCapacityBtu(c)}
                           </option>
@@ -1536,10 +1550,14 @@ export default function TgCalculatorPage() {
                   <select
                     style={input}
                     value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setCapacity(v);
+                      if (v === CALCULATOR_ROUGH_IN_CAPACITY) setSelectedAcModelIds([]);
+                    }}
                     aria-label="Выберите мощность BTU"
                   >
-                    {BTU_MODEL_OPTIONS.map((v) => (
+                    {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
                       <option key={v} value={v}>
                         {formatCapacityBtu(v)}
                       </option>

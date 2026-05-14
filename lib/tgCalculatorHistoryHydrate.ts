@@ -1,5 +1,9 @@
 import type { QuickCalculationExtra } from "@/lib/customServices";
 import type { SelectedExtraServiceMap } from "@/lib/calculator";
+import {
+  CALCULATOR_BTU_ONLY_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
+} from "@/lib/calculator/roughInMode";
 
 /** Поля формы /tg/calculator, восстанавливаемые из calculationHistory. */
 export type TgCalculatorHydratedFields = {
@@ -34,8 +38,12 @@ export type TgCalculatorHydratedFields = {
 export function hydrateTgCalculatorFromHistoryDoc(
   data: Record<string, unknown>
 ): Partial<TgCalculatorHydratedFields> {
-  let capacity = typeof data.capacity === "string" ? data.capacity : "12";
+  let capacity = typeof data.capacity === "string" ? data.capacity.trim() : "12";
   if (capacity === "7-9") capacity = "7";
+  const allowedBtu = new Set<string>([...CALCULATOR_BTU_ONLY_OPTIONS, "7-9"]);
+  if (capacity !== CALCULATOR_ROUGH_IN_CAPACITY && !allowedBtu.has(capacity)) {
+    capacity = "12";
+  }
 
   const mountType = data.mountType === "existing" ? "existing" : "standard";
   const baseWallType = data.baseWallType === "arm" ? "arm" : "normal";
@@ -47,9 +55,12 @@ export function hydrateTgCalculatorFromHistoryDoc(
     ? (data.selectedAcModelIds as unknown[]).filter((x) => typeof x === "string")
     : [];
   const fromLegacy = data.selectedAcModelId ? [String(data.selectedAcModelId)] : [];
-  const selectedAcModelIds = Array.from(
+  let selectedAcModelIds = Array.from(
     new Set([...(fromList as string[]), ...fromLegacy])
   ) as string[];
+  if (capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
+    selectedAcModelIds = [];
+  }
 
   let selectedExtraServices: SelectedExtraServiceMap = {};
   if (data.selectedExtraServices && typeof data.selectedExtraServices === "object") {

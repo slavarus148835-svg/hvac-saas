@@ -1,7 +1,12 @@
 /**
  * Отображение мощности для UI и клиентских текстов.
- * Внутренние ключи расчёта остаются "7" | "9" | "12" | "18" | "24" | "30" | "36" (и "7-9" в старых данных).
+ * Типоразмеры: "7" | "9" | … | "36" (и "7-9" в старых данных), плюс rough_in — «Закладка трасс».
  */
+
+import {
+  CALCULATOR_ROUGH_IN_LABEL_RU,
+  isCalculatorRoughInCapacity,
+} from "./roughInMode";
 
 const TYPICAL_KW_TO_BTU: Record<string, number> = {
   "7": 7000,
@@ -15,6 +20,7 @@ const TYPICAL_KW_TO_BTU: Record<string, number> = {
 
 export function capacityToBtuNumber(capacity: string): number {
   const k = String(capacity ?? "").trim();
+  if (isCalculatorRoughInCapacity(k)) return NaN;
   if (!k || k === "—") return 12000;
   if (k === "7-9") return 7000;
   const mapped = TYPICAL_KW_TO_BTU[k];
@@ -29,7 +35,8 @@ export function capacityToBtuNumber(capacity: string): number {
 export function formatCapacityBtu(capacity: string): string {
   const k = String(capacity ?? "").trim();
   if (!k || k === "—") return "—";
-  return `${capacityToBtuNumber(capacity)} BTU`;
+  if (isCalculatorRoughInCapacity(k)) return CALCULATOR_ROUGH_IN_LABEL_RU;
+  return `${capacityToBtuNumber(k)} BTU`;
 }
 
 /** Синоним для подписей в UI («7000 BTU»). */

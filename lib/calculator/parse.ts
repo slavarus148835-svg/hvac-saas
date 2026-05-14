@@ -10,6 +10,11 @@ import type {
   CalculatorComputeInput,
   SelectedExtraServiceMap,
 } from "./types";
+import {
+  CALCULATOR_BTU_ONLY_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
+  isCalculatorRoughInCapacity,
+} from "./roughInMode";
 
 export function sanitizeNonNegativeIntString(raw: string, max: number) {
   const digits = String(raw || "").replace(/\D/g, "");
@@ -75,6 +80,12 @@ export function capacityKey(value: string) {
   return value;
 }
 
+/** Ключ типоразмера для цен трассы/штробы; для закладки трасс — нейтральный ряд «12». */
+export function calculatorCapacityTierKeyForPricelist(capacity: string): string {
+  if (isCalculatorRoughInCapacity(capacity)) return "12";
+  return capacityKey(capacity);
+}
+
 export function minOneMeter(value: number) {
   return value > 0 ? Math.max(1, value) : 0;
 }
@@ -83,7 +94,14 @@ export function minOneMeter(value: number) {
 export function normalizeCalculatorComputeInput(
   raw: Partial<CalculatorComputeInputLoose>
 ): CalculatorComputeInput {
-  const capacity = typeof raw.capacity === "string" ? raw.capacity : "12";
+  const rawCap = typeof raw.capacity === "string" ? raw.capacity.trim() : "12";
+  const allowedBtu = new Set<string>([...CALCULATOR_BTU_ONLY_OPTIONS, "7-9"]);
+  const capacity =
+    rawCap === CALCULATOR_ROUGH_IN_CAPACITY
+      ? CALCULATOR_ROUGH_IN_CAPACITY
+      : allowedBtu.has(rawCap)
+        ? rawCap
+        : "12";
   const mountType = raw.mountType === "existing" ? "existing" : "standard";
   const routeMeters = typeof raw.routeMeters === "string" ? raw.routeMeters : "0";
   const baseWallType = raw.baseWallType === "arm" ? "arm" : "normal";

@@ -1,4 +1,12 @@
 import { formatAmountRu } from "@/lib/calculator/format";
+import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
+
+function clientQuoteBulletLine(title: string, amount: number, fmtNum: (n: number) => string): string {
+  if (amount === 0 && title === CALCULATOR_ROUGH_IN_LABEL_RU) {
+    return `• ${title}`;
+  }
+  return `• ${title} — ${fmtNum(amount)} ₽`;
+}
 
 /** Единое начало клиентского текста сметы (веб, Mini App, share, сохранение). */
 export const CLIENT_QUOTE_GREETING =
@@ -38,7 +46,7 @@ export function buildStructuredClientQuoteMessage(params: {
 
   for (const it of params.items) {
     const title = map(it.title);
-    lines.push(`• ${title} — ${fmtNum(it.amount)} ₽`);
+    lines.push(clientQuoteBulletLine(title, it.amount, fmtNum));
   }
 
   lines.push("", `Итого: ${fmtNum(params.total)} ₽`);
@@ -72,7 +80,7 @@ export function buildMultiRoomClientQuoteMessage(params: {
     lines.push(`${label}:`, "");
     for (const it of room.items) {
       const title = map(it.title);
-      lines.push(`• ${title} — ${fmtNum(it.amount)} ₽`);
+      lines.push(clientQuoteBulletLine(title, it.amount, fmtNum));
     }
     lines.push("", `Итого по комнате: ${fmtNum(room.subtotal)} ₽`, "");
   }

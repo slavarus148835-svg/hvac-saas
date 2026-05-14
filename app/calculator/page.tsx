@@ -33,10 +33,13 @@ import {
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
   createDefaultRoomDraft,
+  CALCULATOR_CAPACITY_SELECT_OPTIONS,
+  CALCULATOR_ROUGH_IN_CAPACITY,
   DEFAULT_CALCULATOR_PRICES,
   flatCalculatorStateToRoomDraft,
   formatCapacityBtu,
   formatRubles,
+  isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -126,6 +129,8 @@ function draftFromSavedHistoryRoom(entry: {
 }): CalculatorRoomDraft | null {
   if (!entry.input || typeof entry.input !== "object" || Array.isArray(entry.input)) return null;
   const inp = entry.input as Record<string, unknown>;
+  const capRaw = typeof inp.capacity === "string" ? inp.capacity : "12";
+  const capacity = capRaw === "7-9" ? "7" : capRaw;
   const id =
     typeof entry.id === "string" && entry.id.trim() ? String(entry.id).trim() : newRoomId();
   const roomName =
@@ -135,7 +140,7 @@ function draftFromSavedHistoryRoom(entry: {
   return {
     id,
     roomName,
-    capacity: typeof inp.capacity === "string" ? inp.capacity : "12",
+    capacity,
     mountType: inp.mountType === "existing" ? "existing" : "standard",
     routeMeters: typeof inp.routeMeters === "string" ? inp.routeMeters : "0",
     baseWallType: inp.baseWallType === "arm" ? "arm" : "normal",
@@ -163,9 +168,12 @@ function draftFromSavedHistoryRoom(entry: {
     includeDrain: Boolean(inp.includeDrain),
     includePump: Boolean(inp.includePump),
     includeLadderConnection: Boolean(inp.includeLadderConnection),
-    selectedAcModelIds: Array.isArray(inp.selectedAcModelIds)
-      ? inp.selectedAcModelIds.filter((x): x is string => typeof x === "string")
-      : [],
+    selectedAcModelIds:
+      capacity === CALCULATOR_ROUGH_IN_CAPACITY
+        ? []
+        : Array.isArray(inp.selectedAcModelIds)
+          ? inp.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+          : [],
     selectedExtraServices:
       inp.selectedExtraServices && typeof inp.selectedExtraServices === "object" && !Array.isArray(inp.selectedExtraServices)
         ? (inp.selectedExtraServices as SelectedExtraServiceMap)
@@ -399,6 +407,8 @@ function CalculatorPage() {
 
             if (data.capacity === "7-9") {
               setCapacity("7");
+            } else if (data.capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
+              setCapacity(CALCULATOR_ROUGH_IN_CAPACITY);
             } else {
               setCapacity(data.capacity || "12");
             }
@@ -427,13 +437,23 @@ function CalculatorPage() {
             setPercentDiscount(data.percentDiscount || "0");
                 const hg = Number(data.giftRouteMeters);
                 if (Number.isFinite(hg) && hg >= 0) setGiftRouteMeters(Math.floor(hg));
-                const fromList = Array.isArray(data.selectedAcModelIds)
-                  ? data.selectedAcModelIds
-                      .filter((x) => typeof x === "string")
-                      .map((x) => String(x))
-                  : [];
-                const fromLegacy = data.selectedAcModelId ? [String(data.selectedAcModelId)] : [];
-                setSelectedAcModelIds(Array.from(new Set([...fromList, ...fromLegacy])));
+                const capResolved =
+                  data.capacity === "7-9"
+                    ? "7"
+                    : data.capacity === CALCULATOR_ROUGH_IN_CAPACITY
+                      ? CALCULATOR_ROUGH_IN_CAPACITY
+                      : data.capacity || "12";
+                if (capResolved === CALCULATOR_ROUGH_IN_CAPACITY) {
+                  setSelectedAcModelIds([]);
+                } else {
+                  const fromList = Array.isArray(data.selectedAcModelIds)
+                    ? data.selectedAcModelIds
+                        .filter((x) => typeof x === "string")
+                        .map((x) => String(x))
+                    : [];
+                  const fromLegacy = data.selectedAcModelId ? [String(data.selectedAcModelId)] : [];
+                  setSelectedAcModelIds(Array.from(new Set([...fromList, ...fromLegacy])));
+                }
             setClientName(data.clientName || "");
             setClientContact(data.clientContact || "");
             setEditableTailText(
@@ -1444,7 +1464,14 @@ function CalculatorPage() {
 
         {acModels.length > 0 ? (
           <div style={selectedModelsBlockStyle}>
-            <Label text="Модели кондиционеров" note="Сначала выберите модель — она попадёт в смету и расчёт">
+            <Label
+              text="Модели кондиционеров"
+              note={
+                isCalculatorRoughInCapacity(capacity)
+                  ? "При закладке трасс модель не обязательна и не попадает в смету"
+                  : "Сначала выберите модель — она попадёт в смету и расчёт"
+              }
+            >
               <div className="calc-model-row" style={modelPickerRowStyle}>
                 <select
                   value={selectedAcModelPick}
@@ -1501,14 +1528,22 @@ function CalculatorPage() {
 
         <Label
           text="Мощность BTU"
-          note="Типоразмер ряда; используется, если модель кондиционера не выбрана"
+          note={
+            isCalculatorRoughInCapacity(capacity)
+              ? "Закладка трасс: базовый монтаж блока не считается; остальные позиции — как обычно"
+              : "Типоразмер ряда; используется, если модель кондиционера не выбрана"
+          }
         >
           <select
             value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCapacity(v);
+              if (v === CALCULATOR_ROUGH_IN_CAPACITY) setSelectedAcModelIds([]);
+            }}
             style={inputStyle}
           >
-            {(["7", "9", "12", "18", "24", "30", "36"] as const).map((v) => (
+            {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
               <option key={v} value={v}>
                 {formatCapacityBtu(v)}
               </option>
