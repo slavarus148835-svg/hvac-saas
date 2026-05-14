@@ -216,7 +216,7 @@ export async function POST(req: Request) {
         ? body.editableTailText.trim().slice(0, 4000)
         : "";
     if (!editableTailText) {
-      editableTailText = buildCalculatorClosingText();
+      editableTailText = buildCalculatorClosingText(clientName);
     }
 
     const clientText = `${estimateAutoClientText}\n${editableTailText}`.trim();

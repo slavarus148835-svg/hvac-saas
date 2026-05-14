@@ -1,4 +1,4 @@
-export function buildCalculatorClosingText(name: string) {
+export function buildCalculatorClosingText(name = "") {
   const clientLine = name.trim() ? `Клиент: ${name.trim()}` : "";
   return [
     clientLine,
