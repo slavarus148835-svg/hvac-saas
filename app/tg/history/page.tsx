@@ -149,7 +149,7 @@ export default function TgHistoryPage() {
       />
       <div style={page}>
         <h1 style={title}>Сохранённые расчёты</h1>
-        {ready ? <TgMiniAppNav /> : null}
+        {ready && authUi === "profile" ? <TgMiniAppNav /> : null}
 
         {!ready ? (
           <p>Загрузка…</p>

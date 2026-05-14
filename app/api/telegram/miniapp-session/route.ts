@@ -38,20 +38,38 @@ export async function POST(req: Request) {
     }
 
     const tgId = normalizeTelegramUserIdForMiniApp(verified.telegramUser.id);
+    const chatKey =
+      verified.chatId != null && Number.isFinite(verified.chatId)
+        ? String(Math.trunc(verified.chatId)).replace(/\D/g, "")
+        : null;
+
     const db = getAdminDb();
     if (!db) {
       console.log("TELEGRAM_MINIAPP_SESSION_FAILED", { reason: "no_firebase_admin" });
       return NextResponse.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
     }
 
-    const doc = await findUserDocByTelegramId(db, tgId);
+    const doc = await findUserDocByTelegramId(db, tgId, chatKey);
+    if (doc === "ambiguous") {
+      console.log("AUTH_DUPLICATE_BLOCKED", { reason: "miniapp_session_ambiguous_telegram" });
+      return NextResponse.json(
+        { ok: false, authStatus: "duplicate_blocked", error: "telegram_lookup_ambiguous" },
+        { status: 409 }
+      );
+    }
     if (!doc) {
+      console.log("AUTH_TELEGRAM_NEEDS_EMAIL_LINKING", { telegramUserId: tgId });
       console.log("TELEGRAM_MINIAPP_SESSION_FAILED", {
         reason: "user_not_found",
         telegramUserId: tgId,
       });
       return NextResponse.json(
-        { ok: false, need_registration: true },
+        {
+          ok: false,
+          need_email_linking: true,
+          need_registration: true,
+          authStatus: "need_email_linking",
+        },
         { status: 404 }
       );
     }
@@ -71,6 +89,7 @@ export async function POST(req: Request) {
       doc.data() as Record<string, unknown>
     );
 
+    console.log("AUTH_TRIAL_REUSE_EXISTING_USER", { uid: doc.id, source: "miniapp_session" });
     console.log("TELEGRAM_MINIAPP_SESSION_CREATED", {
       uid: doc.id,
       telegramUserId: tgId,
@@ -78,6 +97,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      authStatus: "existing_user_by_telegram",
       sessionToken,
       profile: {
         uid: profile.uid,

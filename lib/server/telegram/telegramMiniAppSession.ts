@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { findUserByTelegramKeys } from "@/lib/server/authDuplicateGuards";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
 export const TELEGRAM_MINIAPP_SESSIONS_COLLECTION = "telegramMiniAppSessions";
@@ -164,35 +165,16 @@ export function normalizeTelegramUserIdForMiniApp(id: number): string {
 }
 
 /**
- * Поиск пользователя по telegramUserId / telegramId (как в miniapp-auth).
+ * Поиск пользователя по telegramUserId / telegramId / telegramChatId.
+ * @returns документ, null если нет, `"ambiguous"` если несколько разных uid.
  */
 export async function findUserDocByTelegramId(
   db: Firestore,
-  tgId: string
-): Promise<QueryDocumentSnapshot | null> {
-  const q1 = await db
-    .collection(PRICING_FS.users)
-    .where("telegramUserId", "==", tgId)
-    .limit(5)
-    .get();
-  const q2 = await db
-    .collection(PRICING_FS.users)
-    .where("telegramId", "==", tgId)
-    .limit(5)
-    .get();
-
-  const seen = new Set<string>();
-  for (const d of q1.docs) {
-    if (!seen.has(d.id)) {
-      seen.add(d.id);
-      return d;
-    }
-  }
-  for (const d of q2.docs) {
-    if (!seen.has(d.id)) {
-      seen.add(d.id);
-      return d;
-    }
-  }
-  return null;
+  tgId: string,
+  telegramChatId: string | null = null
+): Promise<QueryDocumentSnapshot | null | "ambiguous"> {
+  const lookup = await findUserByTelegramKeys(db, tgId, telegramChatId);
+  if (lookup.kind === "none") return null;
+  if (lookup.kind === "ambiguous") return "ambiguous";
+  return lookup.doc;
 }

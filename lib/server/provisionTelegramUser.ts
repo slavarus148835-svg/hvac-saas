@@ -84,11 +84,18 @@ export async function provisionOrUpdateTelegramUser(params: {
     throw new Error("invalid_telegram_id");
   }
 
-  const snap = await db
+  let snap = await db
     .collection(PRICING_FS.users)
     .where("telegramId", "==", telegramId)
     .limit(1)
     .get();
+  if (snap.empty) {
+    snap = await db
+      .collection(PRICING_FS.users)
+      .where("telegramUserId", "==", telegramId)
+      .limit(1)
+      .get();
+  }
 
   const displayName =
     [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() ||
@@ -111,6 +118,7 @@ export async function provisionOrUpdateTelegramUser(params: {
     await db.collection(PRICING_FS.users).doc(uid).set(
       {
         telegramId,
+        telegramUserId: telegramId,
         telegramUsername: profile.telegramUsername ?? null,
         firstName: profile.firstName ?? null,
         lastName: profile.lastName ?? null,
@@ -168,6 +176,7 @@ export async function provisionOrUpdateTelegramUser(params: {
     {
       uid,
       email: "",
+      telegramUserId: telegramId,
       emailVerified: true,
       emailVerifiedByCode: true,
       emailVerifiedAt: now,
@@ -212,6 +221,8 @@ export async function provisionOrUpdateTelegramUser(params: {
   await db.collection(PRICING_FS.priceLists).doc(uid).set(defaultPriceListDoc(), { merge: true });
 
   await runRegistrationTelegramNotifyIfNeeded(db, uid, null);
+
+  console.log("AUTH_NEW_USER_CREATED", { uid, source: "provision_telegram" });
 
   return { uid, created: true };
 }

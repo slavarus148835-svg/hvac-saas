@@ -1,8 +1,25 @@
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
+import { getPartnerSiteOrigin } from "@/lib/partner/constants";
 import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
+import {
+  handlePartnerManagerCallback,
+  parseSlashPartnerAdminCode,
+  sendAdminPartnerDetail,
+  sendAdminPartnersList,
+  sendAdminPartnerToggle,
+  sendPartnerCabinet,
+} from "@/lib/server/partnerManager/telegramPartnerBotHandlers";
+import {
+  createPartnerManagerAdmin,
+  normalizePartnerManagerCode,
+} from "@/lib/server/partnerManager/partnerManagerB2b";
+import { tryHandlePartnerManagerSignupWebhook } from "@/lib/server/partnerManager/partnerManagerTelegramSignupFlow";
 import { provisionTelegramLoginUser } from "@/lib/server/provisionTelegramLoginUser";
-import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
+import {
+  answerTelegramCallbackQuery,
+  sendTelegramMessage,
+} from "@/lib/server/sendTelegramMessage";
 import {
   extractTelegramIdentityFromWebhook,
   syncTelegramIdentityFromWebhook,
@@ -23,7 +40,13 @@ type TelegramMessage = {
   };
   [key: string]: unknown;
 };
-type TelegramUpdate = { message?: TelegramMessage };
+type TelegramCallbackQuery = {
+  id: string;
+  from?: { id?: number };
+  message?: { chat?: TelegramChat; message_id?: number };
+  data?: string;
+};
+type TelegramUpdate = { message?: TelegramMessage; callback_query?: TelegramCallbackQuery };
 
 const MESSAGE_JSON_MAX = 14_000;
 
@@ -39,6 +62,30 @@ function safeJsonStringify(value: unknown, maxLen = MESSAGE_JSON_MAX): string {
       detail: e instanceof Error ? e.message : String(e),
     });
   }
+}
+
+function normalizeBotCommandToken(textRaw: string): string {
+  const t = String(textRaw || "").trim().toLowerCase();
+  const first = t.split(/\s+/)[0] || "";
+  return first.split("@")[0] || first;
+}
+
+function parseAddPartnerCommand(textRaw: string): {
+  name: string;
+  code: string;
+  telegramUserId: number;
+} | null {
+  const trimmed = String(textRaw || "").trim();
+  if (!trimmed.toLowerCase().startsWith("/add_partner")) return null;
+  const rest = trimmed.slice("/add_partner".length).trim();
+  const parts = rest.split(/\s+/).filter(Boolean);
+  if (parts.length < 3) return null;
+  const telegramUserId = Number(parts[parts.length - 1]);
+  if (!Number.isFinite(telegramUserId) || telegramUserId <= 0) return null;
+  const code = String(parts[parts.length - 2] || "").trim();
+  const name = parts.slice(0, -2).join(" ").trim();
+  if (!name || !code) return null;
+  return { name, code, telegramUserId };
 }
 
 function parseStartSessionId(textRaw: string): string | null {
@@ -74,6 +121,45 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    const dbPartner = getAdminDb();
+
+    if (update.callback_query) {
+      const cq = update.callback_query;
+      const data = String(cq.data || "");
+      const fromId = cq.from?.id;
+      const msg = cq.message;
+      const chatId = msg?.chat?.id;
+      const msgId = msg?.message_id;
+      const partnerCallbacks = new Set([
+        "partner_stats",
+        "partner_links",
+        "partner_clients",
+        "partner_payouts",
+      ]);
+      if (
+        dbPartner &&
+        partnerCallbacks.has(data) &&
+        fromId != null &&
+        Number.isFinite(fromId) &&
+        chatId != null &&
+        Number.isFinite(chatId) &&
+        msgId != null &&
+        Number.isFinite(msgId)
+      ) {
+        await handlePartnerManagerCallback({
+          db: dbPartner,
+          callbackQueryId: cq.id,
+          fromTelegramUserId: Number(fromId),
+          chatId: Number(chatId),
+          messageId: Number(msgId),
+          data,
+        });
+      } else {
+        await answerTelegramCallbackQuery(cq.id);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const msg = update.message;
     if (!msg) {
       return NextResponse.json({ ok: true });
@@ -91,6 +177,7 @@ export async function POST(req: Request) {
 
     const textRaw = String(msg.text ?? "");
     const normalized = textRaw.trim().toLowerCase();
+    const cmd0 = normalizeBotCommandToken(textRaw);
     const sessionIdFromStart = parseStartSessionId(textRaw);
     const dbForSync = getAdminDb();
     const identity = extractTelegramIdentityFromWebhook(msg);
@@ -108,6 +195,114 @@ export async function POST(req: Request) {
     console.log("MESSAGE TEXT:", textRaw.slice(0, 500));
 
     const adminRaw = String(process.env.ADMIN_TELEGRAM_CHAT_ID || "").trim();
+
+    if (dbPartner) {
+      const fromTg = msg.from?.id;
+      if (fromTg != null && Number.isFinite(fromTg)) {
+        const signupHandled = await tryHandlePartnerManagerSignupWebhook({
+          db: dbPartner,
+          chatId: Number(chatId),
+          textRaw,
+          cmd0,
+          fromId: Number(fromTg),
+          telegramUsername: msg.from?.username ?? null,
+        });
+        if (signupHandled) {
+          return NextResponse.json({ ok: true });
+        }
+      }
+    } else if (cmd0 === "/manager") {
+      await sendTelegramMessage(
+        String(chatId),
+        "Команда /manager сейчас недоступна: на сервере нет подключения к базе данных. Обратитесь к администратору."
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (dbPartner && cmd0 === "/partner") {
+      const fromId = msg.from?.id;
+      if (fromId == null || !Number.isFinite(fromId)) {
+        await sendTelegramMessage(String(chatId), "Не удалось определить ваш Telegram id.");
+        return NextResponse.json({ ok: true });
+      }
+      await sendPartnerCabinet(dbPartner, String(chatId), Number(fromId));
+      return NextResponse.json({ ok: true });
+    }
+
+    if (dbPartner && adminRaw && String(chatId) === adminRaw) {
+      const detailCode = parseSlashPartnerAdminCode(textRaw, "/partner_detail");
+      if (detailCode) {
+        await sendAdminPartnerDetail(dbPartner, String(chatId), detailCode);
+        return NextResponse.json({ ok: true });
+      }
+      const disableCode = parseSlashPartnerAdminCode(textRaw, "/disable_partner");
+      if (disableCode) {
+        await sendAdminPartnerToggle(dbPartner, String(chatId), disableCode, false);
+        return NextResponse.json({ ok: true });
+      }
+      const enableCode = parseSlashPartnerAdminCode(textRaw, "/enable_partner");
+      if (enableCode) {
+        await sendAdminPartnerToggle(dbPartner, String(chatId), enableCode, true);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
+    if (dbPartner && cmd0 === "/partners") {
+      if (!adminRaw || String(chatId) !== adminRaw) {
+        await sendTelegramMessage(
+          String(chatId),
+          "Команда /partners доступна только администратору."
+        );
+        return NextResponse.json({ ok: true });
+      }
+      await sendAdminPartnersList(dbPartner, String(chatId));
+      return NextResponse.json({ ok: true });
+    }
+
+    const addPartner = parseAddPartnerCommand(textRaw);
+    if (dbPartner && addPartner) {
+      if (!adminRaw || String(chatId) !== adminRaw) {
+        await sendTelegramMessage(
+          String(chatId),
+          "Создание менеджера доступно только администратору."
+        );
+        return NextResponse.json({ ok: true });
+      }
+      const adminFromId = msg.from?.id;
+      const created = await createPartnerManagerAdmin(dbPartner, {
+        name: addPartner.name,
+        code: addPartner.code,
+        telegramUserId: addPartner.telegramUserId,
+        createdByAdminTelegramId:
+          adminFromId != null && Number.isFinite(adminFromId) ? Number(adminFromId) : 0,
+      });
+      if (!created.ok) {
+        const msgErr =
+          created.reason === "duplicate_code"
+            ? "Код уже занят. Выберите другой."
+            : "Не удалось создать менеджера.";
+        await sendTelegramMessage(String(chatId), msgErr);
+        return NextResponse.json({ ok: true });
+      }
+      const origin = getPartnerSiteOrigin();
+      const link = `${origin}/?partner=${encodeURIComponent(
+        normalizePartnerManagerCode(addPartner.code)
+      )}`;
+      await sendTelegramMessage(
+        String(chatId),
+        [
+          "Менеджер создан.",
+          `ID: ${created.managerId}`,
+          `Имя: ${addPartner.name}`,
+          `Код: ${addPartner.code}`,
+          `telegramUserId: ${addPartner.telegramUserId}`,
+          "",
+          "Ссылка:",
+          link,
+        ].join("\n")
+      );
+      return NextResponse.json({ ok: true });
+    }
 
     if (normalized.startsWith("/stat")) {
       if (!adminRaw || String(chatId) !== adminRaw) {

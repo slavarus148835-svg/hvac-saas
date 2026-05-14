@@ -13,6 +13,8 @@ export type TelegramMiniAppAuthResult = {
   ok: boolean;
   profile?: TelegramMiniAppProfile;
   need_registration?: boolean;
+  need_email_linking?: boolean;
+  authStatus?: string;
   error?: string;
 };
 
@@ -95,8 +97,20 @@ export async function authTelegramMiniApp(
       };
     }
 
-    if (data.need_registration === true) {
-      return { ok: true, need_registration: true };
+    if (data.need_email_linking === true || data.need_registration === true) {
+      return {
+        ok: true,
+        need_registration: true,
+        need_email_linking: true,
+        authStatus: typeof data.authStatus === "string" ? data.authStatus : undefined,
+      };
+    }
+
+    if (res.status === 409 && data.authStatus === "duplicate_blocked") {
+      return {
+        ok: false,
+        error: "Конфликт данных Telegram. Попробуйте позже или напишите в поддержку.",
+      };
     }
 
     const profileRaw = data.profile;
@@ -108,6 +122,7 @@ export async function authTelegramMiniApp(
       return {
         ok: true,
         profile: mapProfile(profileRaw as Record<string, unknown>),
+        authStatus: typeof data.authStatus === "string" ? data.authStatus : undefined,
       };
     }
 

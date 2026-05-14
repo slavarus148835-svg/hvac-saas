@@ -68,6 +68,7 @@ import type {
 import { RoomFormBlock } from "@/app/calculator/RoomFormBlock";
 import { mergeNumericPriceDocument } from "@/lib/mergeNumericPriceDocument";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { stripClientIdentityLinesFromPublicQuote } from "@/lib/clientQuotePublicSanitize";
 
 const fmt = formatRubles;
 
@@ -688,6 +689,11 @@ function CalculatorPage() {
 
   const finalClientText = `${result.autoClientText}\n${editableTailText}`.trim();
 
+  const publicFinalClientText = useMemo(
+    () => stripClientIdentityLinesFromPublicQuote(finalClientText),
+    [finalClientText]
+  );
+
   const buildHistoryPayload = useCallback((): Omit<HistoryCalcDoc, "id"> => {
     const iso = new Date().toISOString();
     const scalar =
@@ -1002,10 +1008,10 @@ function CalculatorPage() {
     shareBusyRef.current = true;
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(finalClientText);
+        await navigator.clipboard.writeText(publicFinalClientText);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = finalClientText;
+        ta.value = publicFinalClientText;
         ta.style.position = "fixed";
         ta.style.left = "-9999px";
         document.body.appendChild(ta);
@@ -1032,12 +1038,12 @@ function CalculatorPage() {
       return;
     }
 
-    const body = shortenForMessenger(finalClientText);
+    const body = shortenForMessenger(publicFinalClientText);
     const encoded = encodeURIComponent(body);
     let url = `https://wa.me/${phone}?text=${encoded}`;
     if (url.length > 8190) {
       const shortBody = encodeURIComponent(
-        finalClientText.slice(0, 1500) +
+        publicFinalClientText.slice(0, 1500) +
           "\n\n[полный текст — скопируйте кнопкой «Копировать»]"
       );
       url = `https://wa.me/${phone}?text=${shortBody}`;
@@ -1057,7 +1063,7 @@ function CalculatorPage() {
       return;
     }
 
-    const body = shortenForMessenger(finalClientText);
+    const body = shortenForMessenger(publicFinalClientText);
     const encoded = encodeURIComponent(body);
     const phone = normalizeWhatsAppPhone(raw);
     const username = normalizeUsername(raw);

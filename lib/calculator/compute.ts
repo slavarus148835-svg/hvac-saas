@@ -108,16 +108,6 @@ export function computeCalculatorLineItems(
 
   const items: CalculatorLineItem[] = [];
 
-  const capBtu = formatCapacityBtu(input.capacity);
-  items.push({
-    title:
-      input.mountType === "standard"
-        ? `Монтаж на нашу трассу, ${capBtu}`
-        : `Монтаж на чужую трассу, ${capBtu}`,
-    amount: basePrice,
-    note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
-  });
-
   for (const modelId of input.selectedAcModelIds) {
     const m = input.acModels.find((x) => x.id === modelId);
     const priceVal =
@@ -134,6 +124,16 @@ export function computeCalculatorLineItems(
       });
     }
   }
+
+  const capBtu = formatCapacityBtu(input.capacity);
+  items.push({
+    title:
+      input.mountType === "standard"
+        ? `Монтаж на нашу трассу, ${capBtu}`
+        : `Монтаж на чужую трассу, ${capBtu}`,
+    amount: basePrice,
+    note: `Цена за 1 монтаж: ${fmt(basePrice)}`,
+  });
 
   if (input.baseWallType === "arm") {
     items.push({

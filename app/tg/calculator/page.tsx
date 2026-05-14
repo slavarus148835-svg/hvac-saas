@@ -43,6 +43,7 @@ import {
   buildTelegramMiniAppClientQuoteText,
   mapMiniAppQuoteItemTitle,
 } from "@/lib/telegramMiniAppQuoteText";
+import { stripClientIdentityLinesFromPublicQuote } from "@/lib/clientQuotePublicSanitize";
 import { hydrateTgCalculatorFromHistoryDoc } from "@/lib/tgCalculatorHistoryHydrate";
 import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 import { tgHapticButtonTap, tgHapticNotification } from "@/lib/telegramHaptic";
@@ -577,8 +578,6 @@ export default function TgCalculatorPage() {
       t = multiEstimate.autoClientText;
     } else {
       t = buildTelegramMiniAppClientQuoteText({
-        clientName,
-        clientContact,
         capacity,
         mountType,
         items: singleResult.items.map((i) => ({
@@ -601,8 +600,6 @@ export default function TgCalculatorPage() {
   }, [
     multiRoomEnabled,
     multiEstimate,
-    clientName,
-    clientContact,
     capacity,
     mountType,
     singleResult.items,
@@ -617,12 +614,17 @@ export default function TgCalculatorPage() {
     return clientQuoteDraft.trim() || autoClientQuoteText;
   }, [clientQuoteUserEdited, clientQuoteDraft, autoClientQuoteText]);
 
+  const publicClientQuoteText = useMemo(
+    () => stripClientIdentityLinesFromPublicQuote(effectiveClientQuoteText),
+    [effectiveClientQuoteText]
+  );
+
   const showCalculatorForm =
-    (inTelegram === true && ready) ||
-    (inTelegram === false &&
-      authUi === "profile" &&
-      calcPhase === "ready" &&
-      Boolean(profile));
+    authUi === "profile" &&
+    calcPhase === "ready" &&
+    Boolean(profile) &&
+    ((inTelegram === true && ready) ||
+      (inTelegram === false && ready));
 
   useScrollInputIntoView(showCalculatorForm);
 
@@ -1037,7 +1039,7 @@ export default function TgCalculatorPage() {
   function shareTelegramNative() {
     tgHapticButtonTap();
     const wa = window.Telegram?.WebApp;
-    const body = effectiveClientQuoteText;
+    const body = publicClientQuoteText;
     const shareUrl = buildTelegramShareUrl(body);
     try {
       wa?.switchInlineQuery?.(body.slice(0, 200), ["users", "groups", "channels"]);
@@ -1093,7 +1095,7 @@ export default function TgCalculatorPage() {
       />
       <div style={page}>
         <h1 style={{ ...title, margin: "0 0 10px" }}>Калькулятор монтажника</h1>
-        {ready ? <TgMiniAppNav /> : null}
+        {ready && authUi === "profile" && calcPhase === "ready" ? <TgMiniAppNav /> : null}
 
         {ready && inTelegram === true && showCalculatorForm ? (
           <>
@@ -1949,7 +1951,7 @@ export default function TgCalculatorPage() {
                       style={{ ...btn, padding: "14px", fontSize: 15 }}
                       onClick={() => {
                         tgHapticButtonTap();
-                        const u = buildWhatsAppShareUrl(clientContact, effectiveClientQuoteText);
+                        const u = buildWhatsAppShareUrl(clientContact, publicClientQuoteText);
                         if (u) window.open(u, "_blank");
                         else {
                           tgHapticNotification("warning");
@@ -1972,7 +1974,7 @@ export default function TgCalculatorPage() {
                       onClick={async () => {
                         tgHapticButtonTap();
                         try {
-                          await navigator.clipboard.writeText(effectiveClientQuoteText);
+                          await navigator.clipboard.writeText(publicClientQuoteText);
                           tgHapticNotification("success");
                           setSaveToast("Текст скопирован");
                         } catch {

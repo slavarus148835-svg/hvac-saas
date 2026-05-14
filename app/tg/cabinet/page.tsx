@@ -4,10 +4,13 @@ import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
+import { auth } from "@/lib/firebase";
+import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
-import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
+import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 import { fetchMiniAppMeAccount, type MiniAppMeAccount } from "@/lib/telegramMiniAppCalculatorApi";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -79,6 +82,7 @@ type AuthUi =
   | "checking"
   | "profile"
   | "need_registration"
+  | "need_email_linking"
   | "error"
   | "no_tg"
   | "no_init";
@@ -91,6 +95,7 @@ export default function TgCabinetPage() {
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [accountExtra, setAccountExtra] = useState<MiniAppMeAccount | null>(null);
+  const [emailLinkInitData, setEmailLinkInitData] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +131,15 @@ export default function TgCabinetPage() {
           setAuthError(null);
           const me = await fetchMiniAppMeAccount();
           if (!cancelled && me.ok) setAccountExtra(me.account);
+        } else if (resolved.status === "need_email_linking") {
+          if (resolved.initData) {
+            setAuthUi("need_email_linking");
+            setEmailLinkInitData(resolved.initData);
+          } else {
+            setAuthUi("need_registration");
+            setEmailLinkInitData("");
+          }
+          setAuthError(null);
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
@@ -148,6 +162,15 @@ export default function TgCabinetPage() {
           setAuthError(null);
           const me = await fetchMiniAppMeAccount();
           if (!cancelled && me.ok) setAccountExtra(me.account);
+        } else if (resolved.status === "need_email_linking") {
+          if (resolved.initData) {
+            setAuthUi("need_email_linking");
+            setEmailLinkInitData(resolved.initData);
+          } else {
+            setAuthUi("need_registration");
+            setEmailLinkInitData("");
+          }
+          setAuthError(null);
         } else if (resolved.status === "need_registration") {
           setAuthUi("need_registration");
           setAuthError(null);
@@ -167,6 +190,22 @@ export default function TgCabinetPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (authUi !== "profile" || !profile?.uid) return;
+    const uid = profile.uid;
+    void tryAttachPartnerManagerFromStorage(
+      uid,
+      async () => {
+        const m = getMiniAppSessionToken();
+        if (m?.trim()) return m.trim();
+        const u = auth.currentUser;
+        if (!u) return "";
+        return u.getIdToken();
+      },
+      "telegram_miniapp"
+    );
+  }, [authUi, profile?.uid]);
+
   return (
     <>
       <Script
@@ -176,7 +215,7 @@ export default function TgCabinetPage() {
       />
       <div style={page}>
         <h1 style={title}>Кабинет</h1>
-        {ready ? <TgMiniAppNav /> : null}
+        {ready && authUi === "profile" ? <TgMiniAppNav /> : null}
         <div style={statusBox}>
           <strong>Подключение Telegram</strong>
           <br />
@@ -234,6 +273,26 @@ export default function TgCabinetPage() {
                 ) : null}
               </ul>
             ) : null}
+            {authUi === "need_email_linking" && emailLinkInitData ? (
+              <>
+                <TgMiniAppEmailLink
+                  initData={emailLinkInitData}
+                  onLinked={async (p) => {
+                    setProfile(p);
+                    setAuthUi("profile");
+                    setAuthError(null);
+                    const me = await fetchMiniAppMeAccount();
+                    if (me.ok) setAccountExtra(me.account);
+                  }}
+                />
+                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
+                  Нет аккаунта?{" "}
+                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                    Регистрация на сайте
+                  </Link>
+                </p>
+              </>
+            ) : null}
             {authUi === "need_registration" ? (
               <p style={{ margin: 0 }}>
                 Аккаунт Telegram не привязан к HVAC-SaaS. Войдите или зарегистрируйтесь
@@ -262,6 +321,16 @@ export default function TgCabinetPage() {
           </Link>
         ) : null}
         {authUi === "need_registration" ? (
+          <>
+            <Link href="/login" style={btn}>
+              Войти
+            </Link>
+            <Link href="/register" style={btnSecondary}>
+              Зарегистрироваться
+            </Link>
+          </>
+        ) : null}
+        {authUi === "need_email_linking" && inTelegram === false ? (
           <>
             <Link href="/login" style={btn}>
               Войти

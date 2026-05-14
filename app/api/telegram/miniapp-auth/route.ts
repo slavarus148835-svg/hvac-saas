@@ -1,7 +1,7 @@
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { findUserByTelegramKeys } from "@/lib/server/authDuplicateGuards";
 import { verifyTelegramInitData } from "@/lib/server/telegram/verifyTelegramInitData";
 
 export const runtime = "nodejs";
@@ -44,52 +44,51 @@ export async function POST(req: Request) {
     }
 
     const tgId = normalizeTelegramUserId(verified.telegramUser.id);
+    const chatKey =
+      verified.chatId != null && Number.isFinite(verified.chatId)
+        ? String(Math.trunc(verified.chatId)).replace(/\D/g, "")
+        : null;
+
     const db = getAdminDb();
     if (!db) {
       console.log("TELEGRAM_MINIAPP_AUTH_FAILED", { reason: "no_firebase_admin" });
       return NextResponse.json({ error: "server_misconfigured" }, { status: 503 });
     }
 
-    const q1 = await db
-      .collection(PRICING_FS.users)
-      .where("telegramUserId", "==", tgId)
-      .limit(5)
-      .get();
-    const q2 = await db
-      .collection(PRICING_FS.users)
-      .where("telegramId", "==", tgId)
-      .limit(5)
-      .get();
+    const lookup = await findUserByTelegramKeys(db, tgId, chatKey);
+    if (lookup.kind === "ambiguous") {
+      console.log("AUTH_DUPLICATE_BLOCKED", { reason: "miniapp_auth_ambiguous_telegram" });
+      return NextResponse.json(
+        { authStatus: "duplicate_blocked", error: "telegram_lookup_ambiguous" },
+        { status: 409 }
+      );
+    }
 
-    const seen = new Set<string>();
     let doc: QueryDocumentSnapshot | null = null;
-    for (const d of q1.docs) {
-      if (!seen.has(d.id)) {
-        seen.add(d.id);
-        doc = d;
-        break;
-      }
-    }
-    if (!doc) {
-      for (const d of q2.docs) {
-        if (!seen.has(d.id)) {
-          seen.add(d.id);
-          doc = d;
-          break;
-        }
-      }
+    if (lookup.kind === "found") {
+      doc = lookup.doc;
     }
 
     if (!doc) {
+      console.log("AUTH_TELEGRAM_NEEDS_EMAIL_LINKING", { telegramUserId: tgId });
       console.log("TELEGRAM_MINIAPP_USER_NOT_FOUND", { telegramUserId: tgId });
-      console.log("TELEGRAM_MINIAPP_AUTH_OK", { outcome: "need_registration" });
-      return NextResponse.json({ need_registration: true });
+      console.log("TELEGRAM_MINIAPP_AUTH_OK", { outcome: "need_email_linking" });
+      return NextResponse.json({
+        need_email_linking: true,
+        need_registration: true,
+        authStatus: "need_email_linking",
+      });
     }
 
+    console.log("AUTH_DUPLICATE_FOUND_BY_TELEGRAM", { uid: doc.id, telegramUserId: tgId });
+    console.log("AUTH_TRIAL_REUSE_EXISTING_USER", { uid: doc.id, source: "miniapp_auth" });
     console.log("TELEGRAM_MINIAPP_USER_FOUND", { uid: doc.id, telegramUserId: tgId });
     const profile = publicProfile(doc.id, doc.data() as Record<string, unknown>);
     console.log("TELEGRAM_MINIAPP_AUTH_OK", { outcome: "profile", uid: doc.id });
-    return NextResponse.json({ profile });
+    return NextResponse.json({
+      profile,
+      authStatus: "existing_user_by_telegram",
+    });
   } catch (e) {
     console.log("TELEGRAM_MINIAPP_AUTH_FAILED", {
       reason: "exception",

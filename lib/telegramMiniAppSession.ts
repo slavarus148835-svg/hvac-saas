@@ -56,6 +56,7 @@ export type CreateMiniAppSessionResult = {
   ok: boolean;
   profile?: TelegramMiniAppProfile;
   need_registration?: boolean;
+  need_email_linking?: boolean;
   error?: string;
 };
 
@@ -92,8 +93,23 @@ export async function createMiniAppSession(
       };
     }
 
-    if (res.status === 404 && data.need_registration === true) {
-      return { ok: true, need_registration: true };
+    if (
+      res.status === 404 &&
+      (data.need_registration === true || data.need_email_linking === true)
+    ) {
+      return {
+        ok: true,
+        need_registration: true,
+        need_email_linking: true,
+      };
+    }
+
+    if (res.status === 409 && data.authStatus === "duplicate_blocked") {
+      return {
+        ok: false,
+        error:
+          "Конфликт данных Telegram. Откройте Mini App из бота ещё раз или напишите в поддержку.",
+      };
     }
 
     if (!res.ok) {
@@ -239,6 +255,7 @@ export async function getMiniAppMe(): Promise<GetMiniAppMeResult> {
 export type EnsureMiniAppProfileResult =
   | { status: "profile"; profile: TelegramMiniAppProfile }
   | { status: "need_registration" }
+  | { status: "need_email_linking"; initData: string }
   | { status: "error"; message: string }
   | { status: "no_init" };
 
@@ -263,6 +280,9 @@ export async function ensureTelegramMiniAppProfile(
   const created = await createMiniAppSession(init);
   if (created.ok && created.profile) {
     return { status: "profile", profile: created.profile };
+  }
+  if (created.need_email_linking) {
+    return { status: "need_email_linking", initData: init };
   }
   if (created.need_registration) {
     return { status: "need_registration" };

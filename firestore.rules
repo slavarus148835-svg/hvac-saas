@@ -69,5 +69,20 @@ service cloud.firestore {
     match /telegram_login_sessions/{sessionId} {
       allow read, write: if false;
     }
+
+    /// B2B партнёрские менеджеры и события — только Admin SDK.
+    match /partnerManagers/{managerId} {
+      allow read, write: if false;
+    }
+    match /partnerEvents/{eventId} {
+      allow read, write: if false;
+    }
+    match /partnerPayouts/{payoutId} {
+      allow read, write: if false;
+    }
+
+    match /partnerManagerSignupSessions/{telegramUserId} {
+      allow read, write: if false;
+    }
   }
 }

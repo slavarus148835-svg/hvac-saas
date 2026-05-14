@@ -1,3 +1,9 @@
+import {
+  PARTNER_MANAGER_FIRST_TOUCH_MS_KEY,
+  PARTNER_MANAGER_STORAGE_KEY,
+  PARTNER_MINIAPP_START_PREFIX,
+} from "@/lib/partner/b2bConstants";
+
 /** Типы Telegram WebApp (минимально нужные для Mini App). */
 export type TelegramWebAppUser = {
   id: number;
@@ -14,7 +20,7 @@ export type TelegramHapticFeedback = {
 
 export type TelegramWebApp = {
   initData: string;
-  initDataUnsafe?: { user?: TelegramWebAppUser };
+  initDataUnsafe?: { user?: TelegramWebAppUser; start_param?: string };
   ready: () => void;
   expand?: () => void;
   close?: () => void;
@@ -38,6 +44,22 @@ export function prepareTelegramMiniAppShell(wa: TelegramWebApp | null) {
     wa.expand?.();
   } catch {
     /* */
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const sp = String(wa.initDataUnsafe?.start_param ?? "").trim();
+      if (sp.toLowerCase().startsWith(PARTNER_MINIAPP_START_PREFIX)) {
+        const code = sp.slice(PARTNER_MINIAPP_START_PREFIX.length).trim();
+        if (code) {
+          localStorage.setItem(PARTNER_MANAGER_STORAGE_KEY, code);
+          if (!localStorage.getItem(PARTNER_MANAGER_FIRST_TOUCH_MS_KEY)) {
+            localStorage.setItem(PARTNER_MANAGER_FIRST_TOUCH_MS_KEY, String(Date.now()));
+          }
+        }
+      }
+    } catch {
+      /* */
+    }
   }
 }
 

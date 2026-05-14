@@ -8,7 +8,7 @@ export type VerifiedTelegramUser = {
 };
 
 export type VerifyTelegramInitDataResult =
-  | { ok: true; telegramUser: VerifiedTelegramUser }
+  | { ok: true; telegramUser: VerifiedTelegramUser; chatId: number | null }
   | { ok: false; error: string };
 
 /**
@@ -97,5 +97,18 @@ export function verifyTelegramInitData(initData: string): VerifyTelegramInitData
     username: typeof u.username === "string" ? u.username : undefined,
   };
 
-  return { ok: true, telegramUser };
+  let chatId: number | null = null;
+  const chatRaw = params.get("chat");
+  if (chatRaw) {
+    try {
+      const c = JSON.parse(chatRaw) as { id?: unknown };
+      if (typeof c.id === "number" && Number.isFinite(c.id)) {
+        chatId = Math.trunc(c.id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { ok: true, telegramUser, chatId };
 }

@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   redirects: async () => [
     {
+      source: "/tg/settings",
+      destination: "/tg/cabinet",
+      permanent: true,
+    },
+    {
       source: "/verify-email",
       destination: "/verify-email-code",
       permanent: true,

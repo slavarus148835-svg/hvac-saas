@@ -12,6 +12,7 @@ import type { CalculatorComputeInput } from "@/lib/calculator/types";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { loadMiniAppCalculatorContext } from "@/lib/server/telegram/loadMiniAppCalculatorContext";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
+import { markFirstCalculationIfNeededAndRecordB2B } from "@/lib/server/partnerManager/partnerManagerB2b";
 
 export const runtime = "nodejs";
 
@@ -215,7 +216,7 @@ export async function POST(req: Request) {
         ? body.editableTailText.trim().slice(0, 4000)
         : "";
     if (!editableTailText) {
-      editableTailText = buildCalculatorClosingText(clientName);
+      editableTailText = buildCalculatorClosingText();
     }
 
     const clientText = `${estimateAutoClientText}\n${editableTailText}`.trim();
@@ -276,6 +277,12 @@ export async function POST(req: Request) {
     const ref = await db.collection("calculationHistory").add(payload);
 
     console.log("TELEGRAM_MINIAPP_CALC_SAVE_OK", { uid: v.uid, id: ref.id, total: estimateTotal });
+
+    try {
+      await markFirstCalculationIfNeededAndRecordB2B(db, v.uid);
+    } catch (e) {
+      console.warn("[miniapp-calculation-save] first-calc b2b hook failed", e);
+    }
 
     return NextResponse.json({ ok: true, id: ref.id, total: estimateTotal });
   } catch (e) {

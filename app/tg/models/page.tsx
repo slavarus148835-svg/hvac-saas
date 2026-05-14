@@ -15,6 +15,7 @@ import { formatCapacityBtu } from "@/lib/calculator";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 
 const CAP_OPTS = ["", "7", "9", "12", "18", "24", "30", "36"] as const;
@@ -83,9 +84,29 @@ const input: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+const btnGhost: React.CSSProperties = {
+  ...btn,
+  background: "#fff",
+  color: "#0f172a",
+  border: "2px solid #e2e8f0",
+  marginTop: 8,
+  textDecoration: "none",
+};
+
+type TgModelsAuthUi =
+  | "profile"
+  | "need_email_linking"
+  | "need_registration"
+  | "error"
+  | "no_init"
+  | "no_tg";
+
 export default function TgModelsPage() {
   const [ready, setReady] = useState(false);
-  const [authOk, setAuthOk] = useState(false);
+  const [inTelegram, setInTelegram] = useState(false);
+  const [authUi, setAuthUi] = useState<TgModelsAuthUi>("need_registration");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [emailLinkInitData, setEmailLinkInitData] = useState("");
   const [models, setModels] = useState<MiniAppModelRow[]>([]);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -102,7 +123,7 @@ export default function TgModelsPage() {
   const [editComment, setEditComment] = useState("");
   const [editBusy, setEditBusy] = useState(false);
 
-  useScrollInputIntoView(ready && authOk);
+  useScrollInputIntoView(ready && authUi === "profile");
 
   async function reload() {
     const r = await fetchMiniAppModels();
@@ -118,18 +139,50 @@ export default function TgModelsPage() {
     let cancelled = false;
     void (async () => {
       const wa = await waitForTelegramWebApp({ intervalMs: 200, maxAttempts: 12 });
-      if (wa) prepareTelegramMiniAppShell(wa);
+      const tg = Boolean(wa);
+      if (wa) {
+        prepareTelegramMiniAppShell(wa);
+        setInTelegram(true);
+      } else {
+        setInTelegram(false);
+      }
       const initData = typeof wa?.initData === "string" ? wa.initData.trim() : "";
       const r = await ensureTelegramMiniAppProfile(initData || null);
       if (cancelled) return;
-      if (r.status !== "profile") {
-        setAuthOk(false);
+      if (r.status === "profile") {
+        setAuthUi("profile");
+        setAuthError(null);
+        await reload();
+        if (cancelled) return;
         setReady(true);
         return;
       }
-      setAuthOk(true);
-      await reload();
-      if (cancelled) return;
+      if (r.status === "need_email_linking") {
+        if (r.initData) {
+          setAuthUi("need_email_linking");
+          setEmailLinkInitData(r.initData);
+        } else {
+          setAuthUi("need_registration");
+          setEmailLinkInitData("");
+        }
+        setAuthError(null);
+        setReady(true);
+        return;
+      }
+      if (r.status === "need_registration") {
+        setAuthUi("need_registration");
+        setAuthError(null);
+        setReady(true);
+        return;
+      }
+      if (r.status === "error") {
+        setAuthUi("error");
+        setAuthError(r.message);
+        setReady(true);
+        return;
+      }
+      setAuthUi(tg ? "no_init" : "no_tg");
+      setAuthError(null);
       setReady(true);
     })();
     return () => {
@@ -233,16 +286,82 @@ export default function TgModelsPage() {
         <p style={{ margin: "0 0 12px", fontSize: 14, color: "#64748b", lineHeight: 1.5 }}>
           Список общий с веб-версией. Выбранные модели сразу доступны в калькуляторе Mini App.
         </p>
-        <TgMiniAppNav />
+        {ready && authUi === "profile" ? <TgMiniAppNav /> : null}
 
         {!ready ? (
           <p style={{ color: "#64748b" }}>Загрузка…</p>
-        ) : !authOk ? (
+        ) : authUi !== "profile" ? (
           <div style={card}>
-            <p style={{ margin: "0 0 12px" }}>Нужна сессия Mini App.</p>
-            <Link href="/login" style={btn}>
-              Войти
-            </Link>
+            {inTelegram && authUi === "need_email_linking" && emailLinkInitData ? (
+              <>
+                <TgMiniAppEmailLink
+                  initData={emailLinkInitData}
+                  onLinked={async () => {
+                    setAuthUi("profile");
+                    setAuthError(null);
+                    await reload();
+                  }}
+                />
+                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
+                  Нет аккаунта?{" "}
+                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                    Регистрация на сайте
+                  </Link>
+                </p>
+              </>
+            ) : null}
+            {inTelegram && authUi === "need_registration" ? (
+              <>
+                <p style={{ margin: "0 0 12px" }}>
+                  Подключите Telegram к профилю HVAC-SaaS — список моделей синхронизируется с сайтом.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Link href="/login" style={{ ...btn, flex: 1, padding: "12px", fontSize: 15 }}>
+                    Войти
+                  </Link>
+                  <Link
+                    href="/register"
+                    style={{ ...btnGhost, flex: 1, padding: "12px", fontSize: 15, marginTop: 0 }}
+                  >
+                    Регистрация
+                  </Link>
+                </div>
+              </>
+            ) : null}
+            {!inTelegram && (authUi === "need_registration" || authUi === "need_email_linking") ? (
+              <>
+                <p style={{ margin: "0 0 12px" }}>
+                  Войдите на сайте или свяжите Telegram с профилем, чтобы управлять моделями.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={{ ...btnGhost, textAlign: "center" }}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
+            {authUi === "error" && authError ? (
+              <p style={{ margin: 0, color: "#b91c1c" }}>{authError}</p>
+            ) : null}
+            {authUi === "no_init" ? (
+              <p style={{ margin: 0, color: "#64748b" }}>
+                Нет initData — откройте Mini App из бота или войдите с сохранённой сессией.
+              </p>
+            ) : null}
+            {authUi === "no_tg" ? (
+              <>
+                <p style={{ margin: "0 0 12px", color: "#64748b" }}>
+                  Нет сессии Mini App. Войдите на сайте или откройте приложение из бота.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={{ ...btnGhost, textAlign: "center" }}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
           </div>
         ) : (
           <>

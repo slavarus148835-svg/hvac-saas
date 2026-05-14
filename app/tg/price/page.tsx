@@ -14,6 +14,7 @@ import {
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
+import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 
 const page: React.CSSProperties = {
@@ -81,46 +82,93 @@ function emptyForm(): Record<string, string> {
   return o;
 }
 
+type TgPriceAuthUi =
+  | "profile"
+  | "need_email_linking"
+  | "need_registration"
+  | "error"
+  | "no_init"
+  | "no_tg";
+
 export default function TgPricePage() {
   const [ready, setReady] = useState(false);
-  const [authOk, setAuthOk] = useState(false);
+  const [inTelegram, setInTelegram] = useState(false);
+  const [authUi, setAuthUi] = useState<TgPriceAuthUi>("need_registration");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [emailLinkInitData, setEmailLinkInitData] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>(emptyForm);
   const [giftRouteMeters, setGiftRouteMeters] = useState("1");
   const [hasSavedPriceList, setHasSavedPriceList] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
 
-  useScrollInputIntoView(ready && authOk);
+  useScrollInputIntoView(ready && authUi === "profile");
+
+  const loadPriceForm = async () => {
+    const p = await fetchMiniAppPriceForm();
+    if (!p.ok) {
+      setLoadError(p.error);
+      return;
+    }
+    const next = emptyForm();
+    for (const k of MINI_APP_PRICE_FORM_KEYS) {
+      const v = p.form[k];
+      next[k] = typeof v === "string" && v.trim() ? v : next[k];
+    }
+    setForm(next);
+    setGiftRouteMeters(String(p.giftRouteMeters));
+    setHasSavedPriceList(p.hasSavedPriceList);
+    setLoadError(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const wa = await waitForTelegramWebApp({ intervalMs: 200, maxAttempts: 12 });
-      if (wa) prepareTelegramMiniAppShell(wa);
+      const tg = Boolean(wa);
+      if (wa) {
+        prepareTelegramMiniAppShell(wa);
+        setInTelegram(true);
+      } else {
+        setInTelegram(false);
+      }
       const initData = typeof wa?.initData === "string" ? wa.initData.trim() : "";
       const r = await ensureTelegramMiniAppProfile(initData || null);
       if (cancelled) return;
-      if (r.status !== "profile") {
-        setAuthOk(false);
+      if (r.status === "profile") {
+        setAuthUi("profile");
+        setAuthError(null);
+        await loadPriceForm();
+        if (cancelled) return;
         setReady(true);
         return;
       }
-      setAuthOk(true);
-      const p = await fetchMiniAppPriceForm();
-      if (cancelled) return;
-      if (!p.ok) {
-        setLoadError(p.error);
+      if (r.status === "need_email_linking") {
+        if (r.initData) {
+          setAuthUi("need_email_linking");
+          setEmailLinkInitData(r.initData);
+        } else {
+          setAuthUi("need_registration");
+          setEmailLinkInitData("");
+        }
+        setAuthError(null);
         setReady(true);
         return;
       }
-      const next = emptyForm();
-      for (const k of MINI_APP_PRICE_FORM_KEYS) {
-        const v = p.form[k];
-        next[k] = typeof v === "string" && v.trim() ? v : next[k];
+      if (r.status === "need_registration") {
+        setAuthUi("need_registration");
+        setAuthError(null);
+        setReady(true);
+        return;
       }
-      setForm(next);
-      setGiftRouteMeters(String(p.giftRouteMeters));
-      setHasSavedPriceList(p.hasSavedPriceList);
+      if (r.status === "error") {
+        setAuthUi("error");
+        setAuthError(r.message);
+        setReady(true);
+        return;
+      }
+      setAuthUi(tg ? "no_init" : "no_tg");
+      setAuthError(null);
       setReady(true);
     })();
     return () => {
@@ -174,19 +222,83 @@ export default function TgPricePage() {
           Те же поля, что в веб-кабинете: документ прайса в Firestore и подарочные метры трассы в
           профиле пользователя.
         </p>
-        <TgMiniAppNav />
+        {ready && authUi === "profile" ? <TgMiniAppNav /> : null}
 
         {!ready ? (
           <p style={{ color: "#64748b" }}>Загрузка…</p>
-        ) : !authOk ? (
+        ) : authUi !== "profile" ? (
           <div style={card}>
-            <p style={{ margin: "0 0 12px" }}>Войдите через Mini App, чтобы редактировать прайс.</p>
-            <Link href="/login" style={btn}>
-              Войти на сайте
-            </Link>
-            <Link href="/register" style={btnSecondary}>
-              Регистрация
-            </Link>
+            {inTelegram && authUi === "need_email_linking" && emailLinkInitData ? (
+              <>
+                <TgMiniAppEmailLink
+                  initData={emailLinkInitData}
+                  onLinked={async () => {
+                    setAuthUi("profile");
+                    setAuthError(null);
+                    await loadPriceForm();
+                  }}
+                />
+                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
+                  Нет аккаунта?{" "}
+                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                    Регистрация на сайте
+                  </Link>
+                </p>
+              </>
+            ) : null}
+            {inTelegram && authUi === "need_registration" ? (
+              <>
+                <p style={{ margin: "0 0 12px" }}>
+                  Подключите Telegram к профилю HVAC-SaaS — тогда откроется редактирование прайса.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Link href="/login" style={{ ...btn, flex: 1, padding: "12px", fontSize: 15 }}>
+                    Войти
+                  </Link>
+                  <Link
+                    href="/register"
+                    style={{ ...btnSecondary, flex: 1, padding: "12px", fontSize: 15, marginTop: 0 }}
+                  >
+                    Регистрация
+                  </Link>
+                </div>
+              </>
+            ) : null}
+            {!inTelegram && (authUi === "need_registration" || authUi === "need_email_linking") ? (
+              <>
+                <p style={{ margin: "0 0 12px" }}>
+                  Свяжите Telegram с профилем HVAC-SaaS или войдите на сайте, чтобы редактировать
+                  прайс.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={btnSecondary}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
+            {authUi === "error" && authError ? (
+              <p style={{ margin: 0, color: "#b91c1c" }}>{authError}</p>
+            ) : null}
+            {authUi === "no_init" ? (
+              <p style={{ margin: 0, color: "#64748b" }}>
+                Нет initData — откройте Mini App из бота или войдите с сохранённой сессией.
+              </p>
+            ) : null}
+            {authUi === "no_tg" ? (
+              <>
+                <p style={{ margin: "0 0 12px", color: "#64748b" }}>
+                  Нет сессии Mini App. Войдите на сайте или откройте приложение из бота.
+                </p>
+                <Link href="/login" style={btn}>
+                  Войти
+                </Link>
+                <Link href="/register" style={btnSecondary}>
+                  Зарегистрироваться
+                </Link>
+              </>
+            ) : null}
           </div>
         ) : (
           <>

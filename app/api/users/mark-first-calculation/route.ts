@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
+import { markFirstCalculationIfNeededAndRecordB2B } from "@/lib/server/partnerManager/partnerManagerB2b";
 import { requireBearerUid } from "@/lib/server/requireBearerUid";
 
 export const runtime = "nodejs";
 
-/** Идempotентная отметка первого сохранённого расчёта на users/{uid}. */
+/** Идемпотентная отметка первого сохранённого расчёта на users/{uid} + B2B-событие. */
 export async function POST(req: Request) {
   const authRes = await requireBearerUid(req);
   if (!authRes.ok) {
@@ -18,31 +18,12 @@ export async function POST(req: Request) {
   }
 
   const uid = authRes.data.uid;
-  const ref = db.collection("users").doc(uid);
 
   try {
-    const outcome = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const data = snap.exists ? (snap.data() as Record<string, unknown>) : {};
-      if (firestoreTimeToMs(data.firstCalculationAt) > 0) {
-        return "skip" as const;
-      }
-
-      tx.set(
-        ref,
-        {
-          firstCalculationAt: Date.now(),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-
-      return "write" as const;
-    });
-
+    const written = await markFirstCalculationIfNeededAndRecordB2B(db, uid);
     return NextResponse.json({
       ok: true,
-      written: outcome === "write",
+      written,
     });
   } catch (e) {
     console.error("[mark-first-calculation]", e);
