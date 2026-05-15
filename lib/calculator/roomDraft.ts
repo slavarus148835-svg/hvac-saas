@@ -1,6 +1,6 @@
 import type { QuickCalculationExtra } from "@/lib/customServices";
 import type { CalculatorComputeInput, SelectedExtraServiceMap } from "./types";
-import { CALCULATOR_ROUGH_IN_CAPACITY } from "./roughInMode";
+import { CALCULATOR_ROUGH_IN_CAPACITY, normalizeRoughInRouteCapacity } from "./roughInMode";
 
 /** Локальное состояние одной комнаты (без глобальных полей прайса). */
 export type CalculatorRoomDraft = {
@@ -20,6 +20,7 @@ export function createDefaultRoomDraft(roomLabel: string): CalculatorRoomDraft {
     id: newRoomId(),
     roomName: roomLabel,
     capacity: "12",
+    roughInRouteCapacity: "12",
     mountType: "standard",
     routeMeters: "0",
     baseWallType: "normal",
@@ -63,6 +64,7 @@ export function roomDraftToComputeInput(
 export function flatCalculatorStateToRoomDraft(params: {
   roomName: string;
   capacity: string;
+  roughInRouteCapacity: string;
   mountType: "standard" | "existing";
   routeMeters: string;
   baseWallType: "normal" | "arm";
@@ -90,6 +92,7 @@ export function flatCalculatorStateToRoomDraft(params: {
     id: newRoomId(),
     roomName: params.roomName,
     capacity: params.capacity,
+    roughInRouteCapacity: params.roughInRouteCapacity,
     mountType: params.mountType,
     routeMeters: params.routeMeters,
     baseWallType: params.baseWallType,
@@ -137,10 +140,17 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
       : "Комната";
   const capRaw = typeof input.capacity === "string" ? input.capacity : "12";
   const capacity = capRaw === "7-9" ? "7" : capRaw;
+  const roughRaw =
+    typeof input.roughInRouteCapacity === "string"
+      ? input.roughInRouteCapacity
+      : typeof input.routeCapacity === "string"
+        ? input.routeCapacity
+        : "12";
   return {
     id,
     roomName,
     capacity,
+    roughInRouteCapacity: normalizeRoughInRouteCapacity(roughRaw),
     mountType: input.mountType === "existing" ? "existing" : "standard",
     routeMeters: typeof input.routeMeters === "string" ? input.routeMeters : "0",
     baseWallType: input.baseWallType === "arm" ? "arm" : "normal",

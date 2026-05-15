@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import {
   newQuickExtraId,
@@ -14,6 +15,7 @@ import {
   calculatorRouteMetersRoomNote,
   formatCapacityBtu,
   isCalculatorRoughInCapacity,
+  normalizeRoughInRouteCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -383,6 +385,11 @@ export function RoomFormBlock({
             }
             onPatch({
               capacity: CALCULATOR_ROUGH_IN_CAPACITY,
+              roughInRouteCapacity: normalizeRoughInRouteCapacity(
+                isCalculatorRoughInCapacity(draft.capacity)
+                  ? draft.roughInRouteCapacity
+                  : draft.capacity
+              ),
               selectedAcModelIds: [],
             });
           } else {
@@ -394,6 +401,13 @@ export function RoomFormBlock({
           }
         }}
       />
+
+      {isCalculatorRoughInCapacity(draft.capacity) ? (
+        <CalculatorRoughInRouteCapacitySelect
+          value={draft.roughInRouteCapacity}
+          onChange={(roughInRouteCapacity) => onPatch({ roughInRouteCapacity })}
+        />
+      ) : null}
 
       {!isCalculatorRoughInCapacity(draft.capacity) ? (
         <>

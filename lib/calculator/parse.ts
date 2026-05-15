@@ -14,6 +14,7 @@ import {
   CALCULATOR_BTU_ONLY_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
   isCalculatorRoughInCapacity,
+  normalizeRoughInRouteCapacity,
 } from "./roughInMode";
 
 export function sanitizeNonNegativeIntString(raw: string, max: number) {
@@ -80,9 +81,8 @@ export function capacityKey(value: string) {
   return value;
 }
 
-/** Ключ типоразмера для цен трассы/штробы; для закладки трасс — нейтральный ряд «12». */
+/** Ключ типоразмера для цен монтажа (не для rough_in). */
 export function calculatorCapacityTierKeyForPricelist(capacity: string): string {
-  if (isCalculatorRoughInCapacity(capacity)) return "12";
   return capacityKey(capacity);
 }
 
@@ -135,8 +135,18 @@ export function normalizeCalculatorComputeInput(
   const percentDiscount =
     typeof raw.percentDiscount === "string" ? raw.percentDiscount : "0";
 
+  const roughInRouteRaw =
+    typeof raw.roughInRouteCapacity === "string"
+      ? raw.roughInRouteCapacity
+      : typeof raw.routeCapacity === "string"
+        ? raw.routeCapacity
+        : "12";
+
   return {
     capacity,
+    roughInRouteCapacity: normalizeRoughInRouteCapacity(
+      typeof roughInRouteRaw === "string" ? roughInRouteRaw : "12"
+    ),
     mountType,
     routeMeters,
     baseWallType,
@@ -178,6 +188,8 @@ export function normalizeCalculatorComputeInput(
 
 type CalculatorComputeInputLoose = {
   capacity?: unknown;
+  roughInRouteCapacity?: unknown;
+  routeCapacity?: unknown;
   mountType?: unknown;
   routeMeters?: unknown;
   baseWallType?: unknown;

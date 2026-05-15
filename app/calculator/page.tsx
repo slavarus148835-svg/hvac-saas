@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -52,7 +53,9 @@ import {
   MAX_ROUTE_METERS,
   MAX_STROBA_METERS,
   newRoomId,
+  normalizeCalculatorComputeInput,
   normalizePriceDocForSplitCapacity,
+  normalizeRoughInRouteCapacity,
   parseDecimalMetersInput,
   roomDraftToComputeInput,
   roomDraftToFlatState,
@@ -119,6 +122,7 @@ type HistoryCalcDoc = {
   /** Быстрые строки только в этом расчёте (не из прайса). */
   quickCalculationExtras?: QuickCalculationExtra[];
   giftRouteMeters?: number;
+  roughInRouteCapacity?: string;
   selectedAcModelIds?: string[];
   /** legacy */
   selectedAcModelId?: string;
@@ -146,6 +150,15 @@ function draftFromSavedHistoryRoom(entry: {
     id,
     roomName,
     capacity,
+    roughInRouteCapacity: normalizeRoughInRouteCapacity(
+      typeof inp.roughInRouteCapacity === "string"
+        ? inp.roughInRouteCapacity
+        : typeof inp.routeCapacity === "string"
+          ? inp.routeCapacity
+          : capacity === CALCULATOR_ROUGH_IN_CAPACITY
+            ? "12"
+            : capacity
+    ),
     mountType: inp.mountType === "existing" ? "existing" : "standard",
     routeMeters: typeof inp.routeMeters === "string" ? inp.routeMeters : "0",
     baseWallType: inp.baseWallType === "arm" ? "arm" : "normal",
@@ -225,6 +238,7 @@ function CalculatorPage() {
   const [pricelistCustomServices, setPricelistCustomServices] = useState<UserCustomService[]>([]);
 
   const [capacity, setCapacity] = useState("12");
+  const [roughInRouteCapacity, setRoughInRouteCapacity] = useState("12");
   const lastBtuCapacityRef = useRef("12");
   const traceOnlyMode = isCalculatorRoughInCapacity(capacity);
   const [mountType, setMountType] = useState<"standard" | "existing">("standard");
@@ -419,6 +433,21 @@ function CalculatorPage() {
             } else {
               setCapacity(data.capacity || "12");
             }
+            const capResolved =
+              data.capacity === "7-9"
+                ? "7"
+                : data.capacity === CALCULATOR_ROUGH_IN_CAPACITY
+                  ? CALCULATOR_ROUGH_IN_CAPACITY
+                  : data.capacity || "12";
+            setRoughInRouteCapacity(
+              normalizeRoughInRouteCapacity(
+                typeof data.roughInRouteCapacity === "string"
+                  ? data.roughInRouteCapacity
+                  : capResolved === CALCULATOR_ROUGH_IN_CAPACITY
+                    ? "12"
+                    : capResolved
+              )
+            );
             setMountType(data.mountType || "standard");
             setRouteMeters(data.routeMeters || "0");
             setBaseWallType(data.baseWallType || "normal");
@@ -444,12 +473,6 @@ function CalculatorPage() {
             setPercentDiscount(data.percentDiscount || "0");
                 const hg = Number(data.giftRouteMeters);
                 if (Number.isFinite(hg) && hg >= 0) setGiftRouteMeters(Math.floor(hg));
-                const capResolved =
-                  data.capacity === "7-9"
-                    ? "7"
-                    : data.capacity === CALCULATOR_ROUGH_IN_CAPACITY
-                      ? CALCULATOR_ROUGH_IN_CAPACITY
-                      : data.capacity || "12";
                 if (capResolved === CALCULATOR_ROUGH_IN_CAPACITY) {
                   setSelectedAcModelIds([]);
                 } else {
@@ -620,10 +643,12 @@ function CalculatorPage() {
     }
   }
 
-  const singleEstimate = useMemo(() => {
-    return computeCalculatorEstimate(prices, {
-      capacity,
-      mountType,
+  const singleComputeInput = useMemo(
+    () =>
+      normalizeCalculatorComputeInput({
+        capacity,
+        roughInRouteCapacity,
+        mountType,
       routeMeters,
       baseWallType,
       extraHolesNormal,
@@ -649,10 +674,10 @@ function CalculatorPage() {
       pricelistCustomServices,
       selectedExtraServices,
       quickCalculationExtras,
-    });
-  }, [
-    prices,
+      }),
+    [
     capacity,
+    roughInRouteCapacity,
     mountType,
     routeMeters,
     baseWallType,
@@ -679,7 +704,13 @@ function CalculatorPage() {
     giftRouteMeters,
     acModels,
     selectedAcModelIds,
-  ]);
+  ]
+  );
+
+  const singleEstimate = useMemo(
+    () => computeCalculatorEstimate(prices, singleComputeInput),
+    [prices, singleComputeInput]
+  );
 
   const multiEstimate = useMemo(() => {
     if (!multiRoomEnabled || roomDrafts.length === 0) return null;
@@ -728,6 +759,7 @@ function CalculatorPage() {
         ? roomDraftToFlatState(roomDrafts[0])
         : {
             capacity,
+            roughInRouteCapacity,
             mountType,
             routeMeters,
             baseWallType,
@@ -789,6 +821,7 @@ function CalculatorPage() {
       selectedExtraServices: scalar.selectedExtraServices,
       quickCalculationExtras: scalar.quickCalculationExtras,
       giftRouteMeters,
+      roughInRouteCapacity: scalar.roughInRouteCapacity,
       selectedAcModelIds: scalar.selectedAcModelIds,
       selectedAcModelId: scalar.selectedAcModelIds[0] || "",
       ...(multiRoomEnabled && roomDrafts.length > 0
@@ -1223,6 +1256,7 @@ function CalculatorPage() {
       flatCalculatorStateToRoomDraft({
         roomName: "Комната 1",
         capacity,
+        roughInRouteCapacity,
         mountType,
         routeMeters,
         baseWallType,
@@ -1255,6 +1289,7 @@ function CalculatorPage() {
     if (first) {
       const f = roomDraftToFlatState(first);
       setCapacity(f.capacity);
+      setRoughInRouteCapacity(f.roughInRouteCapacity);
       setMountType(f.mountType);
       setRouteMeters(f.routeMeters);
       setBaseWallType(f.baseWallType);
@@ -1471,6 +1506,11 @@ function CalculatorPage() {
           onCheckedChange={(enabled) => {
             if (enabled) {
               if (!traceOnlyMode) lastBtuCapacityRef.current = capacity;
+              setRoughInRouteCapacity(
+                normalizeRoughInRouteCapacity(
+                  isCalculatorRoughInCapacity(capacity) ? roughInRouteCapacity : capacity
+                )
+              );
               setCapacity(CALCULATOR_ROUGH_IN_CAPACITY);
               setSelectedAcModelIds([]);
             } else {
@@ -1481,6 +1521,12 @@ function CalculatorPage() {
             }
           }}
         />
+        {traceOnlyMode ? (
+          <CalculatorRoughInRouteCapacitySelect
+            value={roughInRouteCapacity}
+            onChange={setRoughInRouteCapacity}
+          />
+        ) : null}
       <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 

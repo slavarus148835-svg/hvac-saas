@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import type { CalculatorRoomDraft, SelectedExtraServiceMap } from "@/lib/calculator";
 import {
@@ -11,6 +12,7 @@ import {
   formatCapacityBtu,
   formatRubles,
   isCalculatorRoughInCapacity,
+  normalizeRoughInRouteCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -280,6 +282,11 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
                 if (!traceOnly) lastBtuRef.current = draft.capacity;
                 onPatch({
                   capacity: CALCULATOR_ROUGH_IN_CAPACITY,
+                  roughInRouteCapacity: normalizeRoughInRouteCapacity(
+                    isCalculatorRoughInCapacity(draft.capacity)
+                      ? draft.roughInRouteCapacity
+                      : draft.capacity
+                  ),
                   selectedAcModelIds: [],
                 });
               } else {
@@ -291,6 +298,14 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
               }
             }}
           />
+
+          {traceOnly ? (
+            <CalculatorRoughInRouteCapacitySelect
+              variant="miniapp"
+              value={draft.roughInRouteCapacity}
+              onChange={(roughInRouteCapacity) => onPatch({ roughInRouteCapacity })}
+            />
+          ) : null}
 
           {!traceOnly ? (
             <>

@@ -28,6 +28,7 @@ import {
   MAX_STROBA_METERS,
   newRoomId,
   normalizeCalculatorComputeInput,
+  normalizeRoughInRouteCapacity,
   roomDraftFromFirestoreEntry,
   roomDraftToComputeInput,
   roomDraftToFlatState,
@@ -42,6 +43,7 @@ import {
   type UserCustomService,
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
+import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
 import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
@@ -205,6 +207,7 @@ export default function TgCalculatorPage() {
   const [customServices, setCustomServices] = useState<UserCustomService[]>([]);
 
   const [capacity, setCapacity] = useState("12");
+  const [roughInRouteCapacity, setRoughInRouteCapacity] = useState("12");
   const [mountType, setMountType] = useState<"standard" | "existing">("standard");
   const [routeMeters, setRouteMeters] = useState("0");
   const [baseWallType, setBaseWallType] = useState<"normal" | "arm">("normal");
@@ -479,6 +482,7 @@ export default function TgCalculatorPage() {
       prices,
       normalizeCalculatorComputeInput({
         capacity,
+        roughInRouteCapacity,
         mountType,
         routeMeters,
         baseWallType,
@@ -510,6 +514,7 @@ export default function TgCalculatorPage() {
   }, [
     prices,
     capacity,
+    roughInRouteCapacity,
     mountType,
     routeMeters,
     baseWallType,
@@ -663,6 +668,7 @@ export default function TgCalculatorPage() {
 
       const h = hydrateTgCalculatorFromHistoryDoc(doc);
       if (h.capacity != null) setCapacity(h.capacity);
+      if (h.roughInRouteCapacity != null) setRoughInRouteCapacity(h.roughInRouteCapacity);
       if (h.mountType) setMountType(h.mountType);
       if (h.routeMeters != null) setRouteMeters(h.routeMeters);
       if (h.baseWallType) setBaseWallType(h.baseWallType);
@@ -723,6 +729,11 @@ export default function TgCalculatorPage() {
         if (!isCalculatorRoughInCapacity(capacity)) {
           lastBtuCapacityRef.current = capacity;
         }
+        setRoughInRouteCapacity(
+          normalizeRoughInRouteCapacity(
+            isCalculatorRoughInCapacity(capacity) ? roughInRouteCapacity : capacity
+          )
+        );
         setCapacity(CALCULATOR_ROUGH_IN_CAPACITY);
         setSelectedAcModelIds([]);
       } else {
@@ -732,7 +743,7 @@ export default function TgCalculatorPage() {
         );
       }
     },
-    [capacity]
+    [capacity, roughInRouteCapacity]
   );
 
   const patchRoom = useCallback((roomId: string, patch: Partial<CalculatorRoomDraft>) => {
@@ -742,6 +753,9 @@ export default function TgCalculatorPage() {
         const merged = { ...r, ...patch };
         if (patch.capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
           merged.selectedAcModelIds = [];
+          if (!isCalculatorRoughInCapacity(r.capacity)) {
+            merged.roughInRouteCapacity = normalizeRoughInRouteCapacity(r.capacity);
+          }
         }
         return merged;
       })
@@ -751,6 +765,7 @@ export default function TgCalculatorPage() {
   function applyFirstRoomToFlatForm(d: CalculatorRoomDraft) {
     const f = roomDraftToFlatState(d);
     setCapacity(f.capacity);
+    setRoughInRouteCapacity(f.roughInRouteCapacity);
     setMountType(f.mountType);
     setRouteMeters(f.routeMeters);
     setBaseWallType(f.baseWallType);
@@ -783,6 +798,7 @@ export default function TgCalculatorPage() {
       const seed = flatCalculatorStateToRoomDraft({
         roomName: "Комната 1",
         capacity,
+        roughInRouteCapacity,
         mountType,
         routeMeters,
         baseWallType,
@@ -1018,6 +1034,7 @@ export default function TgCalculatorPage() {
     setSaveToast(null);
     const payload: Record<string, unknown> = {
       capacity,
+      roughInRouteCapacity,
       mountType,
       routeMeters,
       baseWallType,
@@ -1573,6 +1590,13 @@ export default function TgCalculatorPage() {
                   checked={traceOnlyMode}
                   onCheckedChange={setTraceOnlyMode}
                 />
+                {traceOnlyMode ? (
+                  <CalculatorRoughInRouteCapacitySelect
+                    variant="miniapp"
+                    value={roughInRouteCapacity}
+                    onChange={setRoughInRouteCapacity}
+                  />
+                ) : null}
                 <div style={card}>
                   {!traceOnlyMode ? (
                     <>

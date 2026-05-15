@@ -23,6 +23,7 @@ import {
   clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
+  routeCapacityTierKeyForPricelist,
 } from "./roughInMode";
 import type {
   CalculatorComputeInput,
@@ -87,19 +88,20 @@ export function computeCalculatorLineItems(
   const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
 
   const roughIn = isCalculatorRoughInCapacity(input.capacity);
-  const tierKey = calculatorCapacityTierKeyForPricelist(input.capacity);
+  const mountTierKey = calculatorCapacityTierKeyForPricelist(input.capacity);
+  const routeTierKey = routeCapacityTierKeyForPricelist(input);
 
   const basePrice = roughIn
     ? 0
     : input.mountType === "standard"
-      ? Number(prices[`standard_${tierKey}` as keyof CalculatorPriceList] || 0)
-      : Number(prices[`existing_${tierKey}` as keyof CalculatorPriceList] || 0);
+      ? Number(prices[`standard_${mountTierKey}` as keyof CalculatorPriceList] || 0)
+      : Number(prices[`existing_${mountTierKey}` as keyof CalculatorPriceList] || 0);
 
   const routePricePerMeter = Number(
-    prices[`route_${tierKey}` as keyof CalculatorPriceList] || 0
+    prices[`route_${routeTierKey}` as keyof CalculatorPriceList] || 0
   );
 
-  const isBigCapacity = tierKey === "30" || tierKey === "36";
+  const isBigCapacity = routeTierKey === "30" || routeTierKey === "36";
 
   let strobaPricePerMeter = 0;
   if (input.strobaType === "brick") {
@@ -157,8 +159,11 @@ export function computeCalculatorLineItems(
       giftM > 0
         ? `Цена за 1 м: ${fmt(routePricePerMeter)}. В подарок ${giftM} м, к оплате ${routePaidMeters} м`
         : `Цена за 1 м: ${fmt(routePricePerMeter)}. К оплате ${routePaidMeters} м`;
+    const routeTitle = roughIn
+      ? `Трасса под ${formatCapacityBtu(routeTierKey)} × ${formatMetersQtyRu(chargedRouteMeters)} м`
+      : `Трасса × ${chargedRouteMeters} м`;
     items.push({
-      title: `Трасса × ${chargedRouteMeters} м`,
+      title: routeTitle,
       amount: routePaidMeters * routePricePerMeter,
       note: routeNote,
     });

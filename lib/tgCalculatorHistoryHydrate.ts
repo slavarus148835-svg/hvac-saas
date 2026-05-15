@@ -3,11 +3,13 @@ import type { SelectedExtraServiceMap } from "@/lib/calculator";
 import {
   CALCULATOR_BTU_ONLY_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  normalizeRoughInRouteCapacity,
 } from "@/lib/calculator/roughInMode";
 
 /** Поля формы /tg/calculator, восстанавливаемые из calculationHistory. */
 export type TgCalculatorHydratedFields = {
   capacity: string;
+  roughInRouteCapacity: string;
   mountType: "standard" | "existing";
   routeMeters: string;
   baseWallType: "normal" | "arm";
@@ -79,8 +81,17 @@ export function hydrateTgCalculatorFromHistoryDoc(
     ) as QuickCalculationExtra[];
   }
 
+  const roughInRouteCapacity = normalizeRoughInRouteCapacity(
+    typeof data.roughInRouteCapacity === "string"
+      ? data.roughInRouteCapacity
+      : capacity === CALCULATOR_ROUGH_IN_CAPACITY
+        ? "12"
+        : capacity
+  );
+
   return {
     capacity,
+    roughInRouteCapacity,
     mountType,
     routeMeters: typeof data.routeMeters === "string" ? data.routeMeters : "0",
     baseWallType,

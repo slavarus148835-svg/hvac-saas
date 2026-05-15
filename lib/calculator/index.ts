@@ -31,6 +31,8 @@ export {
   clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
+  normalizeRoughInRouteCapacity,
+  routeCapacityTierKeyForPricelist,
 } from "./roughInMode";
 export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
 export { computeMultiRoomEstimate } from "./computeMultiRoomEstimate";

@@ -26,6 +26,29 @@ export function isCalculatorRoughInCapacity(capacity: string): boolean {
   return String(capacity ?? "").trim() === CALCULATOR_ROUGH_IN_CAPACITY;
 }
 
+const ALLOWED_ROUGH_IN_ROUTE = new Set<string>(CALCULATOR_BTU_ONLY_OPTIONS);
+
+/** Нормализация типоразмера трассы в режиме закладки (fallback «12»). */
+export function normalizeRoughInRouteCapacity(raw: string | undefined): CalculatorBtuDigitCapacity {
+  const k = String(raw ?? "").trim();
+  if (k === "7-9") return "7";
+  if (ALLOWED_ROUGH_IN_ROUTE.has(k)) return k as CalculatorBtuDigitCapacity;
+  return "12";
+}
+
+/** Ключ прайса route_* / штроба: при rough_in — из roughInRouteCapacity, иначе из capacity монтажа. */
+export function routeCapacityTierKeyForPricelist(input: {
+  capacity: string;
+  roughInRouteCapacity: string;
+}): string {
+  if (isCalculatorRoughInCapacity(input.capacity)) {
+    return normalizeRoughInRouteCapacity(input.roughInRouteCapacity);
+  }
+  const cap = String(input.capacity ?? "").trim();
+  if (cap === "7-9") return "7";
+  return ALLOWED_ROUGH_IN_ROUTE.has(cap) ? cap : "12";
+}
+
 /** Подарочные метры трассы — только при монтаже кондиционера, не при «Закладка трасс». */
 export function effectiveGiftRouteMeters(
   capacity: string,

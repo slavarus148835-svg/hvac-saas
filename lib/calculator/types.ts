@@ -65,6 +65,8 @@ export type CalculatorLineItem = {
 
 export type CalculatorComputeInput = {
   capacity: string;
+  /** Типоразмер трассы (7|9|12|…) при capacity === rough_in; на монтаж не влияет. */
+  roughInRouteCapacity: string;
   mountType: "standard" | "existing";
   routeMeters: string;
   baseWallType: "normal" | "arm";
