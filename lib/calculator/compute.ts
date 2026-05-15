@@ -20,7 +20,7 @@ import {
   sanitizeNonNegativeMoneyString,
 } from "./parse";
 import {
-  CALCULATOR_ROUGH_IN_LABEL_RU,
+  clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
 } from "./roughInMode";
@@ -115,12 +115,7 @@ export function computeCalculatorLineItems(
 
   const items: CalculatorLineItem[] = [];
 
-  if (roughIn) {
-    items.push({
-      title: CALCULATOR_ROUGH_IN_LABEL_RU,
-      amount: 0,
-    });
-  } else {
+  if (!roughIn) {
     for (const modelId of input.selectedAcModelIds) {
       const m = input.acModels.find((x) => x.id === modelId);
       const priceVal =
@@ -356,7 +351,10 @@ export function computeCalculatorEstimate(
   const total = Number.isFinite(totalRaw) ? Math.max(0, totalRaw) : 0;
 
   const autoClientText = buildStructuredClientQuoteMessage({
-    items: items.map((item) => ({ title: item.title, amount: item.amount })),
+    items: clientQuoteItemsWithRoughInHeader(
+      input.capacity,
+      items.map((item) => ({ title: item.title, amount: item.amount }))
+    ),
     total,
   });
 

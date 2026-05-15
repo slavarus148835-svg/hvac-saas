@@ -1,6 +1,7 @@
 import { buildMultiRoomClientQuoteMessage, type ClientQuoteRoomBlock } from "@/lib/clientQuoteStandard";
 import { computeCalculatorLineItems } from "@/lib/calculator/compute";
 import { formatRubles } from "@/lib/calculator/format";
+import { clientQuoteItemsWithRoughInHeader } from "@/lib/calculator/roughInMode";
 import { sanitizeNonNegativeIntString } from "@/lib/calculator/parse";
 import type {
   CalculatorLineItem,
@@ -21,8 +22,7 @@ export function computeMultiRoomEstimate(
   prices: CalculatorPriceList,
   rooms: CalculatorRoomInput[],
   globalPercentDiscount: string,
-  fmt: (n: number) => string = formatRubles,
-  opts?: { clientName?: string; clientContact?: string }
+  fmt: (n: number) => string = formatRubles
 ): MultiRoomComputeResult {
   const safeRooms = rooms.length > 0 ? rooms : [];
 
@@ -75,11 +75,15 @@ export function computeMultiRoomEstimate(
     });
   }
 
-  const quoteRooms: ClientQuoteRoomBlock[] = roomResults.map((r) => ({
-    roomName: r.roomName,
-    items: r.items.map((it) => ({ title: it.title, amount: it.amount })),
-    subtotal: r.subtotal,
-  }));
+  const quoteRooms: ClientQuoteRoomBlock[] = roomResults.map((r, idx) => {
+    const cap = safeRooms[idx]?.input.capacity ?? "";
+    const lineItems = r.items.map((it) => ({ title: it.title, amount: it.amount }));
+    return {
+      roomName: r.roomName,
+      items: clientQuoteItemsWithRoughInHeader(cap, lineItems),
+      subtotal: r.subtotal,
+    };
+  });
 
   const discountLine =
     discountByPercent > 0
@@ -93,8 +97,6 @@ export function computeMultiRoomEstimate(
     rooms: quoteRooms,
     total,
     discountLine,
-    clientName: opts?.clientName?.trim() || undefined,
-    clientContact: opts?.clientContact?.trim() || undefined,
   });
 
   return {

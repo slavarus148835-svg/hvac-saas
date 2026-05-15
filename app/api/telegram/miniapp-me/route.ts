@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import {
+  cabinetAccessStatusLabel,
+  cabinetAccessUntilLabel,
+} from "@/lib/cabinetSubscriptionDisplay";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { firestoreFieldToIsoUtc } from "@/lib/server/telegram/firestoreTimeIso";
+import type { UserTrialFields } from "@/lib/trialSubscription";
 import {
   loadUserDocByUid,
   telegramMiniAppPublicProfileFromUserDoc,
@@ -40,6 +45,7 @@ export async function GET(req: Request) {
 
     const profile = telegramMiniAppPublicProfileFromUserDoc(v.uid, loaded.data);
     const d = loaded.data;
+    const trialUser = d as UserTrialFields;
     const subscriptionStatus =
       typeof d.subscriptionStatus === "string" ? d.subscriptionStatus : null;
 
@@ -56,7 +62,12 @@ export async function GET(req: Request) {
         telegramUsername: profile.telegramUsername,
         trialEndsAt: firestoreFieldToIsoUtc(d.trialEndsAt),
         paidAt: firestoreFieldToIsoUtc(d.paidAt),
+        paidUntil: firestoreFieldToIsoUtc(d.paidUntil),
+        firstCalculationAt: firestoreFieldToIsoUtc(d.firstCalculationAt),
+        trialStartedAt: firestoreFieldToIsoUtc(d.trialStartedAt),
         subscriptionStatus,
+        accessStatusLabel: cabinetAccessStatusLabel(trialUser),
+        accessUntilLabel: cabinetAccessUntilLabel(trialUser),
       },
     });
   } catch (e) {

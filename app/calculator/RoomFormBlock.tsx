@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import {
   newQuickExtraId,
   type UserCustomService,
@@ -249,6 +250,14 @@ export function RoomFormBlock({
   onRemove,
   onDuplicate,
 }: RoomFormBlockProps) {
+  const lastBtuRef = useRef("12");
+
+  useEffect(() => {
+    if (!isCalculatorRoughInCapacity(draft.capacity)) {
+      lastBtuRef.current = draft.capacity;
+    }
+  }, [draft.capacity]);
+
   const [modelPick, setModelPick] = useState("");
   const [quickName, setQuickName] = useState("");
   const [quickPrice, setQuickPrice] = useState("");
@@ -365,24 +374,36 @@ export function RoomFormBlock({
         </div>
       ) : null}
 
+      <CalculatorTraceOnlyModeCard
+        checked={isCalculatorRoughInCapacity(draft.capacity)}
+        onCheckedChange={(enabled) => {
+          if (enabled) {
+            if (!isCalculatorRoughInCapacity(draft.capacity)) {
+              lastBtuRef.current = draft.capacity;
+            }
+            onPatch({
+              capacity: CALCULATOR_ROUGH_IN_CAPACITY,
+              selectedAcModelIds: [],
+            });
+          } else {
+            const restore = lastBtuRef.current;
+            onPatch({
+              capacity:
+                restore && !isCalculatorRoughInCapacity(restore) ? restore : "12",
+            });
+          }
+        }}
+      />
+
+      {!isCalculatorRoughInCapacity(draft.capacity) ? (
+        <>
       <Label
         text="Мощность BTU"
-        note={
-          isCalculatorRoughInCapacity(draft.capacity)
-            ? "Закладка трасс: базовый монтаж блока не считается; остальные позиции — как обычно"
-            : "Если модель не выбрана — цена монтажа по типоразмеру"
-        }
+        note="Если модель не выбрана — цена монтажа по типоразмеру"
       >
         <select
           value={draft.capacity}
-          onChange={(e) => {
-            const v = e.target.value;
-            onPatch(
-              v === CALCULATOR_ROUGH_IN_CAPACITY
-                ? { capacity: v, selectedAcModelIds: [] }
-                : { capacity: v }
-            );
-          }}
+          onChange={(e) => onPatch({ capacity: e.target.value })}
           style={inputStyle}
         >
           {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
@@ -403,6 +424,8 @@ export function RoomFormBlock({
           <option value="existing">На чужую трассу</option>
         </select>
       </Label>
+        </>
+      ) : null}
 
       <Label
         text="Трасса, м"

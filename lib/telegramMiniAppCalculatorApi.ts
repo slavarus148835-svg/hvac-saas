@@ -405,7 +405,12 @@ export async function patchMiniAppSettings(payload: {
 export type MiniAppMeAccount = {
   trialEndsAt: string | null;
   paidAt: string | null;
+  paidUntil: string | null;
+  firstCalculationAt: string | null;
+  trialStartedAt: string | null;
   subscriptionStatus: string | null;
+  accessStatusLabel: string;
+  accessUntilLabel: string;
 };
 
 export async function fetchMiniAppMeAccount(): Promise<
@@ -429,8 +434,16 @@ export async function fetchMiniAppMeAccount(): Promise<
       account: {
         trialEndsAt: typeof pr.trialEndsAt === "string" ? pr.trialEndsAt : null,
         paidAt: typeof pr.paidAt === "string" ? pr.paidAt : null,
+        paidUntil: typeof pr.paidUntil === "string" ? pr.paidUntil : null,
+        firstCalculationAt:
+          typeof pr.firstCalculationAt === "string" ? pr.firstCalculationAt : null,
+        trialStartedAt: typeof pr.trialStartedAt === "string" ? pr.trialStartedAt : null,
         subscriptionStatus:
           typeof pr.subscriptionStatus === "string" ? pr.subscriptionStatus : null,
+        accessStatusLabel:
+          typeof pr.accessStatusLabel === "string" ? pr.accessStatusLabel : "—",
+        accessUntilLabel:
+          typeof pr.accessUntilLabel === "string" ? pr.accessUntilLabel : "—",
       },
     };
   } catch {

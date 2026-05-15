@@ -254,17 +254,12 @@ export default function TgCabinetPage() {
                 }}
               >
                 {profile.email ? <li>Email: {profile.email}</li> : null}
-                <li>План / подписка: {profile.plan ?? "—"}</li>
-                {accountExtra?.subscriptionStatus ? (
-                  <li>Статус: {accountExtra.subscriptionStatus}</li>
-                ) : null}
-                <li>Оплата: {profile.hasPaid ? "активна" : "нет"}</li>
-                {!profile.hasPaid && accountExtra?.trialEndsAt ? (
-                  <li>Trial до: {formatIsoDate(accountExtra.trialEndsAt)}</li>
-                ) : null}
-                {profile.hasPaid && accountExtra?.paidAt ? (
-                  <li>Оплата отмечена: {formatIsoDate(accountExtra.paidAt)}</li>
-                ) : null}
+                <li>
+                  Статус:{" "}
+                  {accountExtra?.accessStatusLabel ?? (profile.hasPaid ? "Подписка активна" : "—")}
+                </li>
+                <li>Срок: {accountExtra?.accessUntilLabel ?? "—"}</li>
+                <li>План: {profile.plan ?? "—"}</li>
                 {profile.telegramUsername ? (
                   <li>@{profile.telegramUsername}</li>
                 ) : null}

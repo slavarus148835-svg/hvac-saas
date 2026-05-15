@@ -28,6 +28,7 @@ export {
   calculatorRouteMetersFieldLabel,
   calculatorRouteMetersFieldNote,
   calculatorRouteMetersRoomNote,
+  clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
 } from "./roughInMode";

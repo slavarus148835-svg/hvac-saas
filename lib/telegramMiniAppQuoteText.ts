@@ -1,4 +1,5 @@
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
+import { clientQuoteItemsWithRoughInHeader } from "@/lib/calculator/roughInMode";
 
 export type MiniAppQuoteLineInput = {
   title: string;
@@ -33,10 +34,13 @@ export function buildTelegramMiniAppClientQuoteText(params: {
   /** @deprecated не используется — мощность в строках позиций из compute. */
   capacityDisplay?: "kw" | "btu_typical";
 }): string {
-  void params.capacity;
   void params.mountType;
+  const items = clientQuoteItemsWithRoughInHeader(
+    params.capacity,
+    params.items.map((i) => ({ title: i.title, amount: i.amount }))
+  );
   return buildStructuredClientQuoteMessage({
-    items: params.items.map((i) => ({ title: i.title, amount: i.amount })),
+    items,
     total: params.total,
     clientName: params.clientName,
     clientContact: params.clientContact,

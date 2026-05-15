@@ -8,11 +8,19 @@ export const CALCULATOR_BTU_ONLY_OPTIONS = ["7", "9", "12", "18", "24", "30", "3
 
 export type CalculatorBtuDigitCapacity = (typeof CALCULATOR_BTU_ONLY_OPTIONS)[number];
 
-/** Порядок в селекторе мощности: сначала закладка, затем типоразмеры BTU. */
-export const CALCULATOR_CAPACITY_SELECT_OPTIONS: readonly (
-  | typeof CALCULATOR_ROUGH_IN_CAPACITY
-  | CalculatorBtuDigitCapacity
-)[] = [CALCULATOR_ROUGH_IN_CAPACITY, ...CALCULATOR_BTU_ONLY_OPTIONS];
+/** Типоразмеры BTU в селекторе (без «Закладка трасс» — отдельный переключатель в UI). */
+export const CALCULATOR_CAPACITY_SELECT_OPTIONS: readonly CalculatorBtuDigitCapacity[] =
+  CALCULATOR_BTU_ONLY_OPTIONS;
+
+/** Строки клиентского текста: заголовок «Закладка трасс» без суммы (см. clientQuoteStandard). */
+export function clientQuoteItemsWithRoughInHeader(
+  capacity: string,
+  items: { title: string; amount: number }[]
+): { title: string; amount: number }[] {
+  if (!isCalculatorRoughInCapacity(capacity)) return items;
+  if (items.some((i) => i.title === CALCULATOR_ROUGH_IN_LABEL_RU)) return items;
+  return [{ title: CALCULATOR_ROUGH_IN_LABEL_RU, amount: 0 }, ...items];
+}
 
 export function isCalculatorRoughInCapacity(capacity: string): boolean {
   return String(capacity ?? "").trim() === CALCULATOR_ROUGH_IN_CAPACITY;

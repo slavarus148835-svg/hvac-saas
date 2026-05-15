@@ -30,6 +30,10 @@ import {
 } from "@/lib/checkAccess";
 import { buildLoginRedirectUrl } from "@/lib/safeRedirect";
 import {
+  cabinetAccessStatusLabel,
+  cabinetAccessUntilLabel,
+} from "@/lib/cabinetSubscriptionDisplay";
+import {
   cabinetBadgeLabel,
   cabinetNearExpirySoftParagraphs,
   cabinetBillingPrimaryCtaLabel,
@@ -53,7 +57,9 @@ import {
   type UserTrialFields,
 } from "@/lib/trialSubscription";
 import { canShowReferral } from "@/lib/partner/canShowReferral";
+import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
 import { tryAttachReferralFromStorage } from "@/lib/partner/clientAttachReferral";
+import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
 
 type ProfileData = UserTrialFields & {
   uid?: string;
@@ -270,6 +276,11 @@ export default function DashboardPage() {
     const u = auth.currentUser;
     if (!u || u.uid !== uid) return;
     void tryAttachReferralFromStorage(uid, () => u.getIdToken());
+    void tryAttachPartnerManagerFromStorage(
+      uid,
+      () => u.getIdToken(),
+      isTelegramMiniApp() ? "telegram_miniapp" : "web"
+    );
   }, [user?.uid]);
 
   useEffect(() => {
@@ -747,9 +758,15 @@ export default function DashboardPage() {
             <span style={valueStyle}>{profile?.phone || "не указан"}</span>
           </div>
           <div style={infoRow}>
-            <span style={labelStyle}>Статус доступа</span>
+            <span style={labelStyle}>Статус</span>
             <span style={{ ...valueStyle, color: accessOk ? "#166534" : "#b91c1c" }}>
-              {accessOk ? "Доступ открыт" : "Доступ ограничен"}
+              {profile ? cabinetAccessStatusLabel(profile) : "—"}
+            </span>
+          </div>
+          <div style={infoRow}>
+            <span style={labelStyle}>Срок</span>
+            <span style={valueStyle}>
+              {profile ? cabinetAccessUntilLabel(profile) : "—"}
             </span>
           </div>
 

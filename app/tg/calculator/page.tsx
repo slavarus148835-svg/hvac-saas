@@ -42,7 +42,9 @@ import {
   type UserCustomService,
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
+import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
+import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
 import { buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
 import {
   buildTelegramMiniAppClientQuoteText,
@@ -235,6 +237,8 @@ export default function TgCalculatorPage() {
     QuickCalculationExtra[]
   >([]);
   const [multiRoomEnabled, setMultiRoomEnabled] = useState(false);
+  const lastBtuCapacityRef = useRef("12");
+  const traceOnlyMode = isCalculatorRoughInCapacity(capacity);
   const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
     createDefaultRoomDraft("Комната 1"),
   ]);
@@ -712,6 +716,24 @@ export default function TgCalculatorPage() {
       cancelled = true;
     };
   }, [calcPhase, authUi]);
+
+  const setTraceOnlyMode = useCallback(
+    (enabled: boolean) => {
+      if (enabled) {
+        if (!isCalculatorRoughInCapacity(capacity)) {
+          lastBtuCapacityRef.current = capacity;
+        }
+        setCapacity(CALCULATOR_ROUGH_IN_CAPACITY);
+        setSelectedAcModelIds([]);
+      } else {
+        const restore = lastBtuCapacityRef.current;
+        setCapacity(
+          restore && !isCalculatorRoughInCapacity(restore) ? restore : "12"
+        );
+      }
+    },
+    [capacity]
+  );
 
   const patchRoom = useCallback((roomId: string, patch: Partial<CalculatorRoomDraft>) => {
     setRoomDrafts((prev) =>
@@ -1546,16 +1568,21 @@ export default function TgCalculatorPage() {
 
                 {!multiRoomEnabled ? (
                   <>
+                <CalculatorTraceOnlyModeCard
+                  variant="miniapp"
+                  checked={traceOnlyMode}
+                  onCheckedChange={setTraceOnlyMode}
+                />
                 <div style={card}>
+                  {!traceOnlyMode ? (
+                    <>
                   <span style={label}>Мощность BTU</span>
                   <select
                     style={input}
-                    value={capacity}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setCapacity(v);
-                      if (v === CALCULATOR_ROUGH_IN_CAPACITY) setSelectedAcModelIds([]);
-                    }}
+                    value={
+                      isCalculatorRoughInCapacity(capacity) ? "12" : capacity
+                    }
+                    onChange={(e) => setCapacity(e.target.value)}
                     aria-label="Выберите мощность BTU"
                   >
                     {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
@@ -1576,6 +1603,8 @@ export default function TgCalculatorPage() {
                     <option value="standard">На нашу трассу</option>
                     <option value="existing">На чужую трассу</option>
                   </select>
+                    </>
+                  ) : null}
 
                   <span style={label}>
                     {calculatorRouteMetersFieldLabel(capacity, giftRouteMeters)}
@@ -1885,8 +1914,21 @@ export default function TgCalculatorPage() {
                     Состав сметы
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                    {!multiRoomEnabled && traceOnlyMode ? (
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {CALCULATOR_ROUGH_IN_LABEL_RU}
+                      </div>
+                    ) : null}
                     {displayResult.items.map((i, idx) => {
                       const title = mapMiniAppQuoteItemTitle(i.title);
+                      const hideAmount =
+                        title === CALCULATOR_ROUGH_IN_LABEL_RU && i.amount === 0;
                       return (
                         <div
                           key={`line-${idx}`}
@@ -1899,9 +1941,11 @@ export default function TgCalculatorPage() {
                           }}
                         >
                           <span style={{ flex: 1, minWidth: 0 }}>{title}</span>
-                          <span style={{ flexShrink: 0, fontWeight: 700 }}>
-                            {formatAmountRu(Math.abs(i.amount))} ₽
-                          </span>
+                          {hideAmount ? null : (
+                            <span style={{ flexShrink: 0, fontWeight: 700 }}>
+                              {formatAmountRu(Math.abs(i.amount))} ₽
+                            </span>
+                          )}
                         </div>
                       );
                     })}

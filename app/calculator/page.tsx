@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -41,6 +42,9 @@ import {
   formatCapacityBtu,
   formatRubles,
   isCalculatorRoughInCapacity,
+} from "@/lib/calculator";
+import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
+import {
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -221,6 +225,8 @@ function CalculatorPage() {
   const [pricelistCustomServices, setPricelistCustomServices] = useState<UserCustomService[]>([]);
 
   const [capacity, setCapacity] = useState("12");
+  const lastBtuCapacityRef = useRef("12");
+  const traceOnlyMode = isCalculatorRoughInCapacity(capacity);
   const [mountType, setMountType] = useState<"standard" | "existing">("standard");
   const [routeMeters, setRouteMeters] = useState("0");
   const [baseWallType, setBaseWallType] = useState<"normal" | "arm">("normal");
@@ -1460,6 +1466,21 @@ function CalculatorPage() {
 
       {!multiRoomEnabled ? (
         <>
+        <CalculatorTraceOnlyModeCard
+          checked={traceOnlyMode}
+          onCheckedChange={(enabled) => {
+            if (enabled) {
+              if (!traceOnlyMode) lastBtuCapacityRef.current = capacity;
+              setCapacity(CALCULATOR_ROUGH_IN_CAPACITY);
+              setSelectedAcModelIds([]);
+            } else {
+              const restore = lastBtuCapacityRef.current;
+              setCapacity(
+                restore && !isCalculatorRoughInCapacity(restore) ? restore : "12"
+              );
+            }
+          }}
+        />
       <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
@@ -1527,21 +1548,17 @@ function CalculatorPage() {
           </div>
         ) : null}
 
+        {!traceOnlyMode ? (
+          <>
         <Label
           text="Мощность BTU"
-          note={
-            isCalculatorRoughInCapacity(capacity)
-              ? "Закладка трасс: базовый монтаж блока не считается; остальные позиции — как обычно"
-              : "Типоразмер ряда; используется, если модель кондиционера не выбрана"
-          }
+          note="Типоразмер ряда; используется, если модель кондиционера не выбрана"
         >
           <select
-            value={capacity}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCapacity(v);
-              if (v === CALCULATOR_ROUGH_IN_CAPACITY) setSelectedAcModelIds([]);
-            }}
+            value={
+              isCalculatorRoughInCapacity(capacity) ? "12" : capacity
+            }
+            onChange={(e) => setCapacity(e.target.value)}
             style={inputStyle}
           >
             {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
@@ -1562,6 +1579,8 @@ function CalculatorPage() {
             <option value="existing">На чужую трассу</option>
           </select>
         </Label>
+          </>
+        ) : null}
 
         <Label
           text="Трасса, м"
@@ -1938,7 +1957,23 @@ function CalculatorPage() {
         <h2 style={sectionTitle}>5. Расчётная часть</h2>
 
         <div style={calcBreakdownLight}>
-          {result.items.map((item, index) => (
+          {!multiRoomEnabled && traceOnlyMode ? (
+            <div
+              style={{
+                ...calcBreakdownRowStyle,
+                fontWeight: 700,
+                marginBottom: 10,
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                {CALCULATOR_ROUGH_IN_LABEL_RU}
+              </span>
+            </div>
+          ) : null}
+          {result.items.map((item, index) => {
+            const hideAmount =
+              item.title === CALCULATOR_ROUGH_IN_LABEL_RU && item.amount === 0;
+            return (
             <div
               key={index}
               style={{
@@ -1947,11 +1982,14 @@ function CalculatorPage() {
               }}
             >
               <span style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>{item.title}</span>
-              <span style={calcBreakdownAmountStyle}>
-                {fmt(Math.abs(item.amount))}
-              </span>
+              {hideAmount ? null : (
+                <span style={calcBreakdownAmountStyle}>
+                  {fmt(Math.abs(item.amount))}
+                </span>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={calcTotalPlaque}>

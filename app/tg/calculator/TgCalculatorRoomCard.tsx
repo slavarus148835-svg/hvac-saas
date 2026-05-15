@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import type { CalculatorRoomDraft, SelectedExtraServiceMap } from "@/lib/calculator";
 import {
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
@@ -128,6 +129,15 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
     onDuplicate,
     onRemoveRoom,
   } = props;
+
+  const lastBtuRef = useRef("12");
+  const traceOnly = isCalculatorRoughInCapacity(draft.capacity);
+
+  useEffect(() => {
+    if (!isCalculatorRoughInCapacity(draft.capacity)) {
+      lastBtuRef.current = draft.capacity;
+    }
+  }, [draft.capacity]);
 
   const [qName, setQName] = useState("");
   const [qPrice, setQPrice] = useState("");
@@ -262,18 +272,35 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             </div>
           ) : null}
 
+          <CalculatorTraceOnlyModeCard
+            variant="miniapp"
+            checked={traceOnly}
+            onCheckedChange={(enabled) => {
+              if (enabled) {
+                if (!traceOnly) lastBtuRef.current = draft.capacity;
+                onPatch({
+                  capacity: CALCULATOR_ROUGH_IN_CAPACITY,
+                  selectedAcModelIds: [],
+                });
+              } else {
+                const restore = lastBtuRef.current;
+                onPatch({
+                  capacity:
+                    restore && !isCalculatorRoughInCapacity(restore) ? restore : "12",
+                });
+              }
+            }}
+          />
+
+          {!traceOnly ? (
+            <>
           <span style={label}>Мощность BTU</span>
           <select
             style={input}
-            value={draft.capacity}
-            onChange={(e) => {
-              const v = e.target.value;
-              onPatch(
-                v === CALCULATOR_ROUGH_IN_CAPACITY
-                  ? { capacity: v, selectedAcModelIds: [] }
-                  : { capacity: v }
-              );
-            }}
+            value={
+              isCalculatorRoughInCapacity(draft.capacity) ? "12" : draft.capacity
+            }
+            onChange={(e) => onPatch({ capacity: e.target.value })}
           >
             {CALCULATOR_CAPACITY_SELECT_OPTIONS.map((v) => (
               <option key={v} value={v}>
@@ -291,6 +318,8 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             <option value="standard">На нашу трассу</option>
             <option value="existing">На чужую трассу</option>
           </select>
+            </>
+          ) : null}
 
           <span style={label}>
             {calculatorRouteMetersFieldLabel(draft.capacity, giftRouteMeters)}

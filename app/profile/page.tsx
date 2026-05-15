@@ -9,24 +9,22 @@ import { withFeatureGuard } from "@/lib/withFeatureGuard";
 import { buildLoginRedirectUrl } from "@/lib/safeRedirect";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 import {
+  cabinetAccessStatusLabel,
+  cabinetAccessUntilLabel,
+} from "@/lib/cabinetSubscriptionDisplay";
+import {
   cabinetBillingPrimaryCtaLabel,
-  cabinetProfileStatusTitle,
-  cabinetProfileStatusValue,
   cabinetShowsBillingNavigation,
-  cabinetShowsPaidAccessUntilRow,
   cabinetShowsPaidNearExpirySoftBlock,
-  cabinetShowsTrialEndDateRow,
   cabinetShowsTrialNearExpirySoftBlock,
   getCabinetSubscriptionUiState,
 } from "@/lib/subscriptionVisibility";
 import {
-  firestoreTimeToMs,
   isPaidActive,
   isTrialPending,
   isTrialRunning,
   paidDaysRemainingWhileActive,
   trialDaysRemaining,
-  trialEndsMs,
   type UserTrialFields,
 } from "@/lib/trialSubscription";
 
@@ -43,6 +41,7 @@ function ProfilePage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveMessage, setProfileSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
@@ -83,6 +82,7 @@ function ProfilePage() {
       return;
     }
     setSavingProfile(true);
+    setProfileSaveMessage(null);
     try {
       await setDoc(
         doc(db, "users", u.uid),
@@ -96,9 +96,10 @@ function ProfilePage() {
       setData((prev) =>
         prev ? { ...prev, name: name.trim(), phone: phone.trim() } : prev
       );
+      setProfileSaveMessage("Данные сохранены");
     } catch (e) {
       console.error("[profile] save", e);
-      alert("Не удалось сохранить. Проверьте соединение и правила Firestore.");
+      setProfileSaveMessage("Не удалось сохранить данные");
     } finally {
       setSavingProfile(false);
     }
@@ -113,8 +114,8 @@ function ProfilePage() {
   const running = data ? isTrialRunning(data) : false;
   const left = data ? trialDaysRemaining(data) : null;
   const paidLeft = data ? paidDaysRemainingWhileActive(data) : null;
-  const trialEndLabel =
-    data && trialEndsMs(data) > 0 ? new Date(trialEndsMs(data)).toLocaleString("ru-RU") : null;
+  const accessStatusLabel = cabinetAccessStatusLabel(data);
+  const accessUntilLabel = cabinetAccessUntilLabel(data);
 
   if (loading) {
     return <div style={loadingStyle}>Загрузка профиля...</div>;
@@ -166,39 +167,43 @@ function ProfilePage() {
           >
             {savingProfile ? "Сохранение…" : "Сохранить"}
           </button>
+          {profileSaveMessage ? (
+            <p
+              style={{
+                margin: "10px 0 0",
+                fontSize: 14,
+                fontWeight: 600,
+                color: profileSaveMessage.includes("сохранены") ? "#166534" : "#b91c1c",
+              }}
+            >
+              {profileSaveMessage}
+            </p>
+          ) : null}
         </div>
 
         <div style={rowStyle}>
-          <span style={labelStyle}>{cabinetProfileStatusTitle(uiState)}</span>
-          <span style={valueStyle}>{cabinetProfileStatusValue(uiState)}</span>
+          <span style={labelStyle}>Статус</span>
+          <span style={valueStyle}>{accessStatusLabel}</span>
         </div>
         <div style={rowStyle}>
           <span style={labelStyle}>Срок</span>
-          <span style={valueStyle}>
-            {pending
-              ? "Начнётся с первого сохранённого расчёта"
-              : running && trialNearSoft && left !== null
-                ? `Осталось ${left} ${left === 1 ? "день" : left < 5 ? "дня" : "дней"} до паузы в доступе`
-                : paid && paidNearSoft && paidLeft !== null
-                  ? `Осталось ${paidLeft} ${paidLeft === 1 ? "день" : paidLeft < 5 ? "дня" : "дней"} до обновления срока`
-                  : running || paid
-                    ? "Инструменты открыты"
-                    : "—"}
-          </span>
+          <span style={valueStyle}>{accessUntilLabel}</span>
         </div>
-        {data && cabinetShowsTrialEndDateRow(data) && trialEndLabel ? (
-          <div style={rowStyle}>
-            <span style={labelStyle}>Действует до</span>
-            <span style={valueStyle}>{trialEndLabel}</span>
-          </div>
+        {pending ? (
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+            Пробный период начнётся с первого сохранённого расчёта в калькуляторе.
+          </p>
         ) : null}
-        {data && cabinetShowsPaidAccessUntilRow(data) && firestoreTimeToMs(data.paidUntil) > 0 ? (
-          <div style={rowStyle}>
-            <span style={labelStyle}>Действует до</span>
-            <span style={valueStyle}>
-              {new Date(firestoreTimeToMs(data.paidUntil)).toLocaleString("ru-RU")}
-            </span>
-          </div>
+        {!pending && running && trialNearSoft && left !== null ? (
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+            Осталось {left} {left === 1 ? "день" : left < 5 ? "дня" : "дней"} до паузы в доступе.
+          </p>
+        ) : null}
+        {!pending && paid && paidNearSoft && paidLeft !== null ? (
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+            Осталось {paidLeft} {paidLeft === 1 ? "день" : paidLeft < 5 ? "дня" : "дней"} до обновления
+            срока.
+          </p>
         ) : null}
         <div
           style={{
