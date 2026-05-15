@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import type { CalculatorRoomDraft, SelectedExtraServiceMap } from "@/lib/calculator";
@@ -350,38 +351,15 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           />
 
-          <span style={label}>Основное отверстие</span>
-          <select
-            style={input}
-            value={draft.baseWallType}
-            onChange={(e) => onPatch({ baseWallType: e.target.value as "normal" | "arm" })}
-          >
-            <option value="normal">Кирпич / газобетон / неарм. бетон</option>
-            <option value="arm">Армированный бетон</option>
-          </select>
-
-          <span style={label}>Доп. отверстия обычные</span>
-          <input
-            style={input}
-            inputMode="numeric"
-            value={draft.extraHolesNormal}
-            onChange={(e) =>
-              onPatch({
-                extraHolesNormal: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-              })
-            }
-          />
-
-          <span style={label}>Доп. отверстия арм. бетон</span>
-          <input
-            style={input}
-            inputMode="numeric"
-            value={draft.extraHolesArm}
-            onChange={(e) =>
-              onPatch({
-                extraHolesArm: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-              })
-            }
+          <CalculatorHoleFieldsSection
+            roughIn={traceOnly}
+            baseWallType={draft.baseWallType}
+            extraHolesNormal={draft.extraHolesNormal}
+            extraHolesArm={draft.extraHolesArm}
+            roughInHolesBrick={draft.roughInHolesBrick}
+            roughInHolesArmConcrete={draft.roughInHolesArmConcrete}
+            onPatch={onPatch}
+            variant="miniapp"
           />
 
           <span style={label}>Штроба, м, мин. 1 м</span>

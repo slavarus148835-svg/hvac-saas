@@ -72,6 +72,10 @@ export type CalculatorComputeInput = {
   baseWallType: "normal" | "arm";
   extraHolesNormal: string;
   extraHolesArm: string;
+  /** Кол-во отверстий кирпич/пеноблок (только rough_in). */
+  roughInHolesBrick: string;
+  /** Кол-во отверстий арм. бетон/монолит (только rough_in). */
+  roughInHolesArmConcrete: string;
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;

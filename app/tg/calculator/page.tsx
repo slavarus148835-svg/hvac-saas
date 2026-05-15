@@ -43,6 +43,7 @@ import {
   type UserCustomService,
 } from "@/lib/customServices";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
+import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
@@ -213,6 +214,8 @@ export default function TgCalculatorPage() {
   const [baseWallType, setBaseWallType] = useState<"normal" | "arm">("normal");
   const [extraHolesNormal, setExtraHolesNormal] = useState("0");
   const [extraHolesArm, setExtraHolesArm] = useState("0");
+  const [roughInHolesBrick, setRoughInHolesBrick] = useState("0");
+  const [roughInHolesArmConcrete, setRoughInHolesArmConcrete] = useState("0");
   const [carryToolFloors, setCarryToolFloors] = useState("0");
   const [carryBlockCount, setCarryBlockCount] = useState("0");
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
@@ -488,6 +491,8 @@ export default function TgCalculatorPage() {
         baseWallType,
         extraHolesNormal,
         extraHolesArm,
+        roughInHolesBrick,
+        roughInHolesArmConcrete,
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
@@ -520,6 +525,8 @@ export default function TgCalculatorPage() {
     baseWallType,
     extraHolesNormal,
     extraHolesArm,
+    roughInHolesBrick,
+    roughInHolesArmConcrete,
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
@@ -674,6 +681,8 @@ export default function TgCalculatorPage() {
       if (h.baseWallType) setBaseWallType(h.baseWallType);
       if (h.extraHolesNormal != null) setExtraHolesNormal(h.extraHolesNormal);
       if (h.extraHolesArm != null) setExtraHolesArm(h.extraHolesArm);
+      if (h.roughInHolesBrick != null) setRoughInHolesBrick(h.roughInHolesBrick);
+      if (h.roughInHolesArmConcrete != null) setRoughInHolesArmConcrete(h.roughInHolesArmConcrete);
       if (h.carryToolFloors != null) setCarryToolFloors(h.carryToolFloors);
       if (h.carryBlockCount != null) setCarryBlockCount(h.carryBlockCount);
       if (h.manualDismantlingCost != null) setManualDismantlingCost(h.manualDismantlingCost);
@@ -771,6 +780,8 @@ export default function TgCalculatorPage() {
     setBaseWallType(f.baseWallType);
     setExtraHolesNormal(f.extraHolesNormal);
     setExtraHolesArm(f.extraHolesArm);
+    setRoughInHolesBrick(f.roughInHolesBrick);
+    setRoughInHolesArmConcrete(f.roughInHolesArmConcrete);
     setCarryToolFloors(f.carryToolFloors);
     setCarryBlockCount(f.carryBlockCount);
     setManualDismantlingCost(f.manualDismantlingCost);
@@ -804,6 +815,8 @@ export default function TgCalculatorPage() {
         baseWallType,
         extraHolesNormal,
         extraHolesArm,
+        roughInHolesBrick,
+        roughInHolesArmConcrete,
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
@@ -1040,6 +1053,8 @@ export default function TgCalculatorPage() {
       baseWallType,
       extraHolesNormal,
       extraHolesArm,
+      roughInHolesBrick,
+      roughInHolesArmConcrete,
       carryToolFloors,
       carryBlockCount,
       manualDismantlingCost,
@@ -1644,40 +1659,24 @@ export default function TgCalculatorPage() {
                     }
                   />
 
-                  <span style={label}>Основное отверстие</span>
-                  <select
-                    style={input}
-                    value={baseWallType}
-                    onChange={(e) =>
-                      setBaseWallType(e.target.value as "normal" | "arm")
-                    }
-                  >
-                    <option value="normal">Кирпич / газобетон / неарм. бетон</option>
-                    <option value="arm">Армированный бетон</option>
-                  </select>
-
-                  <span style={label}>Доп. отверстия обычные</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={extraHolesNormal}
-                    onChange={(e) =>
-                      setExtraHolesNormal(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
-                      )
-                    }
-                  />
-
-                  <span style={label}>Доп. отверстия арм. бетон</span>
-                  <input
-                    style={input}
-                    inputMode="numeric"
-                    value={extraHolesArm}
-                    onChange={(e) =>
-                      setExtraHolesArm(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_HOLES)
-                      )
-                    }
+                  <CalculatorHoleFieldsSection
+                    roughIn={traceOnlyMode}
+                    baseWallType={baseWallType}
+                    extraHolesNormal={extraHolesNormal}
+                    extraHolesArm={extraHolesArm}
+                    roughInHolesBrick={roughInHolesBrick}
+                    roughInHolesArmConcrete={roughInHolesArmConcrete}
+                    onPatch={(patch) => {
+                      if (patch.baseWallType != null) setBaseWallType(patch.baseWallType);
+                      if (patch.extraHolesNormal != null)
+                        setExtraHolesNormal(patch.extraHolesNormal);
+                      if (patch.extraHolesArm != null) setExtraHolesArm(patch.extraHolesArm);
+                      if (patch.roughInHolesBrick != null)
+                        setRoughInHolesBrick(patch.roughInHolesBrick);
+                      if (patch.roughInHolesArmConcrete != null)
+                        setRoughInHolesArmConcrete(patch.roughInHolesArmConcrete);
+                    }}
+                    variant="miniapp"
                   />
 
                   <span style={label}>Штроба, м, мин. 1 м</span>

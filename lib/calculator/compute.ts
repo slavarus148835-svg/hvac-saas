@@ -23,6 +23,10 @@ import {
   clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
+  ROUGH_IN_HOLE_ARM_CONCRETE_LABEL,
+  ROUGH_IN_HOLE_ARM_CONCRETE_PRICE_RUB,
+  ROUGH_IN_HOLE_BRICK_LABEL,
+  ROUGH_IN_HOLE_BRICK_PRICE_RUB,
   routeCapacityTierKeyForPricelist,
 } from "./roughInMode";
 import type {
@@ -62,6 +66,12 @@ export function computeCalculatorLineItems(
   );
   const extraHolesArmNum = Number(
     sanitizeNonNegativeIntString(input.extraHolesArm, MAX_HOLES) || 0
+  );
+  const roughInHolesBrickNum = Number(
+    sanitizeNonNegativeIntString(input.roughInHolesBrick, MAX_HOLES) || 0
+  );
+  const roughInHolesArmConcreteNum = Number(
+    sanitizeNonNegativeIntString(input.roughInHolesArmConcrete, MAX_HOLES) || 0
   );
   const carryToolFloorsNum = Number(
     sanitizeNonNegativeIntString(input.carryToolFloors, MAX_FLOORS) || 0
@@ -146,12 +156,14 @@ export function computeCalculatorLineItems(
     });
   }
 
-  if (input.baseWallType === "arm") {
-    items.push({
-      title: "Доплата за основное отверстие в армированном бетоне",
-      amount: prices.baseArmConcreteSurcharge,
-      note: `Цена за 1 отверстие: ${fmt(prices.baseArmConcreteSurcharge)}`,
-    });
+  if (!roughIn) {
+    if (input.baseWallType === "arm") {
+      items.push({
+        title: "Доплата за основное отверстие в армированном бетоне",
+        amount: prices.baseArmConcreteSurcharge,
+        note: `Цена за 1 отверстие: ${fmt(prices.baseArmConcreteSurcharge)}`,
+      });
+    }
   }
 
   if (chargedRouteMeters > 0) {
@@ -169,20 +181,37 @@ export function computeCalculatorLineItems(
     });
   }
 
-  if (extraHolesNormalNum > 0) {
-    items.push({
-      title: `Доп. отверстия обычные × ${extraHolesNormalNum}`,
-      amount: extraHolesNormalNum * prices.extraHoleNormal,
-      note: `Цена за 1 отверстие: ${fmt(prices.extraHoleNormal)}`,
-    });
-  }
+  if (!roughIn) {
+    if (extraHolesNormalNum > 0) {
+      items.push({
+        title: `Доп. отверстия обычные × ${extraHolesNormalNum}`,
+        amount: extraHolesNormalNum * prices.extraHoleNormal,
+        note: `Цена за 1 отверстие: ${fmt(prices.extraHoleNormal)}`,
+      });
+    }
 
-  if (extraHolesArmNum > 0) {
-    items.push({
-      title: `Доп. отверстия армированный бетон × ${extraHolesArmNum}`,
-      amount: extraHolesArmNum * prices.extraHoleArm,
-      note: `Цена за 1 отверстие: ${fmt(prices.extraHoleArm)}`,
-    });
+    if (extraHolesArmNum > 0) {
+      items.push({
+        title: `Доп. отверстия армированный бетон × ${extraHolesArmNum}`,
+        amount: extraHolesArmNum * prices.extraHoleArm,
+        note: `Цена за 1 отверстие: ${fmt(prices.extraHoleArm)}`,
+      });
+    }
+  } else {
+    if (roughInHolesBrickNum > 0) {
+      items.push({
+        title: `${ROUGH_IN_HOLE_BRICK_LABEL} × ${roughInHolesBrickNum} шт`,
+        amount: roughInHolesBrickNum * ROUGH_IN_HOLE_BRICK_PRICE_RUB,
+        note: `Цена за 1 отверстие: ${fmt(ROUGH_IN_HOLE_BRICK_PRICE_RUB)}`,
+      });
+    }
+    if (roughInHolesArmConcreteNum > 0) {
+      items.push({
+        title: `${ROUGH_IN_HOLE_ARM_CONCRETE_LABEL} × ${roughInHolesArmConcreteNum} шт`,
+        amount: roughInHolesArmConcreteNum * ROUGH_IN_HOLE_ARM_CONCRETE_PRICE_RUB,
+        note: `Цена за 1 отверстие: ${fmt(ROUGH_IN_HOLE_ARM_CONCRETE_PRICE_RUB)}`,
+      });
+    }
   }
 
   if (input.strobaType !== "none" && chargedStrobaMeters > 0) {

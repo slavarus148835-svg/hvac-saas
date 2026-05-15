@@ -26,6 +26,8 @@ export function createDefaultRoomDraft(roomLabel: string): CalculatorRoomDraft {
     baseWallType: "normal",
     extraHolesNormal: "0",
     extraHolesArm: "0",
+    roughInHolesBrick: "0",
+    roughInHolesArmConcrete: "0",
     carryToolFloors: "0",
     carryBlockCount: "0",
     manualDismantlingCost: "0",
@@ -70,6 +72,8 @@ export function flatCalculatorStateToRoomDraft(params: {
   baseWallType: "normal" | "arm";
   extraHolesNormal: string;
   extraHolesArm: string;
+  roughInHolesBrick: string;
+  roughInHolesArmConcrete: string;
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
@@ -98,6 +102,8 @@ export function flatCalculatorStateToRoomDraft(params: {
     baseWallType: params.baseWallType,
     extraHolesNormal: params.extraHolesNormal,
     extraHolesArm: params.extraHolesArm,
+    roughInHolesBrick: params.roughInHolesBrick,
+    roughInHolesArmConcrete: params.roughInHolesArmConcrete,
     carryToolFloors: params.carryToolFloors,
     carryBlockCount: params.carryBlockCount,
     manualDismantlingCost: params.manualDismantlingCost,
@@ -162,6 +168,14 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
       typeof input.extraHolesArm === "string"
         ? input.extraHolesArm
         : String(input.extraHolesArm ?? "0"),
+    roughInHolesBrick:
+      typeof input.roughInHolesBrick === "string"
+        ? input.roughInHolesBrick
+        : String(input.roughInHolesBrick ?? "0"),
+    roughInHolesArmConcrete:
+      typeof input.roughInHolesArmConcrete === "string"
+        ? input.roughInHolesArmConcrete
+        : String(input.roughInHolesArmConcrete ?? "0"),
     carryToolFloors:
       typeof input.carryToolFloors === "string"
         ? input.carryToolFloors

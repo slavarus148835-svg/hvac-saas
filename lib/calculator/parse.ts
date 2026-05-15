@@ -113,6 +113,14 @@ export function normalizeCalculatorComputeInput(
     typeof raw.extraHolesArm === "string"
       ? raw.extraHolesArm
       : String(raw.extraHolesArm ?? "0");
+  const roughInHolesBrick =
+    typeof raw.roughInHolesBrick === "string"
+      ? raw.roughInHolesBrick
+      : String(raw.roughInHolesBrick ?? "0");
+  const roughInHolesArmConcrete =
+    typeof raw.roughInHolesArmConcrete === "string"
+      ? raw.roughInHolesArmConcrete
+      : String(raw.roughInHolesArmConcrete ?? "0");
   const carryToolFloors =
     typeof raw.carryToolFloors === "string"
       ? raw.carryToolFloors
@@ -152,6 +160,9 @@ export function normalizeCalculatorComputeInput(
     baseWallType,
     extraHolesNormal: sanitizeNonNegativeIntString(extraHolesNormal, MAX_HOLES) || "0",
     extraHolesArm: sanitizeNonNegativeIntString(extraHolesArm, MAX_HOLES) || "0",
+    roughInHolesBrick: sanitizeNonNegativeIntString(roughInHolesBrick, MAX_HOLES) || "0",
+    roughInHolesArmConcrete:
+      sanitizeNonNegativeIntString(roughInHolesArmConcrete, MAX_HOLES) || "0",
     carryToolFloors: sanitizeNonNegativeIntString(carryToolFloors, MAX_FLOORS) || "0",
     carryBlockCount: sanitizeNonNegativeIntString(carryBlockCount, MAX_BLOCKS) || "0",
     manualDismantlingCost:
@@ -195,6 +206,8 @@ type CalculatorComputeInputLoose = {
   baseWallType?: unknown;
   extraHolesNormal?: unknown;
   extraHolesArm?: unknown;
+  roughInHolesBrick?: unknown;
+  roughInHolesArmConcrete?: unknown;
   carryToolFloors?: unknown;
   carryBlockCount?: unknown;
   manualDismantlingCost?: unknown;

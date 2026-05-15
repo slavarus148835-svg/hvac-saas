@@ -33,6 +33,8 @@ export {
   isCalculatorRoughInCapacity,
   normalizeRoughInRouteCapacity,
   routeCapacityTierKeyForPricelist,
+  ROUGH_IN_HOLE_ARM_CONCRETE_LABEL,
+  ROUGH_IN_HOLE_BRICK_LABEL,
 } from "./roughInMode";
 export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
 export { computeMultiRoomEstimate } from "./computeMultiRoomEstimate";

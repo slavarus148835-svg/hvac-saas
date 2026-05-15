@@ -4,6 +4,12 @@ export const CALCULATOR_ROUGH_IN_CAPACITY = "rough_in";
 
 export const CALCULATOR_ROUGH_IN_LABEL_RU = "Закладка трасс";
 
+/** Отверстия только в режиме «Закладка трасс» (фиксированные цены, не из прайса). */
+export const ROUGH_IN_HOLE_BRICK_LABEL = "Отверстие кирпич/пеноблок";
+export const ROUGH_IN_HOLE_ARM_CONCRETE_LABEL = "Армированный бетон/монолит";
+export const ROUGH_IN_HOLE_BRICK_PRICE_RUB = 1000;
+export const ROUGH_IN_HOLE_ARM_CONCRETE_PRICE_RUB = 5000;
+
 export const CALCULATOR_BTU_ONLY_OPTIONS = ["7", "9", "12", "18", "24", "30", "36"] as const;
 
 export type CalculatorBtuDigitCapacity = (typeof CALCULATOR_BTU_ONLY_OPTIONS)[number];

@@ -15,6 +15,8 @@ export type TgCalculatorHydratedFields = {
   baseWallType: "normal" | "arm";
   extraHolesNormal: string;
   extraHolesArm: string;
+  roughInHolesBrick: string;
+  roughInHolesArmConcrete: string;
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
@@ -97,6 +99,9 @@ export function hydrateTgCalculatorFromHistoryDoc(
     baseWallType,
     extraHolesNormal: typeof data.extraHolesNormal === "string" ? data.extraHolesNormal : "0",
     extraHolesArm: typeof data.extraHolesArm === "string" ? data.extraHolesArm : "0",
+    roughInHolesBrick: typeof data.roughInHolesBrick === "string" ? data.roughInHolesBrick : "0",
+    roughInHolesArmConcrete:
+      typeof data.roughInHolesArmConcrete === "string" ? data.roughInHolesArmConcrete : "0",
     carryToolFloors: typeof data.carryToolFloors === "string" ? data.carryToolFloors : "0",
     carryBlockCount: typeof data.carryBlockCount === "string" ? data.carryBlockCount : "0",
     manualDismantlingCost:

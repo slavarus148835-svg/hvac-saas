@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -100,6 +101,8 @@ type HistoryCalcDoc = {
   baseWallType?: "normal" | "arm";
   extraHolesNormal?: string;
   extraHolesArm?: string;
+  roughInHolesBrick?: string;
+  roughInHolesArmConcrete?: string;
   carryToolFloors?: string;
   carryBlockCount?: string;
   manualDismantlingCost?: string;
@@ -166,6 +169,14 @@ function draftFromSavedHistoryRoom(entry: {
       typeof inp.extraHolesNormal === "string" ? inp.extraHolesNormal : String(inp.extraHolesNormal ?? "0"),
     extraHolesArm:
       typeof inp.extraHolesArm === "string" ? inp.extraHolesArm : String(inp.extraHolesArm ?? "0"),
+    roughInHolesBrick:
+      typeof inp.roughInHolesBrick === "string"
+        ? inp.roughInHolesBrick
+        : String(inp.roughInHolesBrick ?? "0"),
+    roughInHolesArmConcrete:
+      typeof inp.roughInHolesArmConcrete === "string"
+        ? inp.roughInHolesArmConcrete
+        : String(inp.roughInHolesArmConcrete ?? "0"),
     carryToolFloors:
       typeof inp.carryToolFloors === "string" ? inp.carryToolFloors : String(inp.carryToolFloors ?? "0"),
     carryBlockCount:
@@ -246,6 +257,8 @@ function CalculatorPage() {
   const [baseWallType, setBaseWallType] = useState<"normal" | "arm">("normal");
   const [extraHolesNormal, setExtraHolesNormal] = useState("0");
   const [extraHolesArm, setExtraHolesArm] = useState("0");
+  const [roughInHolesBrick, setRoughInHolesBrick] = useState("0");
+  const [roughInHolesArmConcrete, setRoughInHolesArmConcrete] = useState("0");
   const [carryToolFloors, setCarryToolFloors] = useState("0");
   const [carryBlockCount, setCarryBlockCount] = useState("0");
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
@@ -453,6 +466,8 @@ function CalculatorPage() {
             setBaseWallType(data.baseWallType || "normal");
             setExtraHolesNormal(data.extraHolesNormal || "0");
             setExtraHolesArm(data.extraHolesArm || "0");
+            setRoughInHolesBrick(data.roughInHolesBrick || "0");
+            setRoughInHolesArmConcrete(data.roughInHolesArmConcrete || "0");
             setCarryToolFloors(data.carryToolFloors || "0");
             setCarryBlockCount(data.carryBlockCount || "0");
             setManualDismantlingCost(data.manualDismantlingCost || "0");
@@ -653,6 +668,8 @@ function CalculatorPage() {
       baseWallType,
       extraHolesNormal,
       extraHolesArm,
+      roughInHolesBrick,
+      roughInHolesArmConcrete,
       carryToolFloors,
       carryBlockCount,
       manualDismantlingCost,
@@ -683,6 +700,8 @@ function CalculatorPage() {
     baseWallType,
     extraHolesNormal,
     extraHolesArm,
+    roughInHolesBrick,
+    roughInHolesArmConcrete,
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
@@ -765,6 +784,8 @@ function CalculatorPage() {
             baseWallType,
             extraHolesNormal,
             extraHolesArm,
+            roughInHolesBrick,
+            roughInHolesArmConcrete,
             carryToolFloors,
             carryBlockCount,
             manualDismantlingCost,
@@ -800,6 +821,8 @@ function CalculatorPage() {
       baseWallType: scalar.baseWallType,
       extraHolesNormal: scalar.extraHolesNormal,
       extraHolesArm: scalar.extraHolesArm,
+      roughInHolesBrick: scalar.roughInHolesBrick,
+      roughInHolesArmConcrete: scalar.roughInHolesArmConcrete,
       carryToolFloors: scalar.carryToolFloors,
       carryBlockCount: scalar.carryBlockCount,
       manualDismantlingCost: scalar.manualDismantlingCost,
@@ -1262,6 +1285,8 @@ function CalculatorPage() {
         baseWallType,
         extraHolesNormal,
         extraHolesArm,
+        roughInHolesBrick,
+        roughInHolesArmConcrete,
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
@@ -1295,6 +1320,8 @@ function CalculatorPage() {
       setBaseWallType(f.baseWallType);
       setExtraHolesNormal(f.extraHolesNormal);
       setExtraHolesArm(f.extraHolesArm);
+      setRoughInHolesBrick(f.roughInHolesBrick);
+      setRoughInHolesArmConcrete(f.roughInHolesArmConcrete);
       setCarryToolFloors(f.carryToolFloors);
       setCarryBlockCount(f.carryBlockCount);
       setManualDismantlingCost(f.manualDismantlingCost);
@@ -1649,52 +1676,85 @@ function CalculatorPage() {
         </Label>
         <FieldMessage error={fieldErrors.routeMeters} warning={fieldWarnings.routeMeters} />
 
-        <Label text="Материал основного отверстия" note="Влияет на доплату за армированный бетон в итоге">
-          <select
-            value={baseWallType}
-            onChange={(e) => setBaseWallType(e.target.value as "normal" | "arm")}
-            style={inputStyle}
-          >
-            <option value="normal">Кирпич / газобетон / неармированный бетон</option>
-            <option value="arm">Армированный бетон</option>
-          </select>
-        </Label>
-
-        <Label text="Доп. отверстия обычные, шт." note="Количество дополнительных отверстий">
-          <input
-            value={extraHolesNormal}
-            onChange={(e) =>
+        <CalculatorHoleFieldsSection
+          roughIn={traceOnlyMode}
+          baseWallType={baseWallType}
+          extraHolesNormal={extraHolesNormal}
+          extraHolesArm={extraHolesArm}
+          roughInHolesBrick={roughInHolesBrick}
+          roughInHolesArmConcrete={roughInHolesArmConcrete}
+          onPatch={(patch) => {
+            if (patch.baseWallType != null) setBaseWallType(patch.baseWallType);
+            if (patch.extraHolesNormal != null) {
               onIntFieldChange(
                 "extraHolesNormal",
-                e.target.value,
+                patch.extraHolesNormal,
                 MAX_HOLES,
                 WARN_HOLES,
                 setExtraHolesNormal
-              )
+              );
             }
-            style={inputStyle}
-            inputMode="numeric"
-          />
-        </Label>
-        <FieldMessage error={fieldErrors.extraHolesNormal} warning={fieldWarnings.extraHolesNormal} />
-
-        <Label text="Доп. отверстия армированные, шт." note="Количество отверстий в армированном бетоне">
-          <input
-            value={extraHolesArm}
-            onChange={(e) =>
+            if (patch.extraHolesArm != null) {
               onIntFieldChange(
                 "extraHolesArm",
-                e.target.value,
+                patch.extraHolesArm,
                 MAX_HOLES,
                 WARN_HOLES,
                 setExtraHolesArm
-              )
+              );
             }
-            style={inputStyle}
-            inputMode="numeric"
-          />
-        </Label>
-        <FieldMessage error={fieldErrors.extraHolesArm} warning={fieldWarnings.extraHolesArm} />
+            if (patch.roughInHolesBrick != null) {
+              onIntFieldChange(
+                "roughInHolesBrick",
+                patch.roughInHolesBrick,
+                MAX_HOLES,
+                WARN_HOLES,
+                setRoughInHolesBrick
+              );
+            }
+            if (patch.roughInHolesArmConcrete != null) {
+              onIntFieldChange(
+                "roughInHolesArmConcrete",
+                patch.roughInHolesArmConcrete,
+                MAX_HOLES,
+                WARN_HOLES,
+                setRoughInHolesArmConcrete
+              );
+            }
+          }}
+          variant="web"
+          renderWebField={({ text, note, children, fieldKey }) => (
+            <>
+              <Label text={text} note={note}>
+                {children}
+              </Label>
+              {fieldKey === "extraHolesNormal" ? (
+                <FieldMessage
+                  error={fieldErrors.extraHolesNormal}
+                  warning={fieldWarnings.extraHolesNormal}
+                />
+              ) : null}
+              {fieldKey === "extraHolesArm" ? (
+                <FieldMessage
+                  error={fieldErrors.extraHolesArm}
+                  warning={fieldWarnings.extraHolesArm}
+                />
+              ) : null}
+              {fieldKey === "roughInHolesBrick" ? (
+                <FieldMessage
+                  error={fieldErrors.roughInHolesBrick}
+                  warning={fieldWarnings.roughInHolesBrick}
+                />
+              ) : null}
+              {fieldKey === "roughInHolesArmConcrete" ? (
+                <FieldMessage
+                  error={fieldErrors.roughInHolesArmConcrete}
+                  warning={fieldWarnings.roughInHolesArmConcrete}
+                />
+              ) : null}
+            </>
+          )}
+        />
       </div>
 
       <div style={cardStyle}>

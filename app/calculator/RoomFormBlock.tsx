@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import {
@@ -455,40 +456,21 @@ export function RoomFormBlock({
         />
       </Label>
 
-      <Label text="Материал основного отверстия">
-        <select
-          value={draft.baseWallType}
-          onChange={(e) => onPatch({ baseWallType: e.target.value as "normal" | "arm" })}
-          style={inputStyle}
-        >
-          <option value="normal">Кирпич / газобетон / неармированный бетон</option>
-          <option value="arm">Армированный бетон</option>
-        </select>
-      </Label>
-
-      <Label text="Доп. отверстия обычные, шт.">
-        <input
-          value={draft.extraHolesNormal}
-          onChange={(e) =>
-            onPatch({
-              extraHolesNormal: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-            })
-          }
-          style={inputStyle}
-          inputMode="numeric"
-        />
-      </Label>
-
-      <Label text="Доп. отверстия армированные, шт.">
-        <input
-          value={draft.extraHolesArm}
-          onChange={(e) =>
-            onPatch({ extraHolesArm: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0" })
-          }
-          style={inputStyle}
-          inputMode="numeric"
-        />
-      </Label>
+      <CalculatorHoleFieldsSection
+        roughIn={isCalculatorRoughInCapacity(draft.capacity)}
+        baseWallType={draft.baseWallType}
+        extraHolesNormal={draft.extraHolesNormal}
+        extraHolesArm={draft.extraHolesArm}
+        roughInHolesBrick={draft.roughInHolesBrick}
+        roughInHolesArmConcrete={draft.roughInHolesArmConcrete}
+        onPatch={onPatch}
+        variant="web"
+        renderWebField={({ text, note, children }) => (
+          <Label text={text} note={note}>
+            {children}
+          </Label>
+        )}
+      />
 
       <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", margin: "16px 0 8px" }}>
         Штроба и кабель-каналы
