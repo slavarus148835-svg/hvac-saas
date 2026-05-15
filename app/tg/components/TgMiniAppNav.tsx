@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/tg/price", label: "Прайс" },
   { href: "/tg/models", label: "Модели кондиционеров" },
   { href: "/tg/cabinet", label: "Кабинет" },
+  { href: "/tg/about", label: "О сервисе" },
 ] as const;
 
 const wrap: CSSProperties = {
