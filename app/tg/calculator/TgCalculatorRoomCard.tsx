@@ -6,6 +6,7 @@ import type { CalculatorRoomDraft, SelectedExtraServiceMap } from "@/lib/calcula
 import {
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  calculatorRouteMetersFieldLabel,
   formatCapacityBtu,
   formatRubles,
   isCalculatorRoughInCapacity,
@@ -291,7 +292,9 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             <option value="existing">На чужую трассу</option>
           </select>
 
-          <span style={label}>Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м)</span>
+          <span style={label}>
+            {calculatorRouteMetersFieldLabel(draft.capacity, giftRouteMeters)}
+          </span>
           <input
             style={input}
             inputMode="decimal"

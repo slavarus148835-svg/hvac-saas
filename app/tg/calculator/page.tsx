@@ -13,6 +13,7 @@ import {
   CALCULATOR_BTU_ONLY_OPTIONS,
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  calculatorRouteMetersFieldLabel,
   DEFAULT_CALCULATOR_PRICES,
   flatCalculatorStateToRoomDraft,
   formatAmountRu,
@@ -1577,7 +1578,7 @@ export default function TgCalculatorPage() {
                   </select>
 
                   <span style={label}>
-                    Трасса, м, мин. 1 м (в подарок {giftRouteMeters} м)
+                    {calculatorRouteMetersFieldLabel(capacity, giftRouteMeters)}
                   </span>
                   <input
                     style={input}

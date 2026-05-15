@@ -35,6 +35,7 @@ import {
   createDefaultRoomDraft,
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  calculatorRouteMetersFieldNote,
   DEFAULT_CALCULATOR_PRICES,
   flatCalculatorStateToRoomDraft,
   formatCapacityBtu,
@@ -1564,7 +1565,7 @@ function CalculatorPage() {
 
         <Label
           text="Трасса, м"
-          note={`Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту. К оплате: метры минус «в подарок» (${giftRouteMeters} м из личного прайса)`}
+          note={calculatorRouteMetersFieldNote(capacity, giftRouteMeters)}
         >
           <input
             value={routeMeters}

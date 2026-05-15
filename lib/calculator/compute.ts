@@ -21,6 +21,7 @@ import {
 } from "./parse";
 import {
   CALCULATOR_ROUGH_IN_LABEL_RU,
+  effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
 } from "./roughInMode";
 import type {
@@ -79,7 +80,7 @@ export function computeCalculatorLineItems(
     sanitizeNonNegativeIntString(input.percentDiscount, 100) || 0
   );
 
-  const giftM = Math.max(0, Math.floor(Number(input.giftRouteMeters) || 0));
+  const giftM = effectiveGiftRouteMeters(input.capacity, input.giftRouteMeters);
   const routePaidMeters = Math.max(0, chargedRouteMeters - giftM);
 
   const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
@@ -157,10 +158,14 @@ export function computeCalculatorLineItems(
   }
 
   if (chargedRouteMeters > 0) {
+    const routeNote =
+      giftM > 0
+        ? `Цена за 1 м: ${fmt(routePricePerMeter)}. В подарок ${giftM} м, к оплате ${routePaidMeters} м`
+        : `Цена за 1 м: ${fmt(routePricePerMeter)}. К оплате ${routePaidMeters} м`;
     items.push({
       title: `Трасса × ${chargedRouteMeters} м`,
       amount: routePaidMeters * routePricePerMeter,
-      note: `Цена за 1 м: ${fmt(routePricePerMeter)}. В подарок ${giftM} м, к оплате ${routePaidMeters} м`,
+      note: routeNote,
     });
   }
 

@@ -10,6 +10,7 @@ import type { CalculatorRoomDraft } from "@/lib/calculator/roomDraft";
 import {
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  calculatorRouteMetersRoomNote,
   formatCapacityBtu,
   isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
@@ -405,7 +406,7 @@ export function RoomFormBlock({
 
       <Label
         text="Трасса, м"
-        note={`Доли метра. (0;1) м → 1 м к оплате. Подарок: ${giftRouteMeters} м из прайса`}
+        note={calculatorRouteMetersRoomNote(draft.capacity, giftRouteMeters)}
       >
         <input
           value={draft.routeMeters}

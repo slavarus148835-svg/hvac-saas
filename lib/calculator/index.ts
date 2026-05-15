@@ -25,6 +25,10 @@ export {
   CALCULATOR_CAPACITY_SELECT_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
   CALCULATOR_ROUGH_IN_LABEL_RU,
+  calculatorRouteMetersFieldLabel,
+  calculatorRouteMetersFieldNote,
+  calculatorRouteMetersRoomNote,
+  effectiveGiftRouteMeters,
   isCalculatorRoughInCapacity,
 } from "./roughInMode";
 export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
