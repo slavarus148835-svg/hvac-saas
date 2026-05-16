@@ -45,9 +45,12 @@ export function resolveAdminNotificationChatIdSource():
 }
 
 /**
- * Привязка Telegram к давно созданному web-аккаунту — не новая регистрация.
+ * Привязка Telegram к давно созданному web-аккаунту (dashboard link), не Mini App signup.
+ * Mini App email registration всегда ставит registrationSource = telegram_mini_app.
  */
 function isTelegramLinkToExistingAccount(user: Record<string, unknown>): boolean {
+  if (user.registrationSource === "telegram_mini_app") return false;
+
   const createdMs = firestoreTimeToMs(user.createdAt);
   const linkedMs = firestoreTimeToMs(user.telegramLinkedAt);
   if (createdMs <= 0 || linkedMs <= 0) return false;
