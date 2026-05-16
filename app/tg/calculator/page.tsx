@@ -320,6 +320,9 @@ export default function TgCalculatorPage() {
             setCalcPhase("context_error");
             setContextError(ctx.error);
           }
+        } else if (resolved.status === "pending_email_registration") {
+          window.location.assign("/tg/register");
+          return;
         } else if (resolved.status === "need_email_linking") {
           if (resolved.initData) {
             setAuthUi("need_email_linking");
@@ -367,6 +370,9 @@ export default function TgCalculatorPage() {
             setCalcPhase("context_error");
             setContextError(ctx.error);
           }
+        } else if (resolved.status === "pending_email_registration") {
+          window.location.assign("/tg/register");
+          return;
         } else if (resolved.status === "need_email_linking") {
           if (resolved.initData) {
             setAuthUi("need_email_linking");

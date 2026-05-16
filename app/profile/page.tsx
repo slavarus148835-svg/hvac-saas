@@ -19,6 +19,7 @@ import {
   cabinetShowsTrialNearExpirySoftBlock,
   getCabinetSubscriptionUiState,
 } from "@/lib/subscriptionVisibility";
+import { TelegramMiniAppLinkBlock } from "@/components/telegram/TelegramMiniAppLinkBlock";
 import {
   isPaidActive,
   isTrialPending,
@@ -32,6 +33,8 @@ type ProfileData = UserTrialFields & {
   email?: string;
   name?: string;
   phone?: string;
+  telegramUserId?: string;
+  telegramUsername?: string;
 };
 
 function ProfilePage() {
@@ -205,6 +208,11 @@ function ProfilePage() {
             срока.
           </p>
         ) : null}
+        <TelegramMiniAppLinkBlock
+          telegramUserId={data?.telegramUserId}
+          telegramUsername={data?.telegramUsername}
+        />
+
         <div
           style={{
             ...buttonRow,

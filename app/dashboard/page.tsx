@@ -60,6 +60,7 @@ import { canShowReferral } from "@/lib/partner/canShowReferral";
 import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
 import { tryAttachReferralFromStorage } from "@/lib/partner/clientAttachReferral";
 import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { TelegramMiniAppLinkBlock } from "@/components/telegram/TelegramMiniAppLinkBlock";
 
 type ProfileData = UserTrialFields & {
   uid?: string;
@@ -67,6 +68,8 @@ type ProfileData = UserTrialFields & {
   name?: string;
   phone?: string;
   emailVerifiedByCode?: boolean;
+  telegramUserId?: string;
+  telegramUsername?: string;
 };
 
 type FeatureCard = {
@@ -495,6 +498,13 @@ export default function DashboardPage() {
           Открыть канал
         </a>
       </div>
+
+      {!isTelegramMiniApp() ? (
+        <TelegramMiniAppLinkBlock
+          telegramUserId={profile?.telegramUserId}
+          telegramUsername={profile?.telegramUsername}
+        />
+      ) : null}
 
       {showPaymentReturnBanner ? (
         <div

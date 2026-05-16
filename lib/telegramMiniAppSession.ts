@@ -1,5 +1,8 @@
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
-
+import {
+  clearPendingRegistrationSessionId,
+  savePendingRegistrationSessionId,
+} from "@/lib/telegramMiniAppPending";
 export const HVAC_TG_MINIAPP_SESSION_STORAGE_KEY = "hvac_tg_miniapp_session";
 
 function mapApiProfile(raw: unknown): TelegramMiniAppProfile | undefined {
@@ -57,26 +60,41 @@ export type CreateMiniAppSessionResult = {
   profile?: TelegramMiniAppProfile;
   need_registration?: boolean;
   need_email_linking?: boolean;
+  pending_email_registration?: boolean;
+  pendingSessionId?: string;
   error?: string;
 };
 
-export async function createMiniAppSession(
+function readStartParamFromInitData(initData: string): string {
+  try {
+    return String(new URLSearchParams(initData).get("start_param") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function bootstrapMiniApp(
   initData: string
 ): Promise<CreateMiniAppSessionResult> {
   const trimmed = typeof initData === "string" ? initData.trim() : "";
   if (!trimmed) {
     return {
       ok: false,
-      error:
-        "Нет данных Telegram. Откройте страницу из бота (Mini App).",
+      error: "Нет данных Telegram. Откройте страницу из бота (Mini App).",
     };
   }
 
+  const startParam = readStartParamFromInitData(trimmed);
+  let linkToken: string | undefined;
+  if (startParam.toLowerCase().startsWith("link_")) {
+    linkToken = startParam.slice("link_".length);
+  }
+
   try {
-    const res = await fetch("/api/telegram/miniapp-session", {
+    const res = await fetch("/api/telegram/miniapp-bootstrap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData: trimmed }),
+      body: JSON.stringify({ initData: trimmed, linkToken }),
       cache: "no-store",
     });
 
@@ -87,82 +105,63 @@ export async function createMiniAppSession(
         data = parsed as Record<string, unknown>;
       }
     } catch {
-      return {
-        ok: false,
-        error: "Сервер вернул непонятный ответ. Попробуйте позже.",
-      };
-    }
-
-    if (
-      res.status === 404 &&
-      data.need_email_linking === true
-    ) {
-      return {
-        ok: true,
-        need_email_linking: true,
-      };
-    }
-
-    if (res.status === 409 && data.authStatus === "duplicate_blocked") {
-      return {
-        ok: false,
-        error:
-          "Конфликт данных Telegram. Откройте Mini App из бота ещё раз или напишите в поддержку.",
-      };
-    }
-
-    if (!res.ok) {
-      if (res.status === 401) {
-        return {
-          ok: false,
-          error:
-            "Не удалось подтвердить данные Telegram. Закройте Mini App и откройте снова из бота.",
-        };
-      }
-      if (res.status === 503) {
-        return {
-          ok: false,
-          error: "Сервис временно недоступен. Попробуйте позже.",
-        };
-      }
-      if (res.status >= 500) {
-        return {
-          ok: false,
-          error: "На сервере ошибка. Попробуйте позже.",
-        };
-      }
-      return {
-        ok: false,
-        error: "Не удалось создать сессию. Обновите страницу.",
-      };
+      return { ok: false, error: "Сервер вернул непонятный ответ." };
     }
 
     if (data.ok === true && typeof data.sessionToken === "string") {
       const token = data.sessionToken.trim();
-      if (token) {
-        saveMiniAppSessionToken(token);
-      }
+      if (token) saveMiniAppSessionToken(token);
+      clearPendingRegistrationSessionId();
       const profile = mapApiProfile(data.profile);
-      if (profile) {
-        return { ok: true, profile };
-      }
+      if (profile) return { ok: true, profile };
+      return { ok: false, error: "Профиль не получен после входа." };
+    }
+
+    if (data.authStatus === "pending_email_registration") {
+      const pendingSessionId =
+        typeof data.pendingSessionId === "string" ? data.pendingSessionId.trim() : "";
+      if (pendingSessionId) savePendingRegistrationSessionId(pendingSessionId);
       return {
-        ok: false,
-        error: "Сессия создана, но профиль не получен. Попробуйте снова.",
+        ok: true,
+        pending_email_registration: true,
+        pendingSessionId: pendingSessionId || undefined,
       };
     }
 
-    return {
-      ok: false,
-      error: "Не удалось создать сессию. Попробуйте позже.",
-    };
+    if (res.status === 404 && data.need_email_linking === true) {
+      return { ok: true, need_email_linking: true };
+    }
+
+    if (typeof data.message === "string" && data.message.trim()) {
+      return { ok: false, error: data.message.trim() };
+    }
+
+    if (res.status === 409) {
+      return {
+        ok: false,
+        error:
+          "Конфликт привязки Telegram. Напишите в поддержку или войдите в существующий аккаунт.",
+      };
+    }
+
+    if (res.status === 401) {
+      return {
+        ok: false,
+        error: "Не удалось подтвердить Telegram. Откройте Mini App снова из бота.",
+      };
+    }
+
+    return { ok: false, error: "Не удалось войти через Telegram." };
   } catch {
-    return {
-      ok: false,
-      error:
-        "Нет соединения с сервером. Проверьте интернет и попробуйте снова.",
-    };
+    return { ok: false, error: "Нет соединения с сервером." };
   }
+}
+
+/** @deprecated Используйте bootstrapMiniApp — оставлено для совместимости. */
+export async function createMiniAppSession(
+  initData: string
+): Promise<CreateMiniAppSessionResult> {
+  return bootstrapMiniApp(initData);
 }
 
 export type GetMiniAppMeResult = {
@@ -253,6 +252,7 @@ export async function getMiniAppMe(): Promise<GetMiniAppMeResult> {
 
 export type EnsureMiniAppProfileResult =
   | { status: "profile"; profile: TelegramMiniAppProfile }
+  | { status: "pending_email_registration"; initData: string; pendingSessionId?: string }
   | { status: "need_registration" }
   | { status: "need_email_linking"; initData: string }
   | { status: "error"; message: string }
@@ -279,6 +279,13 @@ export async function ensureTelegramMiniAppProfile(
   const created = await createMiniAppSession(init);
   if (created.ok && created.profile) {
     return { status: "profile", profile: created.profile };
+  }
+  if (created.pending_email_registration) {
+    return {
+      status: "pending_email_registration",
+      initData: init,
+      pendingSessionId: created.pendingSessionId,
+    };
   }
   if (created.need_email_linking) {
     return { status: "need_email_linking", initData: init };

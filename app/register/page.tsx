@@ -508,6 +508,8 @@ export default function RegisterPage() {
           uid: user.uid,
           email: user.email,
           normalizedEmail: norm,
+          authProvider: "email",
+          registrationSource: "web",
           emailVerified: false,
           emailVerifiedByCode: false,
           registrationStage: "auth_created",

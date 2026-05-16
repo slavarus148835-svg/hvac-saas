@@ -104,6 +104,10 @@ export default function TgMiniAppHomePage() {
           router.replace("/tg/calculator");
           return;
         }
+        if (resolved.status === "pending_email_registration") {
+          router.replace("/tg/register");
+          return;
+        }
         if (resolved.status === "need_email_linking") {
           setTgAuth("need_email_linking");
           setEmailLinkInitData(resolved.initData || "");
