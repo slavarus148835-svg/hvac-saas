@@ -34,6 +34,26 @@ export function adminNotificationEnvPresent(): {
   };
 }
 
+/** Какой env используется для chat_id (без значений). */
+export function resolveAdminNotificationChatIdSource():
+  | "TELEGRAM_CHAT_ID"
+  | "ADMIN_TELEGRAM_CHAT_ID"
+  | "none" {
+  if (String(process.env.TELEGRAM_CHAT_ID || "").trim()) return "TELEGRAM_CHAT_ID";
+  if (String(process.env.ADMIN_TELEGRAM_CHAT_ID || "").trim()) return "ADMIN_TELEGRAM_CHAT_ID";
+  return "none";
+}
+
+/**
+ * Привязка Telegram к давно созданному web-аккаунту — не новая регистрация.
+ */
+function isTelegramLinkToExistingAccount(user: Record<string, unknown>): boolean {
+  const createdMs = firestoreTimeToMs(user.createdAt);
+  const linkedMs = firestoreTimeToMs(user.telegramLinkedAt);
+  if (createdMs <= 0 || linkedMs <= 0) return false;
+  return linkedMs - createdMs > 5 * 60 * 1000;
+}
+
 export function buildAdminNewUserNotificationHtml(
   params: NotifyAdminNewUserParams
 ): string {
@@ -121,13 +141,12 @@ export async function notifyAdminNewUserIfNeeded(
     return { sent: false, skipped: "already_notified" };
   }
 
-  const stage = String(user.registrationStage || "");
-  if (stage && stage !== "auth_created" && stage !== "code_send_started") {
-    const createdMs = firestoreTimeToMs(user.createdAt);
-    const isRecent = createdMs > 0 && Date.now() - createdMs < 20 * 60 * 1000;
-    if (!isRecent) {
-      return { sent: false, skipped: "not_new_registration_stage" };
-    }
+  if (isTelegramLinkToExistingAccount(user)) {
+    console.log("ADMIN_NEW_USER_NOTIFY_SKIPPED", {
+      uid,
+      reason: "telegram_linked_to_existing_account",
+    });
+    return { sent: false, skipped: "telegram_linked_to_existing_account" };
   }
 
   const email =
