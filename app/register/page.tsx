@@ -17,6 +17,7 @@ import {
   recordVerificationEmailSentAtNow,
 } from "@/lib/emailVerification";
 import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
+import { formatPreRegisterCheckError } from "@/lib/registrationPreCheckMessages";
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
@@ -28,6 +29,8 @@ import { normalizeEmailForAuth } from "@/lib/authEmailNormalize";
 const TEMP_OVERLOAD_MESSAGE = "Сервис временно перегружен. Повтори попытку через несколько секунд.";
 const TG_SESSION_STORAGE_KEY = "tg_login_session_id";
 const TG_SESSION_EXPIRES_STORAGE_KEY = "tg_login_session_expires_ms";
+/** Только после явного «Войти через Telegram» на этой странице — не подставлять stale localStorage в email-регистрацию. */
+const TG_REGISTER_INITIATED_KEY = "hvac_register_tg_initiated";
 
 function isHtmlPayload(contentType: string, body: string) {
   const ctype = String(contentType || "").toLowerCase();
@@ -129,6 +132,11 @@ export default function RegisterPage() {
         window.location.href = data.botUrl;
       }
       console.log("[register] telegram session created", { sessionId: data.sessionId });
+      try {
+        sessionStorage.setItem(TG_REGISTER_INITIATED_KEY, "1");
+      } catch {
+        /* ignore */
+      }
       setTgSessionId(data.sessionId);
       const expiresMs = Date.parse(data.expiresAt);
       setTgExpiresAtMs(expiresMs);
@@ -149,9 +157,25 @@ export default function RegisterPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (tgWaiting || tgSessionId) return;
+    let initiated = false;
+    try {
+      initiated = sessionStorage.getItem(TG_REGISTER_INITIATED_KEY) === "1";
+    } catch {
+      initiated = false;
+    }
+    if (!initiated) return;
     const sid = String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
     const exp = Number(localStorage.getItem(TG_SESSION_EXPIRES_STORAGE_KEY) || 0);
-    if (!sid || !exp || exp <= Date.now()) return;
+    if (!sid || !exp || exp <= Date.now()) {
+      try {
+        sessionStorage.removeItem(TG_REGISTER_INITIATED_KEY);
+        localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+        localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     setTgSessionId(sid);
     setTgExpiresAtMs(exp);
     setTgWaiting(true);
@@ -400,14 +424,36 @@ export default function RegisterPage() {
 
       const norm = normalizeEmailForAuth(email);
       let telegramLoginSessionId: string | undefined;
+      let tgInitiated = false;
       try {
-        const sid =
-          (tgSessionId && tgSessionId.trim()) ||
-          String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
-        telegramLoginSessionId = sid || undefined;
+        tgInitiated = sessionStorage.getItem(TG_REGISTER_INITIATED_KEY) === "1";
       } catch {
-        telegramLoginSessionId = undefined;
+        tgInitiated = false;
       }
+      if (tgInitiated) {
+        try {
+          const sid =
+            (tgSessionId && tgSessionId.trim()) ||
+            String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
+          telegramLoginSessionId = sid || undefined;
+        } catch {
+          telegramLoginSessionId = undefined;
+        }
+      } else {
+        try {
+          localStorage.removeItem(TG_SESSION_STORAGE_KEY);
+          localStorage.removeItem(TG_SESSION_EXPIRES_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        setTgWaiting(false);
+        setTgStatusText("");
+      }
+
+      console.log("[register] REGISTRATION_START", {
+        normalizedEmail: norm,
+        telegramSessionAttached: Boolean(telegramLoginSessionId),
+      });
 
       const preRes = await fetch("/api/auth/pre-register-check", {
         method: "POST",
@@ -418,19 +464,22 @@ export default function RegisterPage() {
       const preJson = (await preRes.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
+        reason?: string;
+        error?: string;
       };
       if (!preRes.ok || preJson.ok !== true) {
         registeringRef.current = false;
         setIsSubmitting(false);
         setStatusText("Регистрация остановлена");
-        setUserMessage(
-          typeof preJson.message === "string" && preJson.message.trim()
-            ? preJson.message
-            : "Регистрация с этим email невозможна. Войдите или используйте другой email."
-        );
+        console.log("[register] REGISTRATION_STOPPED", {
+          httpStatus: preRes.status,
+          reason: preJson.reason ?? preJson.error,
+        });
+        setUserMessage(formatPreRegisterCheckError(preJson));
         return;
       }
 
+      console.log("[register] REGISTRATION_CREATE_AUTH_START");
       console.log("[register] custom code flow start");
       console.log("[register] sendEmailVerification legacy flow disabled");
       console.log("[register] create user start");
@@ -439,6 +488,7 @@ export default function RegisterPage() {
         email,
         password
       );
+      console.log("[register] REGISTRATION_CREATE_AUTH_SUCCESS", { uid: userCredential.user.uid });
       console.log("[register] create user success");
 
       const user = userCredential.user;
@@ -451,6 +501,7 @@ export default function RegisterPage() {
       setLocalSessionId(sessionId);
       const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
 
+      console.log("[register] REGISTRATION_CREATE_FIRESTORE_START", { uid: user.uid });
       await setDoc(
         doc(db, PRICING_FS.users, user.uid),
         {
@@ -494,6 +545,7 @@ export default function RegisterPage() {
         },
         { merge: true }
       );
+      console.log("[register] REGISTRATION_CREATE_FIRESTORE_SUCCESS", { uid: user.uid });
 
       void tryAttachReferralFromStorage(user.uid, () => user.getIdToken());
       void tryAttachPartnerManagerFromStorage(
@@ -569,29 +621,40 @@ export default function RegisterPage() {
         console.error("[register] notify-registration request failed", e);
       }
 
+      console.log("[register] REGISTRATION_SEND_CODE_START");
       const codeResult = await sendEmailCode(idToken);
+      if (codeResult.ok) {
+        console.log("[register] REGISTRATION_SEND_CODE_SUCCESS");
+      }
       await loadRegistrationStatus(idToken);
       if (!codeResult.ok) {
         holdOnPageRef.current = true;
         setShowResend(true);
         setEmailSendFailed(true);
         setUserMessage(
-          `${codeResult.message} Отправьте код повторно или проверьте настройки почты на сервере.`
+          codeResult.message.includes("отправ")
+            ? `${codeResult.message} Попробуйте ещё раз.`
+            : "Не удалось отправить код. Попробуйте ещё раз."
         );
         return;
       }
       setStatusText("Переход на подтверждение…");
       router.push(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
     } catch (error: unknown) {
-      console.error("[register]", error);
+      console.error("[register] REGISTRATION_CREATE_AUTH_ERROR", error);
       const code =
         error && typeof error === "object" && "code" in error
           ? String((error as { code: unknown }).code)
           : "";
       setStatusText("Создание аккаунта не удалось");
-      setUserMessage(
-        (code ? `Ошибка регистрации [${code}]: ` : "Ошибка регистрации: ") + firebaseAuthErrorMessage(error)
-      );
+      if (code === "auth/email-already-in-use") {
+        setUserMessage("Аккаунт с этим email уже есть. Войдите по email.");
+      } else {
+        setUserMessage(
+          (code ? `Ошибка регистрации [${code}]: ` : "Ошибка регистрации: ") +
+            firebaseAuthErrorMessage(error)
+        );
+      }
     } finally {
       registeringRef.current = false;
       setIsSubmitting(false);

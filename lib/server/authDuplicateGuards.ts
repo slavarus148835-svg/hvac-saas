@@ -207,6 +207,19 @@ export async function authUserExistsByEmail(app: App, normalizedEmail: string): 
   }
 }
 
+export async function authUserExistsForUid(app: App, uid: string): Promise<boolean> {
+  const id = String(uid ?? "").trim();
+  if (!id) return false;
+  try {
+    await getAuth(app).getUser(id);
+    return true;
+  } catch (e: unknown) {
+    const code = typeof e === "object" && e !== null && "code" in e ? String((e as { code: string }).code) : "";
+    if (code === "auth/user-not-found") return false;
+    throw e;
+  }
+}
+
 export function maybeLogNewEmailUserFromDoc(uid: string, user: Record<string, unknown>): void {
   const st = String(user.registrationStage || "");
   if (st !== "auth_created") return;

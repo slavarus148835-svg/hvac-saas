@@ -19,6 +19,7 @@ import { upsertLeadEmailStarted } from "@/lib/server/leadsFirestore";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  console.log("REGISTRATION_SEND_CODE_START", { step: "send_email_code_route" });
   console.log("[send-email-code] start");
 
   const auth = await requireBearerUid(req);
@@ -180,6 +181,7 @@ export async function POST(req: Request) {
     { merge: true }
   );
 
+  console.log("REGISTRATION_SEND_CODE_SUCCESS", { uid });
   console.log("[send-email-code] response status: 200 ok");
   return NextResponse.json({
     ok: true,
