@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
-import { getPartnerSiteOrigin } from "@/lib/partner/constants";
 import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
 import {
   handlePartnerManagerCallback,
@@ -10,10 +9,7 @@ import {
   sendAdminPartnerToggle,
   sendPartnerCabinet,
 } from "@/lib/server/partnerManager/telegramPartnerBotHandlers";
-import {
-  createPartnerManagerAdmin,
-  normalizePartnerManagerCode,
-} from "@/lib/server/partnerManager/partnerManagerB2b";
+import { createPartnerManagerAdmin } from "@/lib/server/partnerManager/partnerManagerB2b";
 import { tryHandlePartnerManagerSignupWebhook } from "@/lib/server/partnerManager/partnerManagerTelegramSignupFlow";
 import { provisionTelegramLoginUser } from "@/lib/server/provisionTelegramLoginUser";
 import {
@@ -72,20 +68,18 @@ function normalizeBotCommandToken(textRaw: string): string {
 
 function parseAddPartnerCommand(textRaw: string): {
   name: string;
-  code: string;
   telegramUserId: number;
 } | null {
   const trimmed = String(textRaw || "").trim();
   if (!trimmed.toLowerCase().startsWith("/add_partner")) return null;
   const rest = trimmed.slice("/add_partner".length).trim();
   const parts = rest.split(/\s+/).filter(Boolean);
-  if (parts.length < 3) return null;
+  if (parts.length < 2) return null;
   const telegramUserId = Number(parts[parts.length - 1]);
   if (!Number.isFinite(telegramUserId) || telegramUserId <= 0) return null;
-  const code = String(parts[parts.length - 2] || "").trim();
-  const name = parts.slice(0, -2).join(" ").trim();
-  if (!name || !code) return null;
-  return { name, code, telegramUserId };
+  const name = parts.slice(0, -1).join(" ").trim();
+  if (!name) return null;
+  return { name, telegramUserId };
 }
 
 function parseStartSessionId(textRaw: string): string | null {
@@ -286,7 +280,6 @@ export async function POST(req: Request) {
       const adminFromId = msg.from?.id;
       const created = await createPartnerManagerAdmin(dbPartner, {
         name: addPartner.name,
-        code: addPartner.code,
         telegramUserId: addPartner.telegramUserId,
         createdByAdminTelegramId:
           adminFromId != null && Number.isFinite(adminFromId) ? Number(adminFromId) : 0,
@@ -294,26 +287,25 @@ export async function POST(req: Request) {
       if (!created.ok) {
         const msgErr =
           created.reason === "duplicate_code"
-            ? "Код уже занят. Выберите другой."
+            ? "Код уже занят. Повторите команду."
             : "Не удалось создать менеджера.";
         await sendTelegramMessage(String(chatId), msgErr);
         return NextResponse.json({ ok: true });
       }
-      const origin = getPartnerSiteOrigin();
-      const link = `${origin}/?partner=${encodeURIComponent(
-        normalizePartnerManagerCode(addPartner.code)
-      )}`;
+      const { buildPartnerManagerLinksBlock } = await import(
+        "@/lib/server/partnerManager/partnerManagerLinks"
+      );
+      const links = buildPartnerManagerLinksBlock(created.code);
       await sendTelegramMessage(
         String(chatId),
         [
           "Менеджер создан.",
           `ID: ${created.managerId}`,
           `Имя: ${addPartner.name}`,
-          `Код: ${addPartner.code}`,
+          `Код: ${created.code}`,
           `telegramUserId: ${addPartner.telegramUserId}`,
           "",
-          "Ссылка:",
-          link,
+          links.text,
         ].join("\n")
       );
       return NextResponse.json({ ok: true });

@@ -1,5 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { getPartnerSiteOrigin } from "@/lib/partner/constants";
+import {
+  buildPartnerManagerLinksBlock,
+  buildPartnerManagerMiniAppUrl,
+  buildPartnerManagerWebUrl,
+} from "@/lib/server/partnerManager/partnerManagerLinks";
 import {
   buildPartnerRecentEventsLinesForAdmin,
   getAllPartnerManagersStats,
@@ -92,12 +96,6 @@ function escapeHtmlAttrHref(url: string): string {
   return url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
-function telegramBotUsername(): string {
-  return String(process.env.TELEGRAM_BOT_USERNAME || "")
-    .trim()
-    .replace(/^@+/, "");
-}
-
 /**
  * Продающий текст + персональная web/Mini App ссылка (HTML для Telegram).
  */
@@ -106,10 +104,8 @@ export function buildPartnerSellingMessageHtml(code: string): {
   webUrl: string;
   miniUrl: string | null;
 } {
-  const origin = getPartnerSiteOrigin().replace(/\/+$/, "");
-  const webUrl = `${origin}/?partner=${encodeURIComponent(code)}`;
-  const bot = telegramBotUsername();
-  const miniUrl = bot ? `https://t.me/${bot}/app?startapp=partner_${code}` : null;
+  const webUrl = buildPartnerManagerWebUrl(code);
+  const miniUrl = buildPartnerManagerMiniAppUrl(code);
 
   const webVisible = escapeHtml(webUrl);
   const webHref = escapeHtmlAttrHref(webUrl);
@@ -254,18 +250,17 @@ export async function handlePartnerManagerCallback(params: {
   await answerTelegramCallbackQuery(params.callbackQueryId);
 
   if (params.data === "partner_links") {
-    const { html, webUrl, miniUrl } = buildPartnerSellingMessageHtml(st.code);
+    const { text, webUrl, miniUrl } = buildPartnerManagerLinksBlock(st.code);
     const replyMarkup = buildPartnerLinksUrlReplyMarkup(webUrl, miniUrl);
     const edit = await editTelegramMessageText(
       String(params.chatId),
       params.messageId,
-      html,
-      { replyMarkup, parseMode: "HTML" }
+      text,
+      { replyMarkup }
     );
     if (!edit.ok) {
-      await sendTelegramMessage(String(params.chatId), html, {
+      await sendTelegramMessage(String(params.chatId), text, {
         replyMarkup,
-        parseMode: "HTML",
       });
     }
     return;

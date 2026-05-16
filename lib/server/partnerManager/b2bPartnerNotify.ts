@@ -23,6 +23,16 @@ export function formatRuDateTime(ms?: number): string {
   return d.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
 }
 
+/** Сумма в ₽: целые без копеек, иначе 2 знака. */
+export function formatRubAmount(rub: number): string {
+  const n = Number(rub);
+  if (!Number.isFinite(n)) return "0 ₽";
+  if (Math.abs(n - Math.round(n)) < 0.005) {
+    return `${Math.round(n)} ₽`;
+  }
+  return `${n.toFixed(2)} ₽`;
+}
+
 export async function loadUserContactForB2BNotify(
   db: Firestore,
   uid: string
@@ -37,6 +47,32 @@ export async function loadUserContactForB2BNotify(
   return { email: email || null, telegramId: tg || null, uid };
 }
 
+export type PartnerManagerNotifyInfo = {
+  name: string;
+  code: string;
+  telegramUserId: number | null;
+  telegramChatId: number | null;
+};
+
+export async function loadPartnerManagerForB2BNotify(
+  db: Firestore,
+  managerId: string
+): Promise<PartnerManagerNotifyInfo> {
+  const snap = await db.collection(PARTNER_MANAGERS_COLLECTION).doc(managerId).get();
+  const m = snap.data() ?? {};
+  const name = typeof m.name === "string" && m.name.trim() ? m.name.trim() : managerId;
+  const code = typeof m.code === "string" ? m.code.trim() : "";
+  const telegramUserId =
+    typeof m.telegramUserId === "number" && Number.isFinite(m.telegramUserId) && m.telegramUserId > 0
+      ? Math.trunc(m.telegramUserId)
+      : null;
+  const telegramChatId =
+    typeof m.telegramChatId === "number" && Number.isFinite(m.telegramChatId) && m.telegramChatId > 0
+      ? Math.trunc(m.telegramChatId)
+      : null;
+  return { name, code, telegramUserId, telegramChatId };
+}
+
 async function pendingPayoutRub(db: Firestore, managerId: string): Promise<number> {
   const snap = await db.collection(PARTNER_MANAGERS_COLLECTION).doc(managerId).get();
   const m = snap.data() ?? {};
@@ -45,26 +81,45 @@ async function pendingPayoutRub(db: Firestore, managerId: string): Promise<numbe
   return Math.max(0, accrued - paid) / 100;
 }
 
+function formatSourceLabel(source: "web" | "telegram_miniapp"): string {
+  return source === "telegram_miniapp" ? "telegram_miniapp" : "web";
+}
+
+function buildAdminManagerBlock(mgr: PartnerManagerNotifyInfo): string[] {
+  return [
+    `Менеджер: ${mgr.name}`,
+    `Код менеджера: ${mgr.code || "—"}`,
+    `Telegram ID менеджера: ${mgr.telegramUserId ?? "—"}`,
+  ];
+}
+
+function buildAdminClientBlock(user: {
+  email: string | null;
+  telegramId: string | null;
+  uid: string;
+}): string[] {
+  return [
+    "Клиент:",
+    `Email: ${user.email ?? "—"}`,
+    `Telegram ID: ${user.telegramId ?? "—"}`,
+    `UID: ${user.uid}`,
+  ];
+}
+
 type RegistrationCtx = {
   userId: string;
   partnerManagerId: string;
-  partnerCode: string;
-  managerName: string;
   source: "web" | "telegram_miniapp";
 };
 
 type FirstCalcCtx = {
   userId: string;
   partnerManagerId: string;
-  partnerCode: string;
-  managerName: string;
 };
 
 type PaymentCtx = {
   userId: string;
   partnerManagerId: string;
-  partnerCode: string;
-  managerName: string;
   orderId: string;
   amountKop: number;
 };
@@ -72,8 +127,6 @@ type PaymentCtx = {
 type RefundCtx = {
   userId: string;
   partnerManagerId: string;
-  partnerCode: string;
-  managerName: string;
   orderId: string;
   commissionAmountKop: number;
   tbankStatus: string;
@@ -100,7 +153,7 @@ async function sendAdmin(text: string): Promise<void> {
 async function sendManager(chatId: number, text: string): Promise<void> {
   const r = await sendTelegramMessage(String(chatId), text);
   if (!r.ok) {
-    console.error("[b2bPartnerNotify] manager send failed", r.error);
+    console.error("[b2bPartnerNotify] manager send failed", { chatId, error: r.error });
   }
 }
 
@@ -109,7 +162,14 @@ export async function notifyAdminPartnerManagerEvent(
   db: Firestore,
   payload: AdminPartnerNotifyPayload
 ): Promise<void> {
-  const user = await loadUserContactForB2BNotify(db, payload.userId);
+  const [user, mgr] = await Promise.all([
+    loadUserContactForB2BNotify(db, payload.userId),
+    loadPartnerManagerForB2BNotify(db, payload.partnerManagerId),
+  ]);
+
+  const managerLines = buildAdminManagerBlock(mgr);
+  const clientLines = buildAdminClientBlock(user);
+  const dateLine = `Дата: ${formatRuDateTime()}`;
 
   try {
     if (payload.type === "registration") {
@@ -117,16 +177,12 @@ export async function notifyAdminPartnerManagerEvent(
         [
           "🆕 Новый пользователь по партнёрской ссылке",
           "",
-          `Менеджер: ${payload.managerName}`,
-          `Код: ${payload.partnerCode}`,
+          ...managerLines,
           "",
-          "Пользователь:",
-          `Email: ${user.email ?? "—"}`,
-          `Telegram ID: ${user.telegramId ?? "—"}`,
-          `UID: ${user.uid}`,
+          ...clientLines,
           "",
-          `Источник: ${payload.source === "telegram_miniapp" ? "telegram_miniapp" : "web"}`,
-          `Дата: ${formatRuDateTime()}`,
+          `Источник: ${formatSourceLabel(payload.source)}`,
+          dateLine,
         ].join("\n")
       );
       return;
@@ -137,15 +193,11 @@ export async function notifyAdminPartnerManagerEvent(
         [
           "🧮 Первый расчёт по партнёрской ссылке",
           "",
-          `Менеджер: ${payload.managerName}`,
-          `Код: ${payload.partnerCode}`,
+          ...managerLines,
           "",
-          "Пользователь:",
-          `Email: ${user.email ?? "—"}`,
-          `Telegram ID: ${user.telegramId ?? "—"}`,
-          `UID: ${user.uid}`,
+          ...clientLines,
           "",
-          `Дата: ${formatRuDateTime()}`,
+          dateLine,
         ].join("\n")
       );
       return;
@@ -158,21 +210,17 @@ export async function notifyAdminPartnerManagerEvent(
         [
           "💰 Новая оплата по партнёрской ссылке",
           "",
-          `Менеджер: ${payload.managerName}`,
-          `Код: ${payload.partnerCode}`,
+          ...managerLines,
           "",
-          "Пользователь:",
-          `Email: ${user.email ?? "—"}`,
-          `Telegram ID: ${user.telegramId ?? "—"}`,
-          `UID: ${user.uid}`,
+          ...clientLines,
           "",
-          `Оплата: ${calc.amountRub.toFixed(2)} ₽`,
-          `Налог 12%: ${taxRub.toFixed(2)} ₽`,
-          `База после налога: ${calc.netAfterTaxRub.toFixed(2)} ₽`,
-          `Комиссия менеджера 30%: ${calc.commissionAmountRub.toFixed(2)} ₽`,
+          `Оплата: ${formatRubAmount(calc.amountRub)}`,
+          `Налог 12%: ${formatRubAmount(taxRub)}`,
+          `База после налога: ${formatRubAmount(calc.netAfterTaxRub)}`,
+          `Комиссия менеджера 30%: ${formatRubAmount(calc.commissionAmountRub)}`,
           "",
           `Order ID: ${payload.orderId}`,
-          `Дата: ${formatRuDateTime()}`,
+          dateLine,
         ].join("\n")
       );
       return;
@@ -184,18 +232,14 @@ export async function notifyAdminPartnerManagerEvent(
         [
           "↩️ Возврат по партнёрской оплате",
           "",
-          `Менеджер: ${payload.managerName}`,
-          `Код: ${payload.partnerCode}`,
+          ...managerLines,
           "",
-          "Пользователь:",
-          `Email: ${user.email ?? "—"}`,
-          `Telegram ID: ${user.telegramId ?? "—"}`,
-          `UID: ${user.uid}`,
+          ...clientLines,
           "",
-          `Сторно комиссии: ${rub.toFixed(2)} ₽`,
+          `Сторно комиссии: ${formatRubAmount(rub)}`,
           `Order ID: ${payload.orderId}`,
           `Статус T-Bank: ${payload.tbankStatus}`,
-          `Дата: ${formatRuDateTime()}`,
+          dateLine,
         ].join("\n")
       );
     }
@@ -229,23 +273,28 @@ export type ManagerPartnerNotifyPayload =
       commissionKop: number;
     };
 
-/** Уведомление менеджеру (без лишних персональных данных). */
+/** Уведомление менеджеру (без email / Telegram ID / UID клиента). */
 export async function notifyPartnerManagerEvent(
   db: Firestore,
   payload: ManagerPartnerNotifyPayload
 ): Promise<void> {
   const chatId = payload.managerTelegramChatId;
-  if (!Number.isFinite(chatId) || chatId <= 0) return;
+  if (!Number.isFinite(chatId) || chatId <= 0) {
+    console.error("[notifyPartnerManagerEvent] missing telegramChatId", {
+      partnerManagerId: payload.partnerManagerId,
+      type: payload.type,
+    });
+    return;
+  }
 
   try {
     if (payload.type === "registration") {
-      const src = payload.source === "telegram_miniapp" ? "telegram_miniapp" : "web";
       await sendManager(
         chatId,
         [
           "🆕 По вашей ссылке зарегистрировался новый пользователь",
           "",
-          `Источник: ${src}`,
+          `Источник: ${formatSourceLabel(payload.source)}`,
           `Дата: ${formatRuDateTime()}`,
         ].join("\n")
       );
@@ -272,10 +321,9 @@ export async function notifyPartnerManagerEvent(
         [
           "💰 Пользователь по вашей ссылке оплатил подписку",
           "",
-          `Оплата: ${calc.amountRub.toFixed(2)} ₽`,
-          `Ваш бонус: ${calc.commissionAmountRub.toFixed(2)} ₽`,
-          "",
-          `Ожидает выплаты всего: ${pending.toFixed(2)} ₽`,
+          `Оплата: ${formatRubAmount(calc.amountRub)}`,
+          `Ваш бонус: ${formatRubAmount(calc.commissionAmountRub)}`,
+          `Ожидает выплаты всего: ${formatRubAmount(pending)}`,
         ].join("\n")
       );
       return;
@@ -284,13 +332,17 @@ export async function notifyPartnerManagerEvent(
     if (payload.type === "refund") {
       const rub = payload.commissionKop / 100;
       const pending = await pendingPayoutRub(db, payload.partnerManagerId);
+      const bonusLine =
+        rub <= 0
+          ? `Сторно бонуса: ${formatRubAmount(rub)}`
+          : `Сторно бонуса: -${formatRubAmount(rub)}`;
       await sendManager(
         chatId,
         [
           "↩️ По оплате пользователя был возврат",
           "",
-          `Сторно бонуса: ${rub.toFixed(2)} ₽`,
-          `Ожидает выплаты всего: ${pending.toFixed(2)} ₽`,
+          bonusLine,
+          `Ожидает выплаты всего: ${formatRubAmount(pending)}`,
         ].join("\n")
       );
     }
@@ -303,9 +355,8 @@ export async function loadPartnerManagerName(
   db: Firestore,
   managerId: string
 ): Promise<string> {
-  const snap = await db.collection(PARTNER_MANAGERS_COLLECTION).doc(managerId).get();
-  const n = snap.data()?.name;
-  return typeof n === "string" && n.trim() ? n.trim() : managerId;
+  const mgr = await loadPartnerManagerForB2BNotify(db, managerId);
+  return mgr.name;
 }
 
 /** Саморегистрация менеджера через Telegram (не B2B-событие клиента). */
@@ -321,8 +372,8 @@ export async function notifyAdminNewSelfRegisteredPartner(params: {
       "",
       `Имя: ${params.name}`,
       `Телефон: ${params.phone}`,
-      `Код: ${params.code}`,
-      `Telegram ID: ${params.telegramUserId}`,
+      `Код менеджера: ${params.code}`,
+      `Telegram ID менеджера: ${params.telegramUserId}`,
     ].join("\n")
   );
 }

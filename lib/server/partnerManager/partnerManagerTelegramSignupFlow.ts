@@ -1,10 +1,9 @@
-import { getPartnerSiteOrigin } from "@/lib/partner/constants";
 import type { Firestore } from "firebase-admin/firestore";
+import { buildPartnerManagerLinksBlock } from "@/lib/server/partnerManager/partnerManagerLinks";
 import { notifyAdminNewSelfRegisteredPartner } from "@/lib/server/partnerManager/b2bPartnerNotify";
 import {
   createSelfRegisteredPartnerManager,
   getPartnerManagerByTelegramUserId,
-  normalizePartnerManagerCode,
 } from "@/lib/server/partnerManager/partnerManagerB2b";
 import {
   deletePartnerManagerSignupSession,
@@ -17,23 +16,16 @@ import {
 import { sendPartnerCabinet } from "@/lib/server/partnerManager/telegramPartnerBotHandlers";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
 
-function managerReferralLink(code: string): string {
-  const origin = getPartnerSiteOrigin().replace(/\/+$/, "");
-  const c = normalizePartnerManagerCode(code);
-  return `${origin}/?partner=${encodeURIComponent(c)}`;
-}
-
 function managerWelcomeAfterSignup(code: string): string {
-  const link = managerReferralLink(code);
+  const { text, webUrl } = buildPartnerManagerLinksBlock(code);
   return [
     "Готово. Вы добавлены как менеджер.",
     "",
-    "Ваша персональная ссылка для клиентов:",
-    link,
+    text,
     "",
     "Шаблон сообщения клиенту (можно скопировать и отредактировать):",
     "",
-    `Привет! Смету по монтажу кондиционера можно посчитать здесь: ${link}`,
+    `Привет! Смету по монтажу кондиционера можно посчитать здесь: ${webUrl}`,
     "Это калькулятор HVAC-SaaS — удобно на объекте и для клиента.",
   ].join("\n");
 }
@@ -67,15 +59,13 @@ export async function tryHandlePartnerManagerSignupWebhook(params: {
     const existing = await getPartnerManagerByTelegramUserId(db, fromId);
     if (existing) {
       await deletePartnerManagerSignupSession(db, fromId);
-      const code = normalizePartnerManagerCode(existing.data.code);
-      const link = managerReferralLink(code);
+      const links = buildPartnerManagerLinksBlock(existing.data.code);
       await sendTelegramMessage(
         chatStr,
         [
           "Вы уже зарегистрированы как менеджер HVAC-SaaS.",
           "",
-          "Ваша персональная ссылка:",
-          link,
+          links.text,
           "",
           "Ниже — кабинет партнёра в боте (статистика и ссылки).",
         ].join("\n")

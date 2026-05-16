@@ -3,12 +3,17 @@ import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { PARTNER_EVENTS_COLLECTION, PARTNER_MANAGERS_COLLECTION, PARTNER_PAYOUTS_COLLECTION } from "@/lib/partner/b2bConstants";
 import { computeB2BCommissionFromPaymentKop } from "@/lib/server/partnerManager/b2bCommissionMath";
 import {
-  loadPartnerManagerName,
   maskEmailForManager,
   notifyAdminPartnerManagerEvent,
   notifyPartnerManagerEvent,
 } from "@/lib/server/partnerManager/b2bPartnerNotify";
-import { nameToPartnerCodeBase } from "@/lib/server/partnerManager/partnerManagerCodeSlug";
+import {
+  isValidPartnerManagerCode,
+  normalizePartnerManagerCode,
+} from "@/lib/partner/partnerManagerCode";
+import { allocateUniquePartnerManagerCode } from "@/lib/server/partnerManager/generateRandomPartnerCode";
+
+export { normalizePartnerManagerCode } from "@/lib/partner/partnerManagerCode";
 import { TBANK_MONTHLY_AMOUNT_KOPECKS } from "@/lib/server/tbankMonthlyPayment";
 import {
   isTbankAcquiringPaymentSuccess,
@@ -21,13 +26,6 @@ export type PartnerEventType = "registration" | "first_calculation" | "payment" 
 export type PartnerSource = "web" | "telegram_miniapp";
 
 export { computeB2BCommissionFromPaymentKop } from "@/lib/server/partnerManager/b2bCommissionMath";
-
-export function normalizePartnerManagerCode(raw: string): string {
-  return String(raw ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "");
-}
 
 function safeOrderIdForDoc(orderId: string): string {
   return String(orderId || "")
@@ -88,7 +86,7 @@ export async function attachPartnerToUserIfEmpty(
   options?: { firstTouchMs?: number }
 ): Promise<AttachPartnerResult> {
   const code = normalizePartnerManagerCode(rawCode);
-  if (!code || code.length < 2) {
+  if (!isValidPartnerManagerCode(code)) {
     return { ok: true, attached: false, reason: "invalid_code" };
   }
 
@@ -158,8 +156,6 @@ export async function attachPartnerToUserIfEmpty(
           type: "registration",
           userId: uid,
           partnerManagerId: manager.id,
-          partnerCode: manager.data.code,
-          managerName: manager.data.name,
           source,
         });
         await notifyPartnerManagerEvent(db, {
@@ -330,7 +326,6 @@ export async function reverseB2BPartnerManagerCommissionIfNeeded(params: {
 
     if (notify) {
       try {
-        const name = await loadPartnerManagerName(db, notify.partnerManagerId);
         const mgrSnap = await db
           .collection(PARTNER_MANAGERS_COLLECTION)
           .doc(notify.partnerManagerId)
@@ -342,20 +337,16 @@ export async function reverseB2BPartnerManagerCommissionIfNeeded(params: {
           type: "refund",
           userId: uid,
           partnerManagerId: notify.partnerManagerId,
-          partnerCode: notify.partnerCode,
-          managerName: name,
           orderId: oid,
           commissionAmountKop: notify.commissionKop,
           tbankStatus: notify.tbankStatus,
         });
-        if (Number.isFinite(chatId) && chatId > 0) {
-          await notifyPartnerManagerEvent(db, {
-            type: "refund",
-            managerTelegramChatId: chatId,
-            partnerManagerId: notify.partnerManagerId,
-            commissionKop: notify.commissionKop,
-          });
-        }
+        await notifyPartnerManagerEvent(db, {
+          type: "refund",
+          managerTelegramChatId: chatId,
+          partnerManagerId: notify.partnerManagerId,
+          commissionKop: notify.commissionKop,
+        });
       } catch (e) {
         console.error("[reverseB2BPartnerManagerCommissionIfNeeded] notify failed", e);
       }
@@ -435,8 +426,6 @@ export async function tryCreditB2BPartnerManagerPaymentIfVerified(params: {
         type: "payment",
         userId: uid,
         partnerManagerId,
-        partnerCode,
-        managerName: mgr.name,
         orderId: oid,
         amountKop: bankKop,
       });
@@ -770,7 +759,6 @@ export async function buildPartnerRecentEventsLinesForAdmin(
 
 export type CreatePartnerManagerInput = {
   name: string;
-  code: string;
   telegramUserId: number;
   createdByAdminTelegramId: number;
   phone?: string;
@@ -780,10 +768,13 @@ export async function createPartnerManagerAdmin(
   db: Firestore,
   input: CreatePartnerManagerInput
 ): Promise<
-  { ok: true; managerId: string } | { ok: false; reason: "duplicate_code" | "transaction_failed" }
+  | { ok: true; managerId: string; code: string }
+  | { ok: false; reason: "duplicate_code" | "transaction_failed" }
 > {
-  const code = normalizePartnerManagerCode(input.code);
-  if (!code || code.length < 2) {
+  let code: string;
+  try {
+    code = await allocateUniquePartnerManagerCode(db);
+  } catch {
     return { ok: false, reason: "transaction_failed" };
   }
 
@@ -813,7 +804,7 @@ export async function createPartnerManagerAdmin(
       tx.set(ref, payload);
       return ref.id;
     });
-    return { ok: true, managerId };
+    return { ok: true, managerId, code };
   } catch (e) {
     if (String(e instanceof Error ? e.message : e) === "duplicate_code") {
       return { ok: false, reason: "duplicate_code" };
@@ -837,12 +828,13 @@ export async function createSelfRegisteredPartnerManager(params: {
       reason: "duplicate_telegram" | "code_allocation_failed" | "transaction_failed";
     }
 > {
-  const base = nameToPartnerCodeBase(params.name, params.telegramUserId);
-
   for (let attempt = 0; attempt < 100; attempt++) {
-    const raw = attempt === 0 ? base : `${base}_${attempt + 1}`;
-    const code = normalizePartnerManagerCode(raw);
-    if (!code || code.length < 2) continue;
+    let code: string;
+    try {
+      code = await allocateUniquePartnerManagerCode(params.db);
+    } catch {
+      return { ok: false, reason: "code_allocation_failed" };
+    }
 
     const ref = params.db.collection(PARTNER_MANAGERS_COLLECTION).doc();
     try {
@@ -953,23 +945,16 @@ export async function markFirstCalculationIfNeededAndRecordB2B(
 
   if (eventWrote) {
     try {
-      const managerName = mgr?.name?.trim()
-        ? mgr.name
-        : await loadPartnerManagerName(db, partnerManagerId);
       await notifyAdminPartnerManagerEvent(db, {
         type: "first_calculation",
         userId: uid,
         partnerManagerId,
-        partnerCode,
-        managerName,
       });
-      if (mgr && Number.isFinite(mgr.telegramChatId) && mgr.telegramChatId > 0) {
-        await notifyPartnerManagerEvent(db, {
-          type: "first_calculation",
-          managerTelegramChatId: mgr.telegramChatId,
-          partnerManagerId,
-        });
-      }
+      await notifyPartnerManagerEvent(db, {
+        type: "first_calculation",
+        managerTelegramChatId: mgr?.telegramChatId ?? 0,
+        partnerManagerId,
+      });
     } catch (e) {
       console.error("[markFirstCalculationIfNeededAndRecordB2B] notify failed", e);
     }

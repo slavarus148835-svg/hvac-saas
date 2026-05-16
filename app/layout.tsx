@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SessionMonitor } from "@/components/SessionMonitor";
 import { ClientCopyProtection } from "@/components/ClientCopyProtection";
+import { PartnerManagerParamCapture } from "@/components/PartnerManagerParamCapture";
 import { ReferralParamCapture } from "@/components/ReferralParamCapture";
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Suspense fallback={null}>
           <ReferralParamCapture />
+          <PartnerManagerParamCapture />
         </Suspense>
         {children}
         <SessionMonitor />
