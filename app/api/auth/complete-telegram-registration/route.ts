@@ -14,6 +14,7 @@ import {
   normalizeTelegramUserIdForMiniApp,
 } from "@/lib/server/telegram/telegramMiniAppSession";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { notifyAdminNewUserIfNeeded } from "@/lib/server/notifyAdminNewUser";
 
 export const runtime = "nodejs";
 
@@ -122,6 +123,18 @@ export async function POST(req: Request) {
     source: "complete_telegram_registration",
     linkedUid: uid,
     telegramUserId: tgId,
+  });
+
+  const freshUser = await db.collection(PRICING_FS.users).doc(uid).get();
+  const freshData = freshUser.data() ?? {};
+  await notifyAdminNewUserIfNeeded(db, {
+    uid,
+    email,
+    source: "telegram_mini_app",
+    telegramUserId: tgId,
+    telegramUsername: pending.telegramUsername,
+    createdAt:
+      typeof freshData.createdAt === "string" ? freshData.createdAt : new Date().toISOString(),
   });
 
   return NextResponse.json({

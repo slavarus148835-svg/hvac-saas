@@ -2,7 +2,6 @@ import { getAuth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import type { App } from "firebase-admin/app";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
-import { runRegistrationTelegramNotifyIfNeeded } from "@/lib/server/runRegistrationTelegramNotify";
 
 /** Исторический префикс для авто-созданных Telegram-only аккаунтов (больше не создаём). */
 export function firebaseUidForTelegramNumericId(telegramId: string): string {
@@ -98,6 +97,5 @@ export async function provisionOrUpdateTelegramUser(params: {
   } catch (e) {
     console.warn("[provisionTelegramUser] updateUser (existing doc) skipped", e);
   }
-  await runRegistrationTelegramNotifyIfNeeded(db, uid, null);
   return { uid };
 }

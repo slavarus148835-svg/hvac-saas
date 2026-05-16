@@ -28,11 +28,13 @@ export async function sendTelegramNotification(html: string): Promise<TelegramSe
   console.log("[telegram] notify start");
 
   const botToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-  const chatIdRaw = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+  const chatIdRaw = String(
+    process.env.TELEGRAM_CHAT_ID || process.env.ADMIN_TELEGRAM_CHAT_ID || ""
+  ).trim();
 
   if (!botToken || !chatIdRaw) {
     console.error(
-      "[telegram] notify failed: TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы в environment"
+      "[telegram] notify failed: TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID/ADMIN_TELEGRAM_CHAT_ID не заданы"
     );
     return { ok: false, skipped: true, reason: "missing_env" };
   }
