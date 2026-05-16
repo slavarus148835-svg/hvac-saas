@@ -395,6 +395,15 @@ export async function POST(req: Request) {
           telegramLastName: from?.last_name ?? null,
         });
 
+        if (!provision) {
+          console.log("TELEGRAM_LOGIN_CONFIRM_SKIPPED", { telegramUserId, reason: "no_linked_user" });
+          await sendTelegramMessage(
+            String(chatId),
+            "Аккаунт с этим Telegram не найден. Зарегистрируйтесь на сайте с email, подтвердите почту и привяжите Telegram в Mini App."
+          );
+          return NextResponse.json({ ok: true });
+        }
+
         const confirmed = await confirmTelegramLoginSession(db, {
           sessionId: sessionIdFromStart,
           telegramUserId,

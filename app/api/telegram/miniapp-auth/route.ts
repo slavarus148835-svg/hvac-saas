@@ -75,7 +75,6 @@ export async function POST(req: Request) {
       console.log("TELEGRAM_MINIAPP_AUTH_OK", { outcome: "need_email_linking" });
       return NextResponse.json({
         need_email_linking: true,
-        need_registration: true,
         authStatus: "need_email_linking",
       });
     }

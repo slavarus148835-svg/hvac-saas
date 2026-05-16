@@ -20,7 +20,10 @@ import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
 import { getSafePostLoginPath } from "@/lib/safeRedirect";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
+import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
 import { tryAttachReferralFromStorage } from "@/lib/partner/clientAttachReferral";
+import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { normalizeEmailForAuth } from "@/lib/authEmailNormalize";
 
 const TEMP_OVERLOAD_MESSAGE = "Сервис временно перегружен. Повтори попытку через несколько секунд.";
 const TG_SESSION_STORAGE_KEY = "tg_login_session_id";
@@ -90,6 +93,18 @@ export default function RegisterPage() {
       unsubscribe();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const code = String(
+      new URLSearchParams(window.location.search).get("telegram_error") || ""
+    ).trim();
+    if (code === "telegram_not_linked") {
+      setUserMessage(
+        "Вход через Telegram: профиль с этим Telegram ещё не привязан. Зарегистрируйтесь с email на сайте, подтвердите почту и привяжите Telegram в Mini App (раздел Калькулятор)."
+      );
+    }
+  }, []);
 
   const openTelegramBotLogin = async () => {
     try {
@@ -195,6 +210,11 @@ export default function RegisterPage() {
           const afterTg = auth.currentUser;
           if (afterTg) {
             void tryAttachReferralFromStorage(afterTg.uid, () => afterTg.getIdToken());
+            void tryAttachPartnerManagerFromStorage(
+              afterTg.uid,
+              () => afterTg.getIdToken(),
+              isTelegramMiniApp() ? "telegram_miniapp" : "web"
+            );
           }
           try {
             localStorage.removeItem(TG_SESSION_STORAGE_KEY);
@@ -378,6 +398,39 @@ export default function RegisterPage() {
       setIsSubmitting(true);
       registeringRef.current = true;
 
+      const norm = normalizeEmailForAuth(email);
+      let telegramLoginSessionId: string | undefined;
+      try {
+        const sid =
+          (tgSessionId && tgSessionId.trim()) ||
+          String(localStorage.getItem(TG_SESSION_STORAGE_KEY) || "").trim();
+        telegramLoginSessionId = sid || undefined;
+      } catch {
+        telegramLoginSessionId = undefined;
+      }
+
+      const preRes = await fetch("/api/auth/pre-register-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: norm, telegramLoginSessionId }),
+        cache: "no-store",
+      });
+      const preJson = (await preRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      if (!preRes.ok || preJson.ok !== true) {
+        registeringRef.current = false;
+        setIsSubmitting(false);
+        setStatusText("Регистрация остановлена");
+        setUserMessage(
+          typeof preJson.message === "string" && preJson.message.trim()
+            ? preJson.message
+            : "Регистрация с этим email невозможна. Войдите или используйте другой email."
+        );
+        return;
+      }
+
       console.log("[register] custom code flow start");
       console.log("[register] sendEmailVerification legacy flow disabled");
       console.log("[register] create user start");
@@ -403,6 +456,7 @@ export default function RegisterPage() {
         {
           uid: user.uid,
           email: user.email,
+          normalizedEmail: norm,
           emailVerified: false,
           emailVerifiedByCode: false,
           registrationStage: "auth_created",
@@ -442,6 +496,11 @@ export default function RegisterPage() {
       );
 
       void tryAttachReferralFromStorage(user.uid, () => user.getIdToken());
+      void tryAttachPartnerManagerFromStorage(
+        user.uid,
+        () => user.getIdToken(),
+        isTelegramMiniApp() ? "telegram_miniapp" : "web"
+      );
 
       await setDoc(doc(db, PRICING_FS.priceLists, user.uid), {
         standard_7: 5900,

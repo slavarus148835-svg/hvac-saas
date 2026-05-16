@@ -82,6 +82,10 @@ export async function GET(req: NextRequest) {
         photoUrl,
       },
     });
+    if (!out) {
+      console.log("AUTH_TELEGRAM_WIDGET_NO_LINKED_USER", { telegramId });
+      return registerErrorRedirect(req, "telegram_not_linked");
+    }
     uid = out.uid;
   } catch (e) {
     console.error("[api/auth/telegram] provision failed", e);

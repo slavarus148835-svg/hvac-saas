@@ -5,6 +5,7 @@ import {
   isPaidUserForStatsTotals,
   userHasConfirmedBankPayment,
 } from "@/lib/server/statsPaidUser";
+import { isStatsExcludedTelegramProvisionUid } from "@/lib/server/statsExcludeTelegramProvisionUid";
 
 const TRIAL_DAYS = 15;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -65,6 +66,8 @@ export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
   let endedTrialConfirmedBankPaidUsers = 0;
 
   for (const doc of snap.docs) {
+    if (isStatsExcludedTelegramProvisionUid(doc.id)) continue;
+
     totalUsers++;
     const user = doc.data() as Record<string, unknown>;
     const bankPaid = userHasConfirmedBankPayment(user);

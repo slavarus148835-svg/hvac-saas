@@ -9,6 +9,7 @@ import {
   userHasConfirmedBankPayment,
   type UserRecord,
 } from "@/lib/server/statsPaidUser";
+import { isStatsExcludedTelegramProvisionUid } from "@/lib/server/statsExcludeTelegramProvisionUid";
 
 const TRIAL_DAYS = 15;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -125,6 +126,8 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
   let paidUsers7d = 0;
 
   for (const [uid, user] of userById.entries()) {
+    if (isStatsExcludedTelegramProvisionUid(uid)) continue;
+
     totalUsers++;
 
     const createdAtMs = firestoreTimeToMs(user.createdAt);
@@ -149,6 +152,12 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
     }
 
     bumpEarliestCalculationMs(firstCalculationAtMsByUser, uid, firestoreTimeToMs(user.firstCalculationAt));
+  }
+
+  for (const k of [...firstCalculationAtMsByUser.keys()]) {
+    if (isStatsExcludedTelegramProvisionUid(k)) {
+      firstCalculationAtMsByUser.delete(k);
+    }
   }
 
   const usersWithCalculation = firstCalculationAtMsByUser.size;

@@ -4,6 +4,7 @@ import {
   buildRegistrationNotificationHtml,
   sendTelegramNotification,
 } from "@/lib/server/sendTelegramNotification";
+import { isStatsExcludedTelegramProvisionUid } from "@/lib/server/statsExcludeTelegramProvisionUid";
 
 /**
  * Идемпотентное уведомление о регистрации (как POST /api/auth/notify-registration).
@@ -13,6 +14,9 @@ export async function runRegistrationTelegramNotifyIfNeeded(
   uid: string,
   bearerEmail?: string | null
 ): Promise<void> {
+  if (isStatsExcludedTelegramProvisionUid(uid)) {
+    return;
+  }
   const userRef = db.collection(PRICING_FS.users).doc(uid);
   const snap = await userRef.get();
   if (!snap.exists) return;

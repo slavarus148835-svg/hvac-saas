@@ -10,7 +10,7 @@ export async function provisionTelegramLoginUser(params: {
   telegramUsername?: string | null;
   telegramFirstName?: string | null;
   telegramLastName?: string | null;
-}): Promise<{ uid: string; created: boolean }> {
+}): Promise<{ uid: string } | null> {
   const telegramId = String(params.telegramUserId || "").replace(/\D/g, "");
   if (!telegramId) throw new Error("invalid_telegram_user_id");
   const out = await provisionOrUpdateTelegramUser({
@@ -25,6 +25,10 @@ export async function provisionTelegramLoginUser(params: {
     },
   });
 
+  if (!out) {
+    return null;
+  }
+
   await params.db.collection(PRICING_FS.users).doc(out.uid).set(
     {
       telegramUserId: telegramId,
@@ -36,5 +40,5 @@ export async function provisionTelegramLoginUser(params: {
     { merge: true }
   );
 
-  return out;
+  return { uid: out.uid };
 }

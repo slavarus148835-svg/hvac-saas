@@ -67,7 +67,6 @@ export async function POST(req: Request) {
         {
           ok: false,
           need_email_linking: true,
-          need_registration: true,
           authStatus: "need_email_linking",
         },
         { status: 404 }

@@ -95,11 +95,10 @@ export async function createMiniAppSession(
 
     if (
       res.status === 404 &&
-      (data.need_registration === true || data.need_email_linking === true)
+      data.need_email_linking === true
     ) {
       return {
         ok: true,
-        need_registration: true,
         need_email_linking: true,
       };
     }
