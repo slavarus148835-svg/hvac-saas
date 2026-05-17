@@ -5,6 +5,7 @@ import {
   TELEGRAM_LINK_TOKEN_PREFIX,
   TELEGRAM_LINK_TOKEN_TTL_MS,
 } from "@/lib/server/telegram/telegramLinkShared";
+import { buildTelegramMiniAppUrlWithStartapp } from "@/lib/telegramMiniAppLinks";
 
 export type TelegramLinkTokenDoc = {
   uid: string;
@@ -28,9 +29,8 @@ export function generateRawLinkToken(): string {
 }
 
 export function buildTelegramMiniAppLinkUrl(rawToken: string): string {
-  const bot = String(process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "hvac_cash_bot").trim();
   const payload = `${TELEGRAM_LINK_TOKEN_PREFIX}${rawToken}`;
-  return `https://t.me/${bot}/app?startapp=${encodeURIComponent(payload)}`;
+  return buildTelegramMiniAppUrlWithStartapp(payload) ?? "";
 }
 
 export async function createTelegramLinkToken(

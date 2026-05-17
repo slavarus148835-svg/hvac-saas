@@ -13,6 +13,8 @@ import {
 } from "@/lib/miniAppOnboarding";
 import { useTgMiniAppAccess } from "@/lib/useTgMiniAppAccess";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { getTelegramMiniAppUrl } from "@/lib/telegramMiniAppLinks";
+import { openTelegramExternalLink } from "@/lib/openTelegramExternalLink";
 
 const page: CSSProperties = {
   minHeight: "100dvh",
@@ -122,6 +124,7 @@ export default function TgMiniAppHomePage() {
   }
 
   if (inBrowser) {
+    const miniAppUrl = getTelegramMiniAppUrl();
     return (
       <>
         <Script
@@ -132,17 +135,25 @@ export default function TgMiniAppHomePage() {
         <div style={page}>
           <h1 style={title}>HVAC SaaS</h1>
           <p style={sub}>
-            Слой Mini App для Telegram. Внутри Telegram после входа открывается калькулятор.
+            Калькулятор для монтажников кондиционеров. Откройте Mini App в Telegram — там доступны
+            расчёты, история и кабинет.
           </p>
-          <Link href="/tg/calculator" style={btn}>
-            Калькулятор Mini App
+          <button
+            type="button"
+            style={btn}
+            onClick={() => openTelegramExternalLink(miniAppUrl)}
+          >
+            Открыть Mini App в Telegram
+          </button>
+          <Link href="/login" style={btnSecondary}>
+            Войти на сайте
           </Link>
-          <Link href="/tg/history" style={btnSecondary}>
-            История расчётов
-          </Link>
-          <Link href="/tg/cabinet" style={btnSecondary}>
-            Кабинет (Mini App)
-          </Link>
+          <p style={{ margin: "16px 0 0", fontSize: 13, color: "#94a3b8", lineHeight: 1.45 }}>
+            Ссылка:{" "}
+            <a href={miniAppUrl} style={{ color: "#0f172a", wordBreak: "break-all" }}>
+              {miniAppUrl}
+            </a>
+          </p>
           <TgMiniAppLegalFooter />
         </div>
       </>

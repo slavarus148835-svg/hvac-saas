@@ -1,33 +1,23 @@
-import { getPartnerSiteOrigin } from "@/lib/partner/constants";
-import { normalizePartnerManagerCode } from "@/lib/partner/partnerManagerCode";
+import {
+  getTelegramMiniAppManagerUrl,
+  getWebManagerUrl,
+} from "@/lib/telegramMiniAppLinks";
 
-export function resolveTelegramBotUsernameForLinks(): string {
-  return String(
-    process.env.TELEGRAM_BOT_USERNAME ||
-      process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
-      ""
-  )
-    .trim()
-    .replace(/^@+/, "");
-}
+export { resolveTelegramBotUsernameForLinks } from "@/lib/telegramMiniAppLinks";
 
 export function buildPartnerManagerWebUrl(
   code: string,
   origin?: string
 ): string {
-  const base = (origin ?? getPartnerSiteOrigin()).replace(/\/+$/, "");
-  const c = normalizePartnerManagerCode(code);
-  return `${base}/?partner=${encodeURIComponent(c)}`;
+  return getWebManagerUrl(code, origin);
 }
 
 export function buildPartnerManagerMiniAppUrl(
   code: string,
-  botUsername?: string
+  _botUsername?: string
 ): string | null {
-  const bot = (botUsername ?? resolveTelegramBotUsernameForLinks()).trim();
-  if (!bot) return null;
-  const c = normalizePartnerManagerCode(code);
-  return `https://t.me/${bot}/app?startapp=${encodeURIComponent(c)}`;
+  void _botUsername;
+  return getTelegramMiniAppManagerUrl(code);
 }
 
 export function buildPartnerManagerLinksBlock(code: string): {

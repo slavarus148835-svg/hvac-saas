@@ -12,6 +12,8 @@ const ROOT = path.join(__dirname, "..");
 dotenv.config({ path: path.join(ROOT, ".env.vercel.production.local") });
 dotenv.config({ path: path.join(ROOT, ".env.local") });
 
+import { getWebManagerUrl } from "../lib/telegramMiniAppLinks";
+
 function ensureFirebase(): boolean {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw?.trim()) return false;
@@ -72,7 +74,7 @@ async function main() {
         name: data.name ?? "",
         oldCode,
         newCode,
-        web: `https://hvac-saas-lovat.vercel.app/?partner=${newCode}`,
+        web: getWebManagerUrl(newCode),
       })
     );
   }

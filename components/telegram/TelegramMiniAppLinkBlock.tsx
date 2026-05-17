@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useState } from "react";
 import { createTelegramWebLinkToken } from "@/lib/telegramWebLink";
 import { openTelegramExternalLink } from "@/lib/openTelegramExternalLink";
+import { getTelegramMiniAppUrl } from "@/lib/telegramMiniAppLinks";
 
 type Props = {
   telegramUserId?: string | null;
@@ -27,8 +28,7 @@ export function TelegramMiniAppLinkBlock({ telegramUserId, telegramUsername }: P
   const handleOpen = async () => {
     setMessage(null);
     if (linked) {
-      const bot = String(process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "hvac_cash_bot").trim();
-      openTelegramExternalLink(`https://t.me/${bot}/app`);
+      openTelegramExternalLink(getTelegramMiniAppUrl());
       return;
     }
 
