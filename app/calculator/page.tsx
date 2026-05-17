@@ -32,7 +32,6 @@ import { ensureTrialStartedOnFirstCalculation } from "@/lib/trialSubscription";
 import { withFeatureGuard } from "@/lib/withFeatureGuard";
 import { buildLoginRedirectUrl } from "@/lib/safeRedirect";
 import {
-  buildCalculatorClosingText,
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
   createDefaultRoomDraft,
@@ -94,7 +93,6 @@ type HistoryCalcDoc = {
   clientName?: string;
   clientContact?: string;
   clientText: string;
-  editableTailText?: string;
 
   mountType?: "standard" | "existing";
   routeMeters?: string;
@@ -289,8 +287,6 @@ function CalculatorPage() {
 
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
-  const [editableTailText, setEditableTailText] = useState(buildCalculatorClosingText());
-
   const [selectedExtraServices, setSelectedExtraServices] =
     useState<SelectedExtraServiceMap>({});
   const [quickCalculationExtras, setQuickCalculationExtras] = useState<QuickCalculationExtra[]>([]);
@@ -501,9 +497,6 @@ function CalculatorPage() {
                 }
             setClientName(data.clientName || "");
             setClientContact(data.clientContact || "");
-            setEditableTailText(
-              data.editableTailText || buildCalculatorClosingText()
-            );
 
             if (data.selectedExtraServices) {
               setSelectedExtraServices(data.selectedExtraServices);
@@ -764,7 +757,7 @@ function CalculatorPage() {
     return singleEstimate;
   }, [multiEstimate, singleEstimate]);
 
-  const finalClientText = `${result.autoClientText}\n${editableTailText}`.trim();
+  const finalClientText = result.autoClientText.trim();
 
   const publicFinalClientText = useMemo(
     () => stripClientIdentityLinesFromPublicQuote(finalClientText),
@@ -814,7 +807,6 @@ function CalculatorPage() {
       clientName: clientName.trim(),
       clientContact: clientContact.trim(),
       clientText: finalClientText,
-      editableTailText,
 
       mountType: scalar.mountType,
       routeMeters: scalar.routeMeters,
@@ -870,7 +862,6 @@ function CalculatorPage() {
     clientName,
     clientContact,
     finalClientText,
-    editableTailText,
     mountType,
     routeMeters,
     baseWallType,
@@ -900,12 +891,6 @@ function CalculatorPage() {
     acModels,
     pricelistCustomServices,
   ]);
-
-  useEffect(() => {
-    if (!openedFromHistoryRef.current && !editableTailText.trim()) {
-      setEditableTailText(buildCalculatorClosingText());
-    }
-  }, [editableTailText]);
 
   useEffect(() => {
     if (!uid) return;
@@ -969,7 +954,6 @@ function CalculatorPage() {
     clientName,
     clientContact,
     finalClientText,
-    editableTailText,
     result.total,
     capacity,
     mountType,
@@ -2184,17 +2168,6 @@ function CalculatorPage() {
             onChange={(e) => setClientContact(e.target.value)}
             placeholder="+79991234567 или @username"
             style={inputStyle}
-          />
-        </Label>
-
-        <Label
-          text="Текст после суммы"
-          note="Редактируется только часть после расчёта. Слова Итого здесь нет"
-        >
-          <textarea
-            value={editableTailText}
-            onChange={(e) => setEditableTailText(e.target.value)}
-            style={textareaStyle}
           />
         </Label>
 

@@ -1,4 +1,3 @@
-export { buildCalculatorClosingText } from "./buildClosingText";
 export {
   MAX_BLOCKS,
   MAX_CABLE_METERS,
