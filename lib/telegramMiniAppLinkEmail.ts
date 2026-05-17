@@ -58,10 +58,13 @@ export async function linkTelegramMiniAppByEmail(
     }
 
     if (res.status === 409) {
+      const msg =
+        typeof data.message === "string" && data.message.trim()
+          ? data.message
+          : "Этот Telegram уже привязан к другому аккаунту с данными. Обратитесь в поддержку.";
       return {
         ok: false,
-        error:
-          "Этот Telegram уже привязан к другому профилю или конфликт данных. Обратитесь в поддержку.",
+        error: msg,
         authStatus: typeof data.authStatus === "string" ? data.authStatus : undefined,
       };
     }

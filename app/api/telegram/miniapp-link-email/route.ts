@@ -1,19 +1,18 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
-import { getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
+import { findUsersByNormalizedEmail, normalizeEmailForAuth } from "@/lib/server/authDuplicateGuards";
 import {
-  assertSafeTelegramLinkToUser,
-  buildTelegramLinkMergePatch,
-  findUsersByNormalizedEmail,
-  normalizeEmailForAuth,
-} from "@/lib/server/authDuplicateGuards";
-import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+  linkBlockedMessage,
+  linkTelegramToEmailUid,
+} from "@/lib/server/telegram/telegramLinkShared";
 import {
   createTelegramMiniAppSession,
   normalizeTelegramUserIdForMiniApp,
   telegramMiniAppPublicProfileFromUserDoc,
 } from "@/lib/server/telegram/telegramMiniAppSession";
 import { verifyTelegramInitData } from "@/lib/server/telegram/verifyTelegramInitData";
+import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
 export const runtime = "nodejs";
 
@@ -50,13 +49,10 @@ export async function POST(req: Request) {
       verified.chatId != null && Number.isFinite(verified.chatId)
         ? String(Math.trunc(verified.chatId)).replace(/\D/g, "")
         : null;
-    const username =
-      typeof verified.telegramUser.username === "string"
-        ? verified.telegramUser.username.trim().replace(/^@/, "") || null
-        : null;
 
+    const app = getAdminApp();
     const db = getAdminDb();
-    if (!db) {
+    if (!app || !db) {
       return NextResponse.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
     }
 
@@ -95,23 +91,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const safe = await assertSafeTelegramLinkToUser(db, targetUid, targetData, tgId, chatKey);
-    if (!safe.ok) {
+    const linked = await linkTelegramToEmailUid(db, app, {
+      targetUid,
+      telegramUser: verified.telegramUser,
+      chatId: verified.chatId,
+      registrationSource: "telegram_mini_app",
+    });
+
+    if (!linked.ok) {
+      const blockedReason =
+        linked.reason === "telegram_bound_elsewhere" ? "merge_conflict" : linked.reason;
       return NextResponse.json(
-        { ok: false, authStatus: "duplicate_blocked", error: safe.reason },
+        {
+          ok: false,
+          authStatus: "duplicate_blocked",
+          error: blockedReason,
+          message: linkBlockedMessage(blockedReason),
+        },
         { status: 409 }
       );
     }
 
-    const patch = buildTelegramLinkMergePatch({
-      telegramNumericId: tgId,
-      telegramUsername: username,
-      telegramChatId: chatKey,
+    console.log("AUTH_TELEGRAM_LINKED_TO_EXISTING_EMAIL_USER", {
+      uid: targetUid,
+      telegramUserId: tgId,
+      mergedFromUid: linked.mergedFromUid ?? null,
     });
-
-    await db.collection(PRICING_FS.users).doc(targetUid).set(patch, { merge: true });
-
-    console.log("AUTH_TELEGRAM_LINKED_TO_EXISTING_EMAIL_USER", { uid: targetUid, telegramUserId: tgId });
     console.log("AUTH_TRIAL_REUSE_EXISTING_USER", { uid: targetUid, source: "miniapp_link_email" });
 
     const ua = req.headers.get("user-agent");
@@ -133,6 +138,7 @@ export async function POST(req: Request) {
       ok: true,
       authStatus: "existing_user_linked_by_email",
       sessionToken,
+      mergedFromUid: linked.mergedFromUid ?? null,
       profile: {
         uid: profile.uid,
         email: profile.email,

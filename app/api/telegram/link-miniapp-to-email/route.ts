@@ -77,16 +77,18 @@ export async function POST(req: Request) {
     });
 
     if (!linked.ok) {
-      if (linked.reason === "telegram_bound_elsewhere") {
-        console.log("TELEGRAM_LINK_BLOCKED_ALREADY_LINKED_TO_OTHER_UID");
+      const blockedReason =
+        linked.reason === "telegram_bound_elsewhere" ? "merge_conflict" : linked.reason;
+      if (blockedReason === "merge_conflict") {
+        console.log("TELEGRAM_LINK_CONFLICT", { linkedUid: consumed.uid, reason: linked.reason });
       } else if (linked.reason === "target_has_other_telegram") {
         console.log("TELEGRAM_LINK_BLOCKED_UID_HAS_OTHER_TELEGRAM");
       }
       return NextResponse.json(
         {
           ok: false,
-          error: linked.reason,
-          message: linkBlockedMessage(linked.reason),
+          error: blockedReason,
+          message: linkBlockedMessage(blockedReason),
         },
         { status: 409 }
       );
@@ -116,7 +118,11 @@ export async function POST(req: Request) {
       (fresh.data() ?? {}) as Record<string, unknown>
     );
 
-    console.log("TELEGRAM_LINK_SUCCESS", { linkedUid: consumed.uid, telegramUserId: tgId });
+    console.log("TELEGRAM_LINK_SUCCESS", {
+      linkedUid: consumed.uid,
+      telegramUserId: tgId,
+      mergedFromUid: linked.mergedFromUid ?? null,
+    });
 
     return NextResponse.json({
       ok: true,

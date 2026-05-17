@@ -3,7 +3,9 @@ import type { App } from "firebase-admin/app";
 import {
   assertSafeTelegramLinkToUser,
   authUserExistsForUid,
+  findConflictingUidForTelegramKeys,
 } from "@/lib/server/authDuplicateGuards";
+import { mergeTelegramSourceUserIntoTarget } from "@/lib/server/telegram/telegramAccountMerge";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { isStatsExcludedTelegramProvisionUid } from "@/lib/server/statsExcludeTelegramProvisionUid";
 import type { VerifiedTelegramUser } from "@/lib/server/telegram/verifyTelegramInitData";
@@ -178,14 +180,15 @@ export async function markTelegramRegistrationSessionLinked(
 }
 
 export type LinkTelegramToUidResult =
-  | { ok: true }
+  | { ok: true; mergedFromUid?: string }
   | {
       ok: false;
       reason:
         | "target_not_found"
         | "telegram_bound_elsewhere"
         | "target_has_other_telegram"
-        | "uid_has_no_auth";
+        | "uid_has_no_auth"
+        | "merge_conflict";
     };
 
 /**
@@ -202,6 +205,14 @@ export async function linkTelegramToEmailUid(
   }
 ): Promise<LinkTelegramToUidResult> {
   const targetUid = String(params.targetUid || "").trim();
+  const tgId = digitsOnly(String(params.telegramUser.id));
+  const chatKey =
+    params.chatId != null && Number.isFinite(params.chatId)
+      ? digitsOnly(String(Math.trunc(params.chatId)))
+      : null;
+
+  console.log("TELEGRAM_LINK_START", { targetUid, telegramUserId: tgId });
+
   if (!targetUid || isStatsExcludedTelegramProvisionUid(targetUid)) {
     return { ok: false, reason: "target_not_found" };
   }
@@ -217,16 +228,50 @@ export async function linkTelegramToEmailUid(
     return { ok: false, reason: "target_not_found" };
   }
 
-  const targetData = snap.data() as Record<string, unknown>;
-  const tgId = digitsOnly(String(params.telegramUser.id));
-  const chatKey =
-    params.chatId != null && Number.isFinite(params.chatId)
-      ? digitsOnly(String(Math.trunc(params.chatId)))
-      : null;
+  let targetData = snap.data() as Record<string, unknown>;
+  let mergedFromUid: string | undefined;
+
+  const otherUid = await findConflictingUidForTelegramKeys(db, tgId, chatKey, targetUid);
+  if (otherUid) {
+    const mergeResult = await mergeTelegramSourceUserIntoTarget(db, {
+      sourceUid: otherUid,
+      targetUid,
+    });
+    if (!mergeResult.ok) {
+      console.log("TELEGRAM_LINK_CONFLICT", {
+        targetUid,
+        otherUid,
+        telegramUserId: tgId,
+        reason: mergeResult.reason,
+      });
+      return { ok: false, reason: "merge_conflict" };
+    }
+    if (mergeResult.merged) {
+      mergedFromUid = otherUid;
+      console.log("TELEGRAM_AUTO_MERGE", {
+        targetUid,
+        mergedFromUid: otherUid,
+        telegramUserId: tgId,
+        historyMoved: mergeResult.historyMoved,
+      });
+      const refreshed = await userRef.get();
+      targetData = (refreshed.data() ?? targetData) as Record<string, unknown>;
+    }
+  }
 
   const safe = await assertSafeTelegramLinkToUser(db, targetUid, targetData, tgId, chatKey);
   if (!safe.ok) {
-    return { ok: false, reason: safe.reason };
+    console.log("TELEGRAM_LINK_CONFLICT", {
+      targetUid,
+      telegramUserId: tgId,
+      reason: safe.reason,
+      mergedFromUid: mergedFromUid ?? null,
+    });
+    return {
+      ok: false,
+      reason:
+        safe.reason === "telegram_bound_elsewhere" ? "merge_conflict" : safe.reason,
+    };
   }
 
   const patch = buildTelegramUserFieldsPatch({
@@ -243,15 +288,27 @@ export async function linkTelegramToEmailUid(
   await userRef.set(patch, { merge: true });
   await markTgProvisionUserLinked(db, tgId, targetUid, String(targetData.email || ""));
 
-  return { ok: true };
+  console.log("TELEGRAM_LINK_SUCCESS", {
+    targetUid,
+    telegramUserId: tgId,
+    mergedFromUid: mergedFromUid ?? null,
+  });
+
+  return { ok: true, mergedFromUid };
 }
 
 export function linkBlockedMessage(
-  reason: "telegram_bound_elsewhere" | "target_has_other_telegram" | "uid_has_no_auth" | "target_not_found"
+  reason:
+    | "telegram_bound_elsewhere"
+    | "target_has_other_telegram"
+    | "uid_has_no_auth"
+    | "target_not_found"
+    | "merge_conflict"
 ): string {
   switch (reason) {
+    case "merge_conflict":
     case "telegram_bound_elsewhere":
-      return "Этот Telegram уже привязан к другому аккаунту. Войдите в тот аккаунт или обратитесь в поддержку.";
+      return "Этот Telegram уже привязан к другому аккаунту с данными. Войдите в тот аккаунт или обратитесь в поддержку.";
     case "target_has_other_telegram":
       return "К вашему email уже привязан другой Telegram. Обратитесь в поддержку для смены привязки.";
     case "uid_has_no_auth":
