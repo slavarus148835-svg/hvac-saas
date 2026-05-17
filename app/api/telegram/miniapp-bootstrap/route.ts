@@ -12,6 +12,7 @@ import {
   upsertTelegramRegistrationSession,
 } from "@/lib/server/telegram/telegramLinkShared";
 import { consumeTelegramLinkToken } from "@/lib/server/telegram/telegramLinkTokens";
+import { evaluateMiniAppAccessGate } from "@/lib/server/telegram/evaluateMiniAppAccessGate";
 import {
   createTelegramMiniAppSession,
   normalizeTelegramUserIdForMiniApp,
@@ -169,6 +170,8 @@ export async function POST(req: Request) {
 
     if (lookup.kind === "found") {
       const doc = lookup.doc;
+      const userData = doc.data() as Record<string, unknown>;
+      const access = evaluateMiniAppAccessGate(doc.id, userData);
       const { sessionToken } = await createTelegramMiniAppSession(db, {
         uid: doc.id,
         telegramUserId: tgId,
@@ -179,7 +182,10 @@ export async function POST(req: Request) {
         ok: true,
         authStatus: "existing_user_by_telegram",
         sessionToken,
-        profile: publicProfilePayload(doc.id, doc.data() as Record<string, unknown>),
+        accessAllowed: access.allowed,
+        accessGate: access.reason,
+        emailVerifiedByCode: access.emailVerifiedByCode,
+        profile: publicProfilePayload(doc.id, userData),
       });
     }
 

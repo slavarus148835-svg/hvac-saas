@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { assertMiniAppServiceAccess } from "@/lib/server/telegram/assertMiniAppServiceAccess";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
 
 export const runtime = "nodejs";
@@ -55,6 +56,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
+
     const snap = await db
       .collection(PRICING_FS.users)
       .doc(v.uid)
@@ -104,6 +108,9 @@ export async function POST(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     let body: Record<string, unknown>;
     try {
@@ -166,6 +173,9 @@ export async function PATCH(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     let body: Record<string, unknown>;
     try {
@@ -252,6 +262,9 @@ export async function DELETE(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     const url = new URL(req.url);
     const id = (url.searchParams.get("id") || "").trim();

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { QuickCalculationExtra } from "@/lib/customServices";
 import {
-  buildCalculatorClosingText,
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
   normalizeCalculatorComputeInput,
@@ -11,6 +10,7 @@ import {
 import type { CalculatorComputeInput } from "@/lib/calculator/types";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { loadMiniAppCalculatorContext } from "@/lib/server/telegram/loadMiniAppCalculatorContext";
+import { assertMiniAppServiceAccess } from "@/lib/server/telegram/assertMiniAppServiceAccess";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
 import { markFirstCalculationIfNeededAndRecordB2B } from "@/lib/server/partnerManager/partnerManagerB2b";
 
@@ -144,6 +144,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
+
     let body: Record<string, unknown>;
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -211,15 +214,7 @@ export async function POST(req: Request) {
       typeof body.clientName === "string" ? body.clientName.trim().slice(0, 200) : "";
     const clientContact =
       typeof body.clientContact === "string" ? body.clientContact.trim().slice(0, 200) : "";
-    let editableTailText =
-      typeof body.editableTailText === "string"
-        ? body.editableTailText.trim().slice(0, 4000)
-        : "";
-    if (!editableTailText) {
-      editableTailText = buildCalculatorClosingText(clientName);
-    }
-
-    const clientText = `${estimateAutoClientText}\n${editableTailText}`.trim();
+    const clientText = estimateAutoClientText.trim();
 
     const iso = new Date().toISOString();
     const payload = omitUndefinedForFirestore({
@@ -231,7 +226,6 @@ export async function POST(req: Request) {
       clientName,
       clientContact,
       clientText,
-      editableTailText,
 
       mountType: computeInput.mountType,
       routeMeters: computeInput.routeMeters,

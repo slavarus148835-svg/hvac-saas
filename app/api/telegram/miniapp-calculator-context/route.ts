@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { loadMiniAppCalculatorContext } from "@/lib/server/telegram/loadMiniAppCalculatorContext";
+import { assertMiniAppServiceAccess } from "@/lib/server/telegram/assertMiniAppServiceAccess";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
 
 export const runtime = "nodejs";
@@ -28,6 +29,9 @@ export async function GET(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     const ctx = await loadMiniAppCalculatorContext(db, v.uid);
 

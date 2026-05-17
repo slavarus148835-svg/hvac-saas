@@ -11,7 +11,6 @@ import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { normalizeEmailForAuth } from "@/lib/authEmailNormalize";
 import {
-  VERIFY_EMAIL_CODE_PATH,
   firebaseAuthErrorMessage,
   recordVerificationEmailSentAtNow,
 } from "@/lib/emailVerification";
@@ -25,6 +24,11 @@ import {
   getPendingRegistrationSessionId,
   savePendingRegistrationSessionId,
 } from "@/lib/telegramMiniAppPending";
+import {
+  buildVerifyEmailCodePathForPostAuth,
+  DEFAULT_TELEGRAM_POST_AUTH_RETURN,
+  markTelegramPostAuthFlow,
+} from "@/lib/telegramPostAuthRedirect";
 
 export default function TgRegisterPage() {
   const router = useRouter();
@@ -36,6 +40,10 @@ export default function TgRegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userMessage, setUserMessage] = useState("");
   const [statusText, setStatusText] = useState("");
+
+  useEffect(() => {
+    markTelegramPostAuthFlow(DEFAULT_TELEGRAM_POST_AUTH_RETURN);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +193,7 @@ export default function TgRegisterPage() {
       if (codeRes.ok) {
         recordVerificationEmailSentAtNow();
         setStatusText("Код отправлен на почту");
-        router.push(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
+        router.push(buildVerifyEmailCodePathForPostAuth());
         return;
       }
       const codeBody = (await codeRes.json().catch(() => ({}))) as {

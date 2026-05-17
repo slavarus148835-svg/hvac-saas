@@ -62,6 +62,9 @@ export type CreateMiniAppSessionResult = {
   need_email_linking?: boolean;
   pending_email_registration?: boolean;
   pendingSessionId?: string;
+  accessAllowed?: boolean;
+  accessGate?: string;
+  emailVerifiedByCode?: boolean;
   error?: string;
 };
 
@@ -113,7 +116,16 @@ export async function bootstrapMiniApp(
       if (token) saveMiniAppSessionToken(token);
       clearPendingRegistrationSessionId();
       const profile = mapApiProfile(data.profile);
-      if (profile) return { ok: true, profile };
+      if (profile) {
+        return {
+          ok: true,
+          profile,
+          accessAllowed: data.accessAllowed === true,
+          accessGate:
+            typeof data.accessGate === "string" ? data.accessGate : undefined,
+          emailVerifiedByCode: data.emailVerifiedByCode === true,
+        };
+      }
       return { ok: false, error: "Профиль не получен после входа." };
     }
 
@@ -167,6 +179,9 @@ export async function createMiniAppSession(
 export type GetMiniAppMeResult = {
   ok: boolean;
   profile?: TelegramMiniAppProfile;
+  accessAllowed?: boolean;
+  accessGate?: string;
+  emailVerifiedByCode?: boolean;
   error?: string;
   status?: number;
 };
@@ -233,7 +248,15 @@ export async function getMiniAppMe(): Promise<GetMiniAppMeResult> {
     if (data.ok === true) {
       const profile = mapApiProfile(data.profile);
       if (profile) {
-        return { ok: true, profile, status: res.status };
+        return {
+          ok: true,
+          profile,
+          status: res.status,
+          accessAllowed: data.accessAllowed === true,
+          accessGate:
+            typeof data.accessGate === "string" ? data.accessGate : undefined,
+          emailVerifiedByCode: data.emailVerifiedByCode === true,
+        };
       }
     }
 
@@ -251,7 +274,13 @@ export async function getMiniAppMe(): Promise<GetMiniAppMeResult> {
 }
 
 export type EnsureMiniAppProfileResult =
-  | { status: "profile"; profile: TelegramMiniAppProfile }
+  | {
+      status: "profile";
+      profile: TelegramMiniAppProfile;
+      accessAllowed?: boolean;
+      accessGate?: string;
+      emailVerifiedByCode?: boolean;
+    }
   | { status: "pending_email_registration"; initData: string; pendingSessionId?: string }
   | { status: "need_registration" }
   | { status: "need_email_linking"; initData: string }
@@ -267,7 +296,13 @@ export async function ensureTelegramMiniAppProfile(
   if (getMiniAppSessionToken()) {
     const me = await getMiniAppMe();
     if (me.ok && me.profile) {
-      return { status: "profile", profile: me.profile };
+      return {
+        status: "profile",
+        profile: me.profile,
+        accessAllowed: me.accessAllowed,
+        accessGate: me.accessGate,
+        emailVerifiedByCode: me.emailVerifiedByCode,
+      };
     }
   }
 
@@ -278,7 +313,13 @@ export async function ensureTelegramMiniAppProfile(
 
   const created = await createMiniAppSession(init);
   if (created.ok && created.profile) {
-    return { status: "profile", profile: created.profile };
+    return {
+      status: "profile",
+      profile: created.profile,
+      accessAllowed: created.accessAllowed,
+      accessGate: created.accessGate,
+      emailVerifiedByCode: created.emailVerifiedByCode,
+    };
   }
   if (created.pending_email_registration) {
     return {

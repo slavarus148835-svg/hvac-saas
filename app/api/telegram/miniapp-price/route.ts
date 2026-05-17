@@ -12,6 +12,7 @@ import {
 } from "@/lib/miniAppPriceForm";
 import { mergeNumericPriceDocument } from "@/lib/mergeNumericPriceDocument";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { assertMiniAppServiceAccess } from "@/lib/server/telegram/assertMiniAppServiceAccess";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
 
 export const runtime = "nodejs";
@@ -39,6 +40,9 @@ export async function GET(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     const uid = v.uid;
     const userSnap = await db.collection(PRICING_FS.users).doc(uid).get();
@@ -92,6 +96,9 @@ export async function POST(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     const uid = v.uid;
     let body: unknown;

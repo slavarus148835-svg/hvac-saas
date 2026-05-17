@@ -11,14 +11,17 @@ import { doc, setDoc, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { generateSessionId, getOrCreateDeviceId, setLocalSessionId } from "@/lib/deviceSession";
 import {
-  VERIFY_EMAIL_CODE_PATH,
   needsEmailCodeVerification,
   firebaseAuthErrorMessage,
   recordVerificationEmailSentAtNow,
 } from "@/lib/emailVerification";
 import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
 import { formatPreRegisterCheckError } from "@/lib/registrationPreCheckMessages";
-import { getSafePostLoginPath } from "@/lib/safeRedirect";
+import {
+  buildVerifyEmailCodePathForPostAuth,
+  markTelegramPostAuthFlow,
+  resolvePostAuthRedirectPath,
+} from "@/lib/telegramPostAuthRedirect";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { resolveAuthUser } from "@/lib/resolveAuthUser";
 import { tryAttachPartnerManagerFromStorage } from "@/lib/partner/clientAttachPartnerManager";
@@ -77,6 +80,12 @@ export default function RegisterPage() {
   const [tgStatusText, setTgStatusText] = useState("");
 
   useEffect(() => {
+    if (isTelegramMiniApp()) {
+      markTelegramPostAuthFlow();
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const unsubscribe = onAuthStateChanged(auth, async (userFromObserver) => {
       const currentUser = await resolveAuthUser(userFromObserver);
@@ -85,11 +94,17 @@ export default function RegisterPage() {
       if (holdOnPageRef.current) return;
       const snap = await getDocFromServer(doc(db, "users", currentUser.uid));
       const data = snap.exists() ? snap.data() : null;
+      const regSource =
+        data && typeof data.registrationSource === "string"
+          ? data.registrationSource
+          : null;
       if (needsEmailCodeVerification(currentUser, data)) {
-        router.replace(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
+        router.replace(buildVerifyEmailCodePathForPostAuth());
         return;
       }
-      router.replace(getSafePostLoginPath(undefined));
+      router.replace(
+        resolvePostAuthRedirectPath({ registrationSource: regSource })
+      );
     });
     return () => {
       cancelled = true;
@@ -137,6 +152,7 @@ export default function RegisterPage() {
       } catch {
         /* ignore */
       }
+      markTelegramPostAuthFlow();
       setTgSessionId(data.sessionId);
       const expiresMs = Date.parse(data.expiresAt);
       setTgExpiresAtMs(expiresMs);
@@ -392,7 +408,7 @@ export default function RegisterPage() {
         setShowResend(false);
         setEmailSendFailed(false);
         setStatusText("Переход на подтверждение…");
-        router.push(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
+        router.push(buildVerifyEmailCodePathForPostAuth());
       } else {
         setEmailSendFailed(true);
         setUserMessage(result.message);
@@ -641,7 +657,7 @@ export default function RegisterPage() {
         return;
       }
       setStatusText("Переход на подтверждение…");
-      router.push(`${VERIFY_EMAIL_CODE_PATH}?from=register`);
+      router.push(buildVerifyEmailCodePathForPostAuth());
     } catch (error: unknown) {
       console.error("[register] REGISTRATION_CREATE_AUTH_ERROR", error);
       const code =

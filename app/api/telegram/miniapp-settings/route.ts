@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import { assertMiniAppServiceAccess } from "@/lib/server/telegram/assertMiniAppServiceAccess";
 import { verifyTelegramMiniAppSession } from "@/lib/server/telegram/telegramMiniAppSession";
 
 export const runtime = "nodejs";
@@ -37,6 +38,9 @@ export async function GET(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     const snap = await db.collection(PRICING_FS.users).doc(v.uid).get();
     const d = snap.exists ? (snap.data() as Record<string, unknown>) : {};
@@ -75,6 +79,9 @@ export async function PATCH(req: Request) {
     if (!v.ok) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+
+    const denied = await assertMiniAppServiceAccess(db, v.uid);
+    if (denied) return denied;
 
     let body: Record<string, unknown>;
     try {

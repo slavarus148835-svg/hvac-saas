@@ -68,14 +68,8 @@ import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegr
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
-import { TgMiniAppOnboarding } from "@/components/tg/TgMiniAppOnboarding";
+import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
 import type { MiniAppCalculatorTextSettings } from "@/lib/telegramMiniAppCalculatorApi";
-import {
-  completeMiniAppStoreOnboarding,
-  isMiniAppOnboardingCompletedLocally,
-  shouldShowMiniAppStoreOnboarding,
-} from "@/lib/miniAppOnboarding";
-
 const CALC_HELP_DISMISSED_KEY = "hvac_tg_calc_help_dismissed";
 
 const page: React.CSSProperties = {
@@ -251,9 +245,6 @@ export default function TgCalculatorPage() {
   const [modelAddBusy, setModelAddBusy] = useState(false);
   const [clientQuoteUserEdited, setClientQuoteUserEdited] = useState(false);
   const [clientQuoteDraft, setClientQuoteDraft] = useState("");
-  const [storeOnboarding, setStoreOnboarding] = useState<boolean | null>(() =>
-    typeof window !== "undefined" && isMiniAppOnboardingCompletedLocally() ? false : null
-  );
   const [calcHelpVisible, setCalcHelpVisible] = useState(false);
   const [textSettings, setTextSettings] = useState<MiniAppCalculatorTextSettings>({
     quoteFooterTemplate: "",
@@ -401,21 +392,6 @@ export default function TgCalculatorPage() {
       "telegram_miniapp"
     );
   }, [authUi, profile?.uid]);
-
-  useEffect(() => {
-    if (inTelegram !== true || !ready || authUi !== "profile") return;
-    if (isMiniAppOnboardingCompletedLocally()) {
-      queueMicrotask(() => setStoreOnboarding(false));
-      return;
-    }
-    let cancelled = false;
-    void shouldShowMiniAppStoreOnboarding().then((show) => {
-      if (!cancelled) setStoreOnboarding(show);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [inTelegram, ready, authUi]);
 
   useEffect(() => {
     if (inTelegram !== true || !ready) return;
@@ -633,18 +609,10 @@ export default function TgCalculatorPage() {
     [effectiveClientQuoteText]
   );
 
-  const storeOnboardingGatePending =
-    inTelegram === true &&
-    storeOnboarding === null &&
-    authUi === "profile" &&
-    ready;
-
   const showCalculatorForm =
     authUi === "profile" &&
     calcPhase === "ready" &&
     Boolean(profile) &&
-    storeOnboarding !== true &&
-    !storeOnboardingGatePending &&
     ((inTelegram === true && ready) ||
       (inTelegram === false && ready));
 
@@ -1146,28 +1114,8 @@ export default function TgCalculatorPage() {
     });
   }
 
-  if (storeOnboarding === true) {
-    return (
-      <>
-        <Script
-          src="https://telegram.org/js/telegram-web-app.js"
-          strategy="afterInteractive"
-          onLoad={() => {
-            prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null);
-          }}
-        />
-        <TgMiniAppOnboarding
-          onComplete={() => {
-            void completeMiniAppStoreOnboarding().then(() => {
-              setStoreOnboarding(false);
-            });
-          }}
-        />
-      </>
-    );
-  }
-
   return (
+    <TgProtectedMiniApp>
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
@@ -1179,12 +1127,6 @@ export default function TgCalculatorPage() {
       <div style={page}>
         <h1 style={{ ...title, margin: "0 0 10px" }}>Калькулятор монтажника</h1>
         {ready && authUi === "profile" && calcPhase === "ready" ? <TgMiniAppNav /> : null}
-
-        {storeOnboardingGatePending ? (
-          <p style={{ margin: "24px 0", color: "#64748b", fontSize: 15, textAlign: "center" }}>
-            Загрузка…
-          </p>
-        ) : null}
 
         {ready && inTelegram === true && showCalculatorForm ? (
           <>
@@ -2186,5 +2128,6 @@ export default function TgCalculatorPage() {
         ) : null}
       </div>
     </>
+    </TgProtectedMiniApp>
   );
 }

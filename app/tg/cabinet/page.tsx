@@ -12,6 +12,7 @@ import { fetchMiniAppMeAccount, type MiniAppMeAccount } from "@/lib/telegramMini
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
+import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
@@ -300,6 +301,7 @@ export default function TgCabinetPage() {
       authUi === "no_tg");
 
   return (
+    <TgProtectedMiniApp>
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
@@ -429,5 +431,6 @@ export default function TgCabinetPage() {
         <TgMiniAppLegalFooter />
       </div>
     </>
+    </TgProtectedMiniApp>
   );
 }

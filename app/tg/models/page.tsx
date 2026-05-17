@@ -16,6 +16,7 @@ import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
 import { useScrollInputIntoView } from "@/lib/useScrollInputIntoView";
 
 const CAP_OPTS = ["", "7", "9", "12", "18", "24", "30", "36"] as const;
@@ -275,6 +276,7 @@ export default function TgModelsPage() {
   }
 
   return (
+    <TgProtectedMiniApp>
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
@@ -304,7 +306,7 @@ export default function TgModelsPage() {
                 />
                 <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
                   Нет аккаунта?{" "}
-                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                  <Link href="/tg/register" style={{ color: "#0f172a", fontWeight: 600 }}>
                     Регистрация на сайте
                   </Link>
                 </p>
@@ -320,7 +322,7 @@ export default function TgModelsPage() {
                     Войти
                   </Link>
                   <Link
-                    href="/register"
+                    href="/tg/register"
                     style={{ ...btnGhost, flex: 1, padding: "12px", fontSize: 15, marginTop: 0 }}
                   >
                     Регистрация
@@ -336,7 +338,7 @@ export default function TgModelsPage() {
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
-                <Link href="/register" style={{ ...btnGhost, textAlign: "center" }}>
+                <Link href="/tg/register" style={{ ...btnGhost, textAlign: "center" }}>
                   Зарегистрироваться
                 </Link>
               </>
@@ -357,7 +359,7 @@ export default function TgModelsPage() {
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
-                <Link href="/register" style={{ ...btnGhost, textAlign: "center" }}>
+                <Link href="/tg/register" style={{ ...btnGhost, textAlign: "center" }}>
                   Зарегистрироваться
                 </Link>
               </>
@@ -492,5 +494,6 @@ export default function TgModelsPage() {
         )}
       </div>
     </>
+    </TgProtectedMiniApp>
   );
 }

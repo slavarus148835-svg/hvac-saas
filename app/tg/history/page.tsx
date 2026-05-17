@@ -15,6 +15,7 @@ import {
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -141,6 +142,7 @@ export default function TgHistoryPage() {
   }, []);
 
   return (
+    <TgProtectedMiniApp>
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"
@@ -175,7 +177,7 @@ export default function TgHistoryPage() {
                 />
                 <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
                   Нет аккаунта?{" "}
-                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                  <Link href="/tg/register" style={{ color: "#0f172a", fontWeight: 600 }}>
                     Регистрация на сайте
                   </Link>
                 </p>
@@ -189,7 +191,7 @@ export default function TgHistoryPage() {
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
-                <Link href="/register" style={btnSecondary}>
+                <Link href="/tg/register" style={btnSecondary}>
                   Регистрация
                 </Link>
               </>
@@ -202,7 +204,7 @@ export default function TgHistoryPage() {
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
-                <Link href="/register" style={btnSecondary}>
+                <Link href="/tg/register" style={btnSecondary}>
                   Зарегистрироваться
                 </Link>
               </>
@@ -223,7 +225,7 @@ export default function TgHistoryPage() {
                 <Link href="/login" style={btn}>
                   Войти
                 </Link>
-                <Link href="/register" style={btnSecondary}>
+                <Link href="/tg/register" style={btnSecondary}>
                   Регистрация
                 </Link>
               </>
@@ -330,5 +332,6 @@ export default function TgHistoryPage() {
         </Link>
       </div>
     </>
+    </TgProtectedMiniApp>
   );
 }

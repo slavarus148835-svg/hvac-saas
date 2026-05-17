@@ -15,7 +15,7 @@ import {
   EMAIL_VERIFICATION_RESEND_COOLDOWN_SEC,
 } from "@/lib/emailVerification";
 import { doc, getDocFromServer } from "firebase/firestore";
-import { getSafePostLoginPath } from "@/lib/safeRedirect";
+import { resolvePostAuthRedirectPath } from "@/lib/telegramPostAuthRedirect";
 import { formatSendEmailCodeApiError } from "@/lib/sendEmailCodeClientMessages";
 
 const TEMP_OVERLOAD_MESSAGE = "Сервис временно недоступен. Попробуйте ещё раз через 30–60 секунд.";
@@ -32,6 +32,11 @@ function isHtmlPayload(contentType: string, body: string) {
 
 async function waitMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readReturnToFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("returnTo");
 }
 
 export default function VerifyEmailCodePage() {
@@ -83,7 +88,16 @@ export default function VerifyEmailCodePage() {
         const data = snap.exists() ? snap.data() : null;
         if (!needsEmailCodeVerification(user, data)) {
           sessionStorage.setItem(SESSION_EMAIL_JUST_VERIFIED_KEY, "1");
-          router.replace(getSafePostLoginPath(undefined));
+          const regSource =
+            data && typeof data.registrationSource === "string"
+              ? data.registrationSource
+              : null;
+          router.replace(
+            resolvePostAuthRedirectPath({
+              returnToParam: readReturnToFromUrl(),
+              registrationSource: regSource,
+            })
+          );
           return;
         }
         setEmail(user.email ?? null);
@@ -289,7 +303,18 @@ export default function VerifyEmailCodePage() {
       setStatusLabel("код подтвержден");
       setStatus({ kind: "ok", text: "Готово. Переходим в кабинет…" });
       await loadRegistrationStatus(idTokenAfterVerify);
-      router.replace(getSafePostLoginPath(undefined));
+      const afterSnap = await getDocFromServer(doc(db, "users", user.uid));
+      const afterData = afterSnap.exists() ? afterSnap.data() : null;
+      const regSource =
+        afterData && typeof afterData.registrationSource === "string"
+          ? afterData.registrationSource
+          : null;
+      router.replace(
+        resolvePostAuthRedirectPath({
+          returnToParam: readReturnToFromUrl(),
+          registrationSource: regSource,
+        })
+      );
     } catch (e) {
       console.log("[verify-email-code] verify fail", e);
       setStatus({ kind: "err", text: firebaseAuthErrorMessageWithCode(e) });

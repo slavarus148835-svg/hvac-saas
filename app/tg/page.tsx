@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useEffect, useState, type CSSProperties } from "react";
-import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgMiniAppGateShell } from "@/components/tg/TgMiniAppGateShell";
 import { TgMiniAppOnboarding } from "@/components/tg/TgMiniAppOnboarding";
-import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
-import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
 import {
   completeMiniAppStoreOnboarding,
   shouldShowMiniAppStoreOnboarding,
 } from "@/lib/miniAppOnboarding";
+import { useTgMiniAppAccess } from "@/lib/useTgMiniAppAccess";
+import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 
 const page: CSSProperties = {
   minHeight: "100dvh",
@@ -63,182 +64,75 @@ const btnSecondary: CSSProperties = {
   marginTop: 12,
 };
 
-const card: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 14,
-  padding: 16,
-  marginBottom: 16,
-};
-
 /**
- * Точка входа Mini App: сначала проверка сессии / initData, затем калькулятор только для привязанного аккаунта.
+ * Точка входа Mini App: gate (link / verify) → onboarding → калькулятор.
  */
 export default function TgMiniAppHomePage() {
   const router = useRouter();
-  const [phase, setPhase] = useState<"checking" | "telegram" | "browser">("checking");
-  const [tgAuth, setTgAuth] = useState<
-    | "idle"
-    | "loading"
-    | "profile"
-    | "onboarding"
-    | "need_registration"
-    | "need_email_linking"
-    | "error"
-    | "no_init"
-  >("idle");
-  const [tgError, setTgError] = useState<string | null>(null);
-  const [emailLinkInitData, setEmailLinkInitData] = useState("");
+  const [inBrowser, setInBrowser] = useState<boolean | null>(null);
+  const access = useTgMiniAppAccess({ enabled: inBrowser === false, requireTelegram: true });
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const wa = await waitForTelegramWebApp({
-        intervalMs: 200,
-        maxAttempts: 12,
-      });
+      const wa = await waitForTelegramWebApp({ intervalMs: 200, maxAttempts: 12 });
       if (cancelled) return;
-      if (wa) {
-        prepareTelegramMiniAppShell(wa);
-        setPhase("telegram");
-        setTgAuth("loading");
-        const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
-        const resolved = await ensureTelegramMiniAppProfile(initData || null);
-        if (cancelled) return;
-        if (resolved.status === "profile") {
-          const showOnboarding = await shouldShowMiniAppStoreOnboarding();
-          if (cancelled) return;
-          if (showOnboarding) {
-            setTgAuth("onboarding");
-            return;
-          }
-          setTgAuth("profile");
-          router.replace("/tg/calculator");
-          return;
-        }
-        if (resolved.status === "pending_email_registration") {
-          router.replace("/tg/register");
-          return;
-        }
-        if (resolved.status === "need_email_linking") {
-          setTgAuth("need_email_linking");
-          setEmailLinkInitData(resolved.initData || "");
-          setTgError(null);
-          return;
-        }
-        if (resolved.status === "need_registration") {
-          setTgAuth("need_registration");
-          setTgError(null);
-          return;
-        }
-        if (resolved.status === "error") {
-          setTgAuth("error");
-          setTgError(resolved.message);
-          return;
-        }
-        setTgAuth("no_init");
-        setTgError(null);
-        return;
-      }
-      setPhase("browser");
+      setInBrowser(!wa);
+      if (wa) prepareTelegramMiniAppShell(wa);
     })();
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
-  return (
-    <>
-      <Script
-        src="https://telegram.org/js/telegram-web-app.js"
-        strategy="afterInteractive"
-        onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
-      />
-      {phase === "checking" || (phase === "telegram" && tgAuth === "loading") ? (
+  useEffect(() => {
+    if (inBrowser !== false || access.phase !== "ready") {
+      setOnboardingChecked(false);
+      setShowOnboarding(false);
+      return;
+    }
+    if (onboardingChecked) return;
+    let cancelled = false;
+    void shouldShowMiniAppStoreOnboarding().then((show) => {
+      if (cancelled) return;
+      setOnboardingChecked(true);
+      if (show) setShowOnboarding(true);
+      else router.replace("/tg/calculator");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inBrowser, access.phase, onboardingChecked, router]);
+
+  if (inBrowser === null || (inBrowser === false && access.phase === "loading")) {
+    return (
+      <>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
+        />
         <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <p style={{ margin: 0, color: "#64748b", fontSize: 16 }}>Проверка аккаунта…</p>
         </div>
-      ) : null}
-      {phase === "telegram" && tgAuth === "profile" ? (
-        <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 16 }}>Открываем калькулятор…</p>
-        </div>
-      ) : null}
-      {phase === "telegram" &&
-      (tgAuth === "need_registration" ||
-        tgAuth === "need_email_linking" ||
-        tgAuth === "error" ||
-        tgAuth === "no_init") ? (
-        <div style={page}>
-          <h1 style={title}>HVAC SaaS</h1>
-          <p style={sub}>
-            Чтобы пользоваться калькулятором и прайсом в Telegram, войдите в аккаунт HVAC-SaaS или
-            зарегистрируйтесь и привяжите Telegram.
-          </p>
-          <div style={card}>
-            {tgAuth === "need_email_linking" && emailLinkInitData ? (
-              <>
-                <TgMiniAppEmailLink
-                  initData={emailLinkInitData}
-                  onLinked={(_profile) => {
-                    void (async () => {
-                      const showOnboarding = await shouldShowMiniAppStoreOnboarding();
-                      if (showOnboarding) {
-                        setTgAuth("onboarding");
-                        return;
-                      }
-                      router.replace("/tg/calculator");
-                    })();
-                  }}
-                />
-                <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
-                  Нет аккаунта?{" "}
-                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
-                    Регистрация на сайте
-                  </Link>
-                </p>
-              </>
-            ) : null}
-            {tgAuth === "need_registration" ? (
-              <>
-                <p style={{ margin: "0 0 16px", fontSize: 15, lineHeight: 1.5 }}>
-                  Аккаунт с этим Telegram не найден. Войдите или зарегистрируйтесь на сайте — после
-                  привязки откройте Mini App снова из бота.
-                </p>
-                <Link href="/login" style={btn}>
-                  Войти
-                </Link>
-                <Link href="/register" style={btnSecondary}>
-                  Регистрация
-                </Link>
-              </>
-            ) : null}
-            {tgAuth === "error" && tgError ? (
-              <p style={{ margin: 0, color: "#b91c1c", fontSize: 15 }}>{tgError}</p>
-            ) : null}
-            {tgAuth === "no_init" ? (
-              <p style={{ margin: 0, color: "#64748b", fontSize: 15 }}>
-                Нет данных Telegram. Откройте приложение кнопкой из бота HVAC-SaaS.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-      {phase === "telegram" && tgAuth === "onboarding" ? (
-        <TgMiniAppOnboarding
-          onComplete={() => {
-            void completeMiniAppStoreOnboarding().then(() => {
-              router.replace("/tg/calculator");
-            });
-          }}
+      </>
+    );
+  }
+
+  if (inBrowser) {
+    return (
+      <>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
         />
-      ) : null}
-      {phase === "browser" ? (
         <div style={page}>
           <h1 style={title}>HVAC SaaS</h1>
           <p style={sub}>
-            Слой Mini App для Telegram. Внутри Telegram после входа открывается калькулятор. Здесь —
-            веб-справка и ссылки.
+            Слой Mini App для Telegram. Внутри Telegram после входа открывается калькулятор.
           </p>
           <Link href="/tg/calculator" style={btn}>
             Калькулятор Mini App
@@ -249,8 +143,60 @@ export default function TgMiniAppHomePage() {
           <Link href="/tg/cabinet" style={btnSecondary}>
             Кабинет (Mini App)
           </Link>
+          <TgMiniAppLegalFooter />
         </div>
-      ) : null}
-    </>
-  );
+      </>
+    );
+  }
+
+  if (showOnboarding) {
+    return (
+      <>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
+        />
+        <TgMiniAppOnboarding
+          onComplete={() => {
+            void completeMiniAppStoreOnboarding().then(() => {
+              router.replace("/tg/calculator");
+            });
+          }}
+        />
+      </>
+    );
+  }
+
+  if (access.phase === "ready" && onboardingChecked && !showOnboarding) {
+    return (
+      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ margin: 0, color: "#64748b", fontSize: 16 }}>Открываем калькулятор…</p>
+      </div>
+    );
+  }
+
+  if (access.phase !== "ready") {
+    return (
+      <>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onLoad={() => prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null)}
+        />
+        <TgMiniAppGateShell
+          phase={access.phase}
+          initData={access.initData}
+          profile={access.profile}
+          errorMessage={access.errorMessage}
+          onLinked={() => access.refresh()}
+        />
+        <div style={{ maxWidth: 440, margin: "0 auto", padding: "0 16px 24px" }}>
+          <TgMiniAppLegalFooter />
+        </div>
+      </>
+    );
+  }
+
+  return null;
 }
