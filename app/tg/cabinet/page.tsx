@@ -14,8 +14,9 @@ import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
 
 const page: React.CSSProperties = {
-  minHeight: "100vh",
-  padding: "20px 16px 32px",
+  minHeight: "100dvh",
+  padding:
+    "max(20px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom))",
   maxWidth: 440,
   margin: "0 auto",
   fontFamily:
@@ -28,18 +29,45 @@ const page: React.CSSProperties = {
 const title: React.CSSProperties = {
   fontSize: 22,
   fontWeight: 800,
-  margin: "0 0 12px",
+  margin: "0 0 16px",
+  letterSpacing: "-0.02em",
 };
 
-const statusBox: React.CSSProperties = {
+const card: React.CSSProperties = {
   background: "#fff",
   border: "1px solid #e2e8f0",
   borderRadius: 14,
-  padding: "14px 16px",
+  padding: "16px 18px",
   marginBottom: 16,
-  fontSize: 14,
-  lineHeight: 1.5,
-  color: "#334155",
+};
+
+const cardTitle: React.CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 16,
+  fontWeight: 700,
+  color: "#0f172a",
+};
+
+const profileRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  padding: "11px 0",
+  borderBottom: "1px solid #f1f5f9",
+  fontSize: 15,
+  lineHeight: 1.45,
+};
+
+const profileLabel: React.CSSProperties = {
+  color: "#64748b",
+  flexShrink: 0,
+};
+
+const profileValue: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 600,
+  textAlign: "right",
 };
 
 const btn: React.CSSProperties = {
@@ -65,18 +93,13 @@ const btnSecondary: React.CSSProperties = {
   marginTop: 12,
 };
 
-function formatIsoDate(iso: string | null): string {
-  if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
-  return new Date(t).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const hint: React.CSSProperties = {
+  margin: "14px 0 0",
+  fontSize: 13,
+  color: "#64748b",
+  lineHeight: 1.5,
+  textAlign: "center",
+};
 
 type AuthUi =
   | "idle"
@@ -88,10 +111,80 @@ type AuthUi =
   | "no_tg"
   | "no_init";
 
+function formatTariffLabel(
+  profile: TelegramMiniAppProfile,
+  accountExtra: MiniAppMeAccount | null
+): string {
+  if (profile.hasPaid) return "Платная подписка";
+
+  const status = accountExtra?.accessStatusLabel;
+  if (status === "Подписка активна") return "Платная подписка";
+  if (status === "Триал активен") return "Пробный период";
+
+  const plan = (profile.plan ?? "").trim().toLowerCase();
+  if (plan === "trial" || plan.includes("trial")) return "Пробный период";
+  if (
+    plan === "paid" ||
+    plan === "subscription" ||
+    plan.includes("paid") ||
+    plan.includes("pro")
+  ) {
+    return "Платная подписка";
+  }
+  if (status === "Доступ истёк") return "Нет активного доступа";
+
+  return "—";
+}
+
+function ProfileRows({
+  profile,
+  accountExtra,
+}: {
+  profile: TelegramMiniAppProfile;
+  accountExtra: MiniAppMeAccount | null;
+}) {
+  const status =
+    accountExtra?.accessStatusLabel ?? (profile.hasPaid ? "Подписка активна" : "—");
+  const until = accountExtra?.accessUntilLabel ?? "—";
+  const tariff = formatTariffLabel(profile, accountExtra);
+
+  const rows: { label: string; value: string; valueStyle?: React.CSSProperties }[] = [
+    { label: "Статус", value: status },
+    { label: "Срок действия", value: until },
+    { label: "Тариф", value: tariff },
+  ];
+
+  if (profile.blocked) {
+    rows.push({
+      label: "Статус аккаунта",
+      value: "Заблокирован",
+      valueStyle: { color: "#b91c1c" },
+    });
+  }
+
+  return (
+    <div>
+      {rows.map((row, i) => (
+        <div
+          key={row.label}
+          style={{
+            ...profileRow,
+            borderBottom: i === rows.length - 1 ? "none" : profileRow.borderBottom,
+            paddingBottom: i === rows.length - 1 ? 0 : profileRow.padding,
+            paddingTop: i === 0 ? 0 : profileRow.padding,
+          }}
+        >
+          <span style={profileLabel}>{row.label}</span>
+          <span style={{ ...profileValue, ...row.valueStyle }}>{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function TgCabinetPage() {
   const [ready, setReady] = useState(false);
   const [inTelegram, setInTelegram] = useState<boolean | null>(null);
-  const [detail, setDetail] = useState("");
   const [authUi, setAuthUi] = useState<AuthUi>("idle");
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -111,16 +204,6 @@ export default function TgCabinetPage() {
       if (wa) {
         prepareTelegramMiniAppShell(wa);
         setInTelegram(true);
-        setDetail(
-          [
-            "Telegram WebApp активен",
-            wa.version ? `SDK: ${wa.version}` : null,
-            wa.platform ? `Платформа: ${wa.platform}` : null,
-            wa.initData ? "initData получен" : null,
-          ]
-            .filter(Boolean)
-            .join("\n")
-        );
 
         const initData = typeof wa.initData === "string" ? wa.initData.trim() : "";
         setAuthUi("checking");
@@ -153,7 +236,6 @@ export default function TgCabinetPage() {
         }
       } else {
         setInTelegram(false);
-        setDetail("Вне Telegram Mini App — откройте из бота для режима WebApp.");
         setAuthUi("checking");
         const resolved = await ensureTelegramMiniAppProfile(null);
         if (cancelled) return;
@@ -207,6 +289,16 @@ export default function TgCabinetPage() {
     );
   }, [authUi, profile?.uid]);
 
+  const showProfileCard =
+    ready &&
+    (authUi === "profile" ||
+      authUi === "checking" ||
+      authUi === "need_email_linking" ||
+      authUi === "need_registration" ||
+      authUi === "error" ||
+      authUi === "no_init" ||
+      authUi === "no_tg");
+
   return (
     <>
       <Script
@@ -217,60 +309,31 @@ export default function TgCabinetPage() {
       <div style={page}>
         <h1 style={title}>Кабинет</h1>
         {ready && authUi === "profile" ? <TgMiniAppNav /> : null}
-        <div style={statusBox}>
-          <strong>Подключение Telegram</strong>
-          <br />
-          <br />
-          {!ready ? (
-            "…"
-          ) : (
-            <>
-              {inTelegram === true
-                ? "Внутри Telegram WebApp: да"
-                : inTelegram === false
-                  ? "Внутри Telegram WebApp: нет"
-                  : "Проверка…"}
-              <br />
-              <br />
-              {detail}
-            </>
-          )}
-        </div>
 
-        {ready ? (
-          <div style={{ ...statusBox, marginBottom: 16 }}>
-            <strong>Профиль</strong>
-            <br />
-            <br />
+        {!ready ? (
+          <div style={card}>
+            <p style={{ margin: 0, fontSize: 15, color: "#64748b" }}>Загрузка…</p>
+          </div>
+        ) : null}
+
+        {showProfileCard ? (
+          <div style={card}>
             {authUi === "checking" ? (
-              <span>Проверяем Telegram-аккаунт…</span>
+              <p style={{ margin: 0, fontSize: 15, color: "#64748b" }}>
+                Проверяем аккаунт…
+              </p>
             ) : null}
+
             {authUi === "profile" && profile ? (
-              <ul
-                style={{
-                  margin: 0,
-                  paddingLeft: 18,
-                  fontSize: 14,
-                  color: "#475569",
-                }}
-              >
-                {profile.email ? <li>Email: {profile.email}</li> : null}
-                <li>
-                  Статус:{" "}
-                  {accountExtra?.accessStatusLabel ?? (profile.hasPaid ? "Подписка активна" : "—")}
-                </li>
-                <li>Срок: {accountExtra?.accessUntilLabel ?? "—"}</li>
-                <li>План: {profile.plan ?? "—"}</li>
-                {profile.telegramUsername ? (
-                  <li>@{profile.telegramUsername}</li>
-                ) : null}
-                {profile.blocked ? (
-                  <li style={{ color: "#b91c1c" }}>Заблокирован</li>
-                ) : null}
-              </ul>
+              <>
+                <h2 style={cardTitle}>Ваш доступ</h2>
+                <ProfileRows profile={profile} accountExtra={accountExtra} />
+              </>
             ) : null}
+
             {authUi === "need_email_linking" && emailLinkInitData ? (
               <>
+                <h2 style={cardTitle}>Привязка email</h2>
                 <TgMiniAppEmailLink
                   initData={emailLinkInitData}
                   onLinked={async (p) => {
@@ -289,23 +352,32 @@ export default function TgCabinetPage() {
                 </p>
               </>
             ) : null}
+
             {authUi === "need_registration" ? (
-              <p style={{ margin: 0 }}>
-                Аккаунт Telegram не привязан к HVAC-SaaS. Войдите или зарегистрируйтесь
-                на сайте.
-              </p>
+              <>
+                <h2 style={cardTitle}>Вход в аккаунт</h2>
+                <p style={{ margin: 0, fontSize: 15, color: "#475569", lineHeight: 1.5 }}>
+                  Аккаунт Telegram не привязан к HVAC-SaaS. Войдите или зарегистрируйтесь на
+                  сайте.
+                </p>
+              </>
             ) : null}
+
             {authUi === "error" && authError ? (
-              <p style={{ margin: 0, color: "#b91c1c" }}>{authError}</p>
-            ) : null}
-            {authUi === "no_init" ? (
-              <p style={{ margin: 0, color: "#64748b" }}>
-                Нет initData — откройте Mini App из бота.
+              <p style={{ margin: 0, color: "#b91c1c", fontSize: 15, lineHeight: 1.5 }}>
+                {authError}
               </p>
             ) : null}
+
+            {authUi === "no_init" ? (
+              <p style={{ margin: 0, fontSize: 15, color: "#64748b", lineHeight: 1.5 }}>
+                Откройте Mini App из бота HVAC-SaaS, чтобы увидеть профиль.
+              </p>
+            ) : null}
+
             {authUi === "no_tg" ? (
-              <p style={{ margin: 0, color: "#64748b" }}>
-                Полный кабинет на сайте — по ссылке ниже.
+              <p style={{ margin: 0, fontSize: 15, color: "#64748b", lineHeight: 1.5 }}>
+                Полный кабинет и оплата доступны в веб-версии.
               </p>
             ) : null}
           </div>
@@ -316,6 +388,7 @@ export default function TgCabinetPage() {
             Открыть веб-кабинет
           </Link>
         ) : null}
+
         {authUi === "need_registration" ? (
           <>
             <Link href="/login" style={btn}>
@@ -326,6 +399,7 @@ export default function TgCabinetPage() {
             </Link>
           </>
         ) : null}
+
         {authUi === "need_email_linking" && inTelegram === false ? (
           <>
             <Link href="/login" style={btn}>
@@ -336,26 +410,22 @@ export default function TgCabinetPage() {
             </Link>
           </>
         ) : null}
+
         {(authUi === "no_tg" ||
           authUi === "no_init" ||
           authUi === "error" ||
           authUi === "checking" ||
-          authUi === "idle") && ready ? (
+          authUi === "idle") &&
+        ready ? (
           <Link href="/dashboard" style={btn}>
             Открыть кабинет на сайте
           </Link>
         ) : null}
 
-        <p
-          style={{
-            marginTop: 12,
-            fontSize: 12,
-            color: "#94a3b8",
-            textAlign: "center",
-          }}
-        >
-          Полный кабинет и оплата — на сайте (/dashboard)
-        </p>
+        {authUi === "profile" ? (
+          <p style={hint}>Оплата и управление подпиской — в веб-кабинете.</p>
+        ) : null}
+
         <TgMiniAppLegalFooter />
       </div>
     </>

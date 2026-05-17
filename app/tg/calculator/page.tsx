@@ -272,10 +272,6 @@ export default function TgCalculatorPage() {
   }, [modelPick, modelPickByRoom, expandedRoomId]);
 
   useEffect(() => {
-    console.log("[TG_CALCULATOR_BUILD] tg-cleanup-v2");
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
     void (async () => {
@@ -2185,18 +2181,6 @@ export default function TgCalculatorPage() {
             </div>
           </div>
         ) : null}
-        <p
-          style={{
-            fontSize: 10,
-            color: "#94a3b8",
-            textAlign: "center",
-            margin: "8px 8px max(32px, env(safe-area-inset-bottom))",
-            fontFamily: "ui-monospace, monospace",
-            letterSpacing: "0.02em",
-          }}
-        >
-          UI_BUILD_MARKER: tg-cleanup-v2
-        </p>
         {ready && inTelegram === true && authUi === "profile" ? (
           <TgMiniAppLegalFooter />
         ) : null}
