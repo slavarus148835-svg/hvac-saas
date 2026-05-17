@@ -11,6 +11,7 @@ import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/tele
 import { fetchMiniAppMeAccount, type MiniAppMeAccount } from "@/lib/telegramMiniAppCalculatorApi";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -282,7 +283,7 @@ export default function TgCabinetPage() {
                 />
                 <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
                   Нет аккаунта?{" "}
-                  <Link href="/register" style={{ color: "#0f172a", fontWeight: 600 }}>
+                  <Link href="/tg/register" style={{ color: "#0f172a", fontWeight: 600 }}>
                     Регистрация на сайте
                   </Link>
                 </p>
@@ -320,7 +321,7 @@ export default function TgCabinetPage() {
             <Link href="/login" style={btn}>
               Войти
             </Link>
-            <Link href="/register" style={btnSecondary}>
+            <Link href="/tg/register" style={btnSecondary}>
               Зарегистрироваться
             </Link>
           </>
@@ -330,7 +331,7 @@ export default function TgCabinetPage() {
             <Link href="/login" style={btn}>
               Войти
             </Link>
-            <Link href="/register" style={btnSecondary}>
+            <Link href="/tg/register" style={btnSecondary}>
               Зарегистрироваться
             </Link>
           </>
@@ -355,6 +356,7 @@ export default function TgCabinetPage() {
         >
           Полный кабинет и оплата — на сайте (/dashboard)
         </p>
+        <TgMiniAppLegalFooter />
       </div>
     </>
   );

@@ -67,25 +67,16 @@ import { ensureTelegramMiniAppProfile, getMiniAppSessionToken } from "@/lib/tele
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
+import { TgMiniAppOnboarding } from "@/components/tg/TgMiniAppOnboarding";
 import type { MiniAppCalculatorTextSettings } from "@/lib/telegramMiniAppCalculatorApi";
+import {
+  completeMiniAppStoreOnboarding,
+  isMiniAppOnboardingCompletedLocally,
+  shouldShowMiniAppStoreOnboarding,
+} from "@/lib/miniAppOnboarding";
 
-const ONBOARDING_STORAGE_KEY = "hvac_tg_onboarding_seen";
 const CALC_HELP_DISMISSED_KEY = "hvac_tg_calc_help_dismissed";
-
-const ONBOARDING_STEPS = [
-  {
-    title: "Сначала проверьте личный прайс",
-    body: "Цены монтажа, трассы и допработ можно изменить под себя.",
-  },
-  {
-    title: "Добавьте модели кондиционеров",
-    body: "Модели из вашего прайса будут доступны прямо в расчёте.",
-  },
-  {
-    title: "Считайте и отправляйте смету клиенту",
-    body: "Сохраните расчёт и отправьте текст клиенту в Telegram или WhatsApp.",
-  },
-] as const;
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
@@ -260,8 +251,9 @@ export default function TgCalculatorPage() {
   const [modelAddBusy, setModelAddBusy] = useState(false);
   const [clientQuoteUserEdited, setClientQuoteUserEdited] = useState(false);
   const [clientQuoteDraft, setClientQuoteDraft] = useState("");
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [storeOnboarding, setStoreOnboarding] = useState<boolean | null>(() =>
+    typeof window !== "undefined" && isMiniAppOnboardingCompletedLocally() ? false : null
+  );
   const [calcHelpVisible, setCalcHelpVisible] = useState(false);
   const [textSettings, setTextSettings] = useState<MiniAppCalculatorTextSettings>({
     quoteFooterTemplate: "",
@@ -415,18 +407,19 @@ export default function TgCalculatorPage() {
   }, [authUi, profile?.uid]);
 
   useEffect(() => {
-    if (inTelegram !== true || !ready) return;
-    try {
-      if (typeof localStorage === "undefined") return;
-      if (localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1") return;
-      queueMicrotask(() => {
-        setOnboardingStep(0);
-        setOnboardingOpen(true);
-      });
-    } catch {
-      /* */
+    if (inTelegram !== true || !ready || authUi !== "profile") return;
+    if (isMiniAppOnboardingCompletedLocally()) {
+      queueMicrotask(() => setStoreOnboarding(false));
+      return;
     }
-  }, [inTelegram, ready]);
+    let cancelled = false;
+    void shouldShowMiniAppStoreOnboarding().then((show) => {
+      if (!cancelled) setStoreOnboarding(show);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inTelegram, ready, authUi]);
 
   useEffect(() => {
     if (inTelegram !== true || !ready) return;
@@ -644,10 +637,18 @@ export default function TgCalculatorPage() {
     [effectiveClientQuoteText]
   );
 
+  const storeOnboardingGatePending =
+    inTelegram === true &&
+    storeOnboarding === null &&
+    authUi === "profile" &&
+    ready;
+
   const showCalculatorForm =
     authUi === "profile" &&
     calcPhase === "ready" &&
     Boolean(profile) &&
+    storeOnboarding !== true &&
+    !storeOnboardingGatePending &&
     ((inTelegram === true && ready) ||
       (inTelegram === false && ready));
 
@@ -1149,14 +1150,25 @@ export default function TgCalculatorPage() {
     });
   }
 
-  function finishOnboarding() {
-    tgHapticButtonTap();
-    try {
-      localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
-    } catch {
-      /* */
-    }
-    setOnboardingOpen(false);
+  if (storeOnboarding === true) {
+    return (
+      <>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onLoad={() => {
+            prepareTelegramMiniAppShell(window.Telegram?.WebApp ?? null);
+          }}
+        />
+        <TgMiniAppOnboarding
+          onComplete={() => {
+            void completeMiniAppStoreOnboarding().then(() => {
+              setStoreOnboarding(false);
+            });
+          }}
+        />
+      </>
+    );
   }
 
   return (
@@ -1171,6 +1183,12 @@ export default function TgCalculatorPage() {
       <div style={page}>
         <h1 style={{ ...title, margin: "0 0 10px" }}>Калькулятор монтажника</h1>
         {ready && authUi === "profile" && calcPhase === "ready" ? <TgMiniAppNav /> : null}
+
+        {storeOnboardingGatePending ? (
+          <p style={{ margin: "24px 0", color: "#64748b", fontSize: 15, textAlign: "center" }}>
+            Загрузка…
+          </p>
+        ) : null}
 
         {ready && inTelegram === true && showCalculatorForm ? (
           <>
@@ -2179,71 +2197,10 @@ export default function TgCalculatorPage() {
         >
           UI_BUILD_MARKER: tg-cleanup-v2
         </p>
+        {ready && inTelegram === true && authUi === "profile" ? (
+          <TgMiniAppLegalFooter />
+        ) : null}
       </div>
-
-      {onboardingOpen ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 120,
-            background: "rgba(15,23,42,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding:
-              "max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom))",
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 360,
-              background: "#fff",
-              borderRadius: 20,
-              padding: "28px 22px 22px",
-              boxShadow: "0 20px 60px rgba(15,23,42,0.25)",
-              textAlign: "center",
-              boxSizing: "border-box",
-            }}
-          >
-            <p
-              style={{
-                margin: "0 0 8px",
-                fontSize: 22,
-                fontWeight: 800,
-                lineHeight: 1.25,
-                color: "#0f172a",
-              }}
-            >
-              {ONBOARDING_STEPS[onboardingStep].title}
-            </p>
-            <p style={{ margin: "0 0 16px", fontSize: 15, color: "#475569", lineHeight: 1.5 }}>
-              {ONBOARDING_STEPS[onboardingStep].body}
-            </p>
-            <p style={{ margin: "0 0 22px", fontSize: 13, color: "#94a3b8" }}>
-              {onboardingStep + 1} / {ONBOARDING_STEPS.length}
-            </p>
-            {onboardingStep < ONBOARDING_STEPS.length - 1 ? (
-              <button
-                type="button"
-                style={btn}
-                onClick={() => {
-                  tgHapticButtonTap();
-                  setOnboardingStep((s) => s + 1);
-                }}
-              >
-                Далее
-              </button>
-            ) : (
-              <button type="button" style={btn} onClick={finishOnboarding}>
-                Начать работу
-              </button>
-            )}
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }

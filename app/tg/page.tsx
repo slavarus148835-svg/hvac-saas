@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { useEffect, useState, type CSSProperties } from "react";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgMiniAppOnboarding } from "@/components/tg/TgMiniAppOnboarding";
 import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import { prepareTelegramMiniAppShell, waitForTelegramWebApp } from "@/lib/telegramMiniApp";
+import {
+  completeMiniAppStoreOnboarding,
+  shouldShowMiniAppStoreOnboarding,
+} from "@/lib/miniAppOnboarding";
 
 const page: CSSProperties = {
   minHeight: "100dvh",
@@ -76,6 +81,7 @@ export default function TgMiniAppHomePage() {
     | "idle"
     | "loading"
     | "profile"
+    | "onboarding"
     | "need_registration"
     | "need_email_linking"
     | "error"
@@ -100,6 +106,12 @@ export default function TgMiniAppHomePage() {
         const resolved = await ensureTelegramMiniAppProfile(initData || null);
         if (cancelled) return;
         if (resolved.status === "profile") {
+          const showOnboarding = await shouldShowMiniAppStoreOnboarding();
+          if (cancelled) return;
+          if (showOnboarding) {
+            setTgAuth("onboarding");
+            return;
+          }
           setTgAuth("profile");
           router.replace("/tg/calculator");
           return;
@@ -169,7 +181,14 @@ export default function TgMiniAppHomePage() {
                 <TgMiniAppEmailLink
                   initData={emailLinkInitData}
                   onLinked={(_profile) => {
-                    router.replace("/tg/calculator");
+                    void (async () => {
+                      const showOnboarding = await shouldShowMiniAppStoreOnboarding();
+                      if (showOnboarding) {
+                        setTgAuth("onboarding");
+                        return;
+                      }
+                      router.replace("/tg/calculator");
+                    })();
                   }}
                 />
                 <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>
@@ -204,6 +223,15 @@ export default function TgMiniAppHomePage() {
             ) : null}
           </div>
         </div>
+      ) : null}
+      {phase === "telegram" && tgAuth === "onboarding" ? (
+        <TgMiniAppOnboarding
+          onComplete={() => {
+            void completeMiniAppStoreOnboarding().then(() => {
+              router.replace("/tg/calculator");
+            });
+          }}
+        />
       ) : null}
       {phase === "browser" ? (
         <div style={page}>
