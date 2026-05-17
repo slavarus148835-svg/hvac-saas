@@ -1,9 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { useState } from "react";
-import { createTelegramWebLinkToken } from "@/lib/telegramWebLink";
-import { openTelegramExternalLink } from "@/lib/openTelegramExternalLink";
+import type { CSSProperties, MouseEvent } from "react";
 import { getTelegramMiniAppUrl } from "@/lib/telegramMiniAppLinks";
 
 type Props = {
@@ -17,32 +14,53 @@ const cardStyle: CSSProperties = {
   borderRadius: 14,
   border: "1px solid #e2e8f0",
   background: "#f8fafc",
+  position: "relative",
+  zIndex: 2,
 };
 
-export function TelegramMiniAppLinkBlock({ telegramUserId, telegramUsername }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+const linkButtonStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "none",
+  background: "#0f172a",
+  color: "#fff",
+  fontWeight: 700,
+  fontSize: 14,
+  textAlign: "center",
+  textDecoration: "none",
+  cursor: "pointer",
+  pointerEvents: "auto",
+  position: "relative",
+  zIndex: 2,
+};
 
+const MINI_APP_HINT =
+  "Откроется Telegram и запустится мини-приложение HVAC Калькулятор.";
+
+function openMiniAppFallback(url: string) {
+  if (typeof window === "undefined") return;
+  window.location.href = url;
+}
+
+export function TelegramMiniAppLinkBlock({ telegramUserId, telegramUsername }: Props) {
+  const miniAppUrl = getTelegramMiniAppUrl();
   const linked = Boolean(String(telegramUserId ?? "").replace(/\D/g, ""));
 
-  const handleOpen = async () => {
-    setMessage(null);
-    if (linked) {
-      openTelegramExternalLink(getTelegramMiniAppUrl());
-      return;
-    }
+  const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-    setLoading(true);
-    try {
-      const result = await createTelegramWebLinkToken();
-      if (!result.ok) {
-        setMessage(result.message);
-        return;
-      }
-      openTelegramExternalLink(result.linkUrl);
-      setMessage("Откройте Telegram и запустите мини-приложение из бота.");
-    } finally {
-      setLoading(false);
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const touchOrMobile =
+      /iPhone|iPad|iPod|Android/i.test(ua) ||
+      (typeof window !== "undefined" && "ontouchstart" in window);
+
+    if (touchOrMobile) {
+      e.preventDefault();
+      openMiniAppFallback(miniAppUrl);
     }
   };
 
@@ -59,32 +77,18 @@ export function TelegramMiniAppLinkBlock({ telegramUserId, telegramUsername }: P
           Привяжите Telegram, чтобы быстро открывать калькулятор прямо из бота.
         </p>
       )}
-      <button
-        type="button"
-        onClick={() => void handleOpen()}
-        disabled={loading}
-        style={{
-          width: "100%",
-          padding: "12px 14px",
-          borderRadius: 12,
-          border: "none",
-          background: "#0f172a",
-          color: "#fff",
-          fontWeight: 700,
-          fontSize: 14,
-          cursor: loading ? "not-allowed" : "pointer",
-          opacity: loading ? 0.7 : 1,
-        }}
+      <a
+        href={miniAppUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleClick}
+        style={linkButtonStyle}
       >
-        {loading
-          ? "Подготовка ссылки…"
-          : linked
-            ? "Открыть мини-приложение Telegram"
-            : "Перейти в мини-приложение Telegram"}
-      </button>
-      {message ? (
-        <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b" }}>{message}</p>
-      ) : null}
+        {linked ? "Открыть мини-приложение Telegram" : "Перейти в мини-приложение Telegram"}
+      </a>
+      <p style={{ margin: "10px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.45 }}>
+        {MINI_APP_HINT}
+      </p>
     </div>
   );
 }
