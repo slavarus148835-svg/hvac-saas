@@ -69,6 +69,8 @@ import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
 import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
+import { TgChannelPromoCard } from "@/components/tg/TgChannelPromoCard";
+import { isTgChannelPromoDismissed } from "@/lib/tgChannelPromo";
 import type { MiniAppCalculatorTextSettings } from "@/lib/telegramMiniAppCalculatorApi";
 const CALC_HELP_DISMISSED_KEY = "hvac_tg_calc_help_dismissed";
 
@@ -224,6 +226,7 @@ export default function TgCalculatorPage() {
   const [clientContact, setClientContact] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [showChannelPromoAfterSave, setShowChannelPromoAfterSave] = useState(false);
   const [quickCalculationExtras, setQuickCalculationExtras] = useState<
     QuickCalculationExtra[]
   >([]);
@@ -1069,6 +1072,9 @@ export default function TgCalculatorPage() {
     if (r.ok) {
       tgHapticNotification("success");
       setSaveToast(`Сохранено. Итого ${formatRubles(r.total)}`);
+      if (!isTgChannelPromoDismissed()) {
+        setShowChannelPromoAfterSave(true);
+      }
     } else {
       tgHapticNotification("error");
       setSaveToast(r.error);
@@ -2036,6 +2042,13 @@ export default function TgCalculatorPage() {
                   </div>
                   </div>
                 </div>
+
+                {showChannelPromoAfterSave && !isTgChannelPromoDismissed() ? (
+                  <TgChannelPromoCard
+                    style={{ marginTop: 16, marginBottom: 0 }}
+                    onDismiss={() => setShowChannelPromoAfterSave(false)}
+                  />
+                ) : null}
 
                 {saveToast ? (
                   <p style={{ ...text, textAlign: "center", marginTop: 8 }}>{saveToast}</p>

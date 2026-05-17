@@ -16,6 +16,8 @@ import { ensureTelegramMiniAppProfile } from "@/lib/telegramMiniAppSession";
 import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
+import { TgChannelPromoCard } from "@/components/tg/TgChannelPromoCard";
+import { isTgChannelPromoDismissed } from "@/lib/tgChannelPromo";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -239,6 +241,10 @@ export default function TgHistoryPage() {
             {listError ? (
               <p style={{ color: "#b91c1c" }}>{listError}</p>
             ) : items.length === 0 ? (
+              <>
+                {!isTgChannelPromoDismissed() ? (
+                  <TgChannelPromoCard style={{ marginTop: 0 }} />
+                ) : null}
               <div
                 style={{
                   background: "#fff",
@@ -258,6 +264,7 @@ export default function TgHistoryPage() {
                   Сделать первый расчёт
                 </Link>
               </div>
+              </>
             ) : (
               items.map((row) => (
                 <div

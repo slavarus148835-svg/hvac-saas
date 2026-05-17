@@ -13,6 +13,7 @@ import TgMiniAppNav from "@/app/tg/components/TgMiniAppNav";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
 import { TgMiniAppLegalFooter } from "@/components/tg/TgMiniAppLegalFooter";
 import { TgProtectedMiniApp } from "@/components/tg/TgProtectedMiniApp";
+import { TgChannelPromoCard } from "@/components/tg/TgChannelPromoCard";
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
@@ -386,9 +387,12 @@ export default function TgCabinetPage() {
         ) : null}
 
         {authUi === "profile" ? (
-          <Link href="/dashboard" style={btn}>
-            Открыть веб-кабинет
-          </Link>
+          <>
+            <TgChannelPromoCard alwaysVisible />
+            <Link href="/dashboard" style={btn}>
+              Открыть веб-кабинет
+            </Link>
+          </>
         ) : null}
 
         {authUi === "need_registration" ? (
