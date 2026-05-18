@@ -12,6 +12,13 @@ export async function GET() {
     branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
     env: process.env.VERCEL_ENV ?? null,
     time: new Date().toISOString(),
+    buildMarkers: {
+      TELEGRAM_WEBHOOK_HIT: true,
+      statFastPathBeforeFirestoreSync: true,
+      miniAppBootstrapV2: true,
+      retryPolicy88ce754: true,
+      statFailSafeCd87b5e: true,
+    },
   };
   return NextResponse.json(body, {
     headers: {

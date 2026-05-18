@@ -74,7 +74,7 @@ export function verifyTelegramInitData(initData: string): VerifyTelegramInitData
     return { ok: false, error: "missing_auth_date" };
   }
   const authAgeSec = Math.floor(Date.now() / 1000) - Math.trunc(authDate);
-  const maxAuthAgeSec = Number(process.env.TELEGRAM_INITDATA_MAX_AGE_SEC || 86400);
+  const maxAuthAgeSec = Number(process.env.TELEGRAM_INITDATA_MAX_AGE_SEC || 604800);
   if (authAgeSec > maxAuthAgeSec) {
     return { ok: false, error: "auth_date_expired" };
   }
