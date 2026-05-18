@@ -1,4 +1,18 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { MiniAppLaunchDeliveryQueueCache } from "@/lib/server/miniAppLaunchDeliveryQueue";
+import {
+  classifyDeliveryError,
+  isPermanentErrorCode,
+  isRetryableErrorCode,
+  MAX_MINIAPP_LAUNCH_RETRY_COUNT,
+  normalizeRetryCount,
+  type MiniAppLaunchDeliveryChannel,
+  type MiniAppLaunchErrorCode,
+} from "@/lib/server/miniAppLaunchNotifyRetry";
+import {
+  MINIAPP_LAUNCH_CAMPAIGN_ID,
+  NOTIFICATION_CAMPAIGNS_COLLECTION,
+} from "@/lib/server/miniAppLaunchNotifyConstants";
 import { normalizeEmailForAuth } from "@/lib/server/authDuplicateGuards";
 import {
   isGmailVerificationSmtpConfigured,
@@ -8,15 +22,13 @@ import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { sendTelegramTextToUser } from "@/lib/server/sendTelegramNotification";
 import { TELEGRAM_MINI_APP_PUBLIC_URL } from "@/lib/telegramMiniAppLinks";
 
-export const MINIAPP_LAUNCH_CAMPAIGN_ID = "telegram_mini_app_launch_2026_05";
-
-const NOTIFICATION_CAMPAIGNS_COLLECTION = "notificationCampaigns";
+export { MINIAPP_LAUNCH_CAMPAIGN_ID } from "@/lib/server/miniAppLaunchNotifyConstants";
 
 export type MiniAppLaunchNotifyChannel = "auto" | "telegram" | "email";
 
 export type MiniAppLaunchDeliveryStatus = "pending" | "sent" | "failed" | "skipped";
 
-export type MiniAppLaunchDeliveryChannel = "telegram" | "email";
+export type { MiniAppLaunchDeliveryChannel };
 
 export type MiniAppLaunchNotifyBody = {
   dryRun?: boolean;
@@ -144,26 +156,14 @@ function pickChannel(
   return null;
 }
 
-async function loadFinishedDeliveryUids(db: Firestore): Promise<Set<string>> {
-  const snap = await db
-    .collection(NOTIFICATION_CAMPAIGNS_COLLECTION)
-    .doc(MINIAPP_LAUNCH_CAMPAIGN_ID)
-    .collection("deliveries")
-    .get();
-  const done = new Set<string>();
-  for (const doc of snap.docs) {
-    const st = String((doc.data() as { status?: string }).status ?? "");
-    if (st === "sent" || st === "skipped") done.add(doc.id);
-  }
-  return done;
-}
-
 export async function buildMiniAppLaunchCandidates(
   db: Firestore,
-  channelMode: MiniAppLaunchNotifyChannel
+  channelMode: MiniAppLaunchNotifyChannel,
+  queueCache: MiniAppLaunchDeliveryQueueCache
 ): Promise<{ candidates: MiniAppLaunchCandidate[]; skipped: number }> {
+  await queueCache.load(db);
+
   const usersSnap = await db.collection(PRICING_FS.users).get();
-  const finished = await loadFinishedDeliveryUids(db);
   const candidates: MiniAppLaunchCandidate[] = [];
   let skipped = 0;
 
@@ -174,7 +174,7 @@ export async function buildMiniAppLaunchCandidates(
       skipped++;
       continue;
     }
-    if (finished.has(uid)) {
+    if (queueCache.isExcluded(uid)) {
       skipped++;
       continue;
     }
@@ -193,53 +193,147 @@ export async function buildMiniAppLaunchCandidates(
   return { candidates, skipped };
 }
 
+type WriteDeliveryParams = {
+  uid: string;
+  email: string | null;
+  telegramChatId: string | null;
+  channel: MiniAppLaunchDeliveryChannel;
+  status: MiniAppLaunchDeliveryStatus;
+  error?: string | null;
+  lastErrorCode?: MiniAppLaunchErrorCode | null;
+  retryCount?: number;
+  sentAt?: string | null;
+};
+
 async function writeDelivery(
   db: Firestore,
-  params: {
-    uid: string;
-    email: string | null;
-    telegramChatId: string | null;
-    channel: MiniAppLaunchDeliveryChannel;
-    status: MiniAppLaunchDeliveryStatus;
-    error?: string | null;
-    sentAt?: string | null;
-  }
+  params: WriteDeliveryParams,
+  queueCache: MiniAppLaunchDeliveryQueueCache
 ): Promise<void> {
   const t = nowIso();
   const ref = deliveryRef(db, params.uid);
-  const existing = await ref.get();
-  const createdAt =
-    existing.exists && typeof existing.data()?.createdAt === "string"
-      ? String(existing.data()?.createdAt)
-      : t;
-  await ref.set(
+  const isNew = !queueCache.hasDeliveryDoc(params.uid);
+  const payload: Record<string, unknown> = {
+    uid: params.uid,
+    email: params.email,
+    telegramChatId: params.telegramChatId,
+    channel: params.channel,
+    status: params.status,
+    error: params.error ?? null,
+    lastErrorCode: params.lastErrorCode ?? null,
+    retryCount: normalizeRetryCount(params.retryCount),
+    sentAt: params.sentAt ?? null,
+    updatedAt: t,
+  };
+  if (isNew) payload.createdAt = t;
+
+  await ref.set(payload, { merge: true });
+  queueCache.noteDeliveryDoc(params.uid);
+
+  if (params.status === "sent" || params.status === "skipped") {
+    queueCache.markExcluded(params.uid);
+  } else if (params.status === "failed") {
+    const code = params.lastErrorCode ?? "unknown";
+    const permanent =
+      isPermanentErrorCode(code, params.channel) ||
+      normalizeRetryCount(params.retryCount) > MAX_MINIAPP_LAUNCH_RETRY_COUNT;
+    if (permanent) {
+      queueCache.markExcluded(params.uid);
+    } else if (isRetryableErrorCode(code)) {
+      queueCache.markRetryable(params.uid, {
+        retryCount: normalizeRetryCount(params.retryCount),
+        lastErrorCode: params.lastErrorCode ?? null,
+        channel: params.channel,
+      });
+    } else {
+      queueCache.markExcluded(params.uid);
+    }
+  }
+}
+
+async function recordFailure(
+  db: Firestore,
+  candidate: MiniAppLaunchCandidate,
+  rawError: string,
+  queueCache: MiniAppLaunchDeliveryQueueCache,
+  existingRetryCount: number
+): Promise<"failed"> {
+  const lastErrorCode = classifyDeliveryError(rawError, candidate.channel);
+  const retryCount = existingRetryCount + 1;
+  const permanent =
+    isPermanentErrorCode(lastErrorCode, candidate.channel) ||
+    retryCount > MAX_MINIAPP_LAUNCH_RETRY_COUNT;
+  const retryable = isRetryableErrorCode(lastErrorCode) && !permanent;
+
+  if (permanent) {
+    console.log("MINIAPP_NOTIFY_PERMANENT_FAILURE", {
+      uid: candidate.uid,
+      channel: candidate.channel,
+      lastErrorCode,
+      retryCount,
+    });
+  } else if (retryable) {
+    console.log("MINIAPP_NOTIFY_RETRY_ALLOWED", {
+      uid: candidate.uid,
+      channel: candidate.channel,
+      lastErrorCode,
+      retryCount,
+    });
+  } else {
+    console.log("MINIAPP_NOTIFY_RETRY_BLOCKED", {
+      uid: candidate.uid,
+      channel: candidate.channel,
+      lastErrorCode,
+      retryCount,
+      reason: "not_retryable",
+    });
+  }
+
+  await writeDelivery(
+    db,
     {
-      uid: params.uid,
-      email: params.email,
-      telegramChatId: params.telegramChatId,
-      channel: params.channel,
-      status: params.status,
-      error: params.error ?? null,
-      sentAt: params.sentAt ?? null,
-      createdAt,
-      updatedAt: t,
+      ...candidate,
+      status: "failed",
+      error: rawError,
+      lastErrorCode,
+      retryCount,
+      sentAt: null,
     },
-    { merge: true }
+    queueCache
   );
+
+  console.log("MINIAPP_LAUNCH_NOTIFY_FAILED", {
+    uid: candidate.uid,
+    channel: candidate.channel,
+    error: rawError,
+    lastErrorCode,
+    retryCount,
+  });
+  return "failed";
 }
 
 async function sendToCandidate(
   db: Firestore,
   candidate: MiniAppLaunchCandidate,
-  emailConfigured: boolean
+  emailConfigured: boolean,
+  queueCache: MiniAppLaunchDeliveryQueueCache
 ): Promise<"sent" | "failed" | "skipped"> {
+  const prior = queueCache.getRetryMeta(candidate.uid);
+  const existingRetryCount = prior?.retryCount ?? 0;
+
   if (candidate.channel === "email" && !emailConfigured) {
-    await writeDelivery(db, {
-      ...candidate,
-      status: "skipped",
-      error: "email_sender_not_configured",
-      sentAt: null,
-    });
+    await writeDelivery(
+      db,
+      {
+        ...candidate,
+        status: "skipped",
+        error: "email_sender_not_configured",
+        lastErrorCode: "email_sender_not_configured",
+        retryCount: existingRetryCount,
+        sentAt: null,
+      },
+      queueCache
+    );
     console.log("MINIAPP_LAUNCH_NOTIFY_FAILED", {
       uid: candidate.uid,
       channel: candidate.channel,
@@ -248,44 +342,49 @@ async function sendToCandidate(
     return "skipped";
   }
 
-  await writeDelivery(db, { ...candidate, status: "pending", error: null, sentAt: null });
-
   try {
     if (candidate.channel === "telegram") {
       const chatId = candidate.telegramChatId;
       if (!chatId) {
-        await writeDelivery(db, {
-          ...candidate,
-          status: "skipped",
-          error: "missing_telegram_chat_id",
-          sentAt: null,
-        });
+        await writeDelivery(
+          db,
+          {
+            ...candidate,
+            status: "skipped",
+            error: "missing_telegram_chat_id",
+            lastErrorCode: "missing_telegram_chat_id",
+            retryCount: existingRetryCount,
+            sentAt: null,
+          },
+          queueCache
+        );
         return "skipped";
       }
       const r = await sendTelegramTextToUser(chatId, TELEGRAM_MESSAGE);
       if (!r.ok) {
-        await writeDelivery(db, {
-          ...candidate,
-          status: "failed",
-          error: r.error || "telegram_send_failed",
-          sentAt: null,
-        });
-        console.log("MINIAPP_LAUNCH_NOTIFY_FAILED", {
-          uid: candidate.uid,
-          channel: "telegram",
-          error: r.error,
-        });
-        return "failed";
+        return recordFailure(
+          db,
+          candidate,
+          r.error || "telegram_send_failed",
+          queueCache,
+          existingRetryCount
+        );
       }
     } else {
       const email = candidate.email;
       if (!email) {
-        await writeDelivery(db, {
-          ...candidate,
-          status: "skipped",
-          error: "missing_email",
-          sentAt: null,
-        });
+        await writeDelivery(
+          db,
+          {
+            ...candidate,
+            status: "skipped",
+            error: "missing_email",
+            lastErrorCode: "missing_email",
+            retryCount: existingRetryCount,
+            sentAt: null,
+          },
+          queueCache
+        );
         return "skipped";
       }
       const r = await sendPlainGmailEmail({
@@ -294,28 +393,29 @@ async function sendToCandidate(
         text: EMAIL_BODY,
       });
       if (!r.ok) {
-        await writeDelivery(db, {
-          ...candidate,
-          status: "failed",
-          error: r.reason || "email_send_failed",
-          sentAt: null,
-        });
-        console.log("MINIAPP_LAUNCH_NOTIFY_FAILED", {
-          uid: candidate.uid,
-          channel: "email",
-          error: r.reason,
-        });
-        return "failed";
+        return recordFailure(
+          db,
+          candidate,
+          r.reason || "email_send_failed",
+          queueCache,
+          existingRetryCount
+        );
       }
     }
 
     const sentAt = nowIso();
-    await writeDelivery(db, {
-      ...candidate,
-      status: "sent",
-      error: null,
-      sentAt,
-    });
+    await writeDelivery(
+      db,
+      {
+        ...candidate,
+        status: "sent",
+        error: null,
+        lastErrorCode: null,
+        retryCount: existingRetryCount,
+        sentAt,
+      },
+      queueCache
+    );
     console.log("MINIAPP_LAUNCH_NOTIFY_SENT", {
       uid: candidate.uid,
       channel: candidate.channel,
@@ -323,18 +423,7 @@ async function sendToCandidate(
     return "sent";
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await writeDelivery(db, {
-      ...candidate,
-      status: "failed",
-      error: msg,
-      sentAt: null,
-    });
-    console.log("MINIAPP_LAUNCH_NOTIFY_FAILED", {
-      uid: candidate.uid,
-      channel: candidate.channel,
-      error: msg,
-    });
-    return "failed";
+    return recordFailure(db, candidate, msg, queueCache, existingRetryCount);
   }
 }
 
@@ -345,6 +434,7 @@ export async function runMiniAppLaunchNotify(
   const dryRun = body.dryRun !== false;
   const limit = Math.min(500, Math.max(1, Math.trunc(Number(body.limit) || 50)));
   const channelMode: MiniAppLaunchNotifyChannel = body.channel ?? "auto";
+  const queueCache = new MiniAppLaunchDeliveryQueueCache();
 
   console.log("MINIAPP_LAUNCH_NOTIFY_START", {
     campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,
@@ -353,10 +443,18 @@ export async function runMiniAppLaunchNotify(
     channel: channelMode,
   });
 
-  const { candidates, skipped } = await buildMiniAppLaunchCandidates(db, channelMode);
+  const { candidates, skipped } = await buildMiniAppLaunchCandidates(db, channelMode, queueCache);
   const telegramCandidates = candidates.filter((c) => c.channel === "telegram").length;
   const emailCandidates = candidates.filter((c) => c.channel === "email").length;
   const sampleUsers = candidates.slice(0, 10).map((c) => ({ ...c }));
+
+  if (candidates.length === 0) {
+    console.log("MINIAPP_NOTIFY_QUEUE_EXHAUSTED", {
+      campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,
+      channel: channelMode,
+      deliveryCacheSize: queueCache.size,
+    });
+  }
 
   if (dryRun) {
     console.log("MINIAPP_LAUNCH_NOTIFY_DRY_RUN", {
@@ -387,19 +485,29 @@ export async function runMiniAppLaunchNotify(
   let skippedThisRun = 0;
 
   for (const candidate of batch) {
-    const outcome = await sendToCandidate(db, candidate, emailConfigured);
+    const outcome = await sendToCandidate(db, candidate, emailConfigured, queueCache);
     if (outcome === "sent") sent++;
     else if (outcome === "failed") failed++;
     else skippedThisRun++;
   }
+
+  const remaining = Math.max(0, candidates.length - batch.length);
 
   console.log("MINIAPP_LAUNCH_NOTIFY_DONE", {
     processed: batch.length,
     sent,
     failed,
     skippedThisRun,
-    remaining: Math.max(0, candidates.length - batch.length),
+    remaining,
   });
+
+  if (remaining === 0 && candidates.length > 0) {
+    console.log("MINIAPP_NOTIFY_QUEUE_EXHAUSTED", {
+      campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,
+      channel: channelMode,
+      processedThisRun: batch.length,
+    });
+  }
 
   return {
     campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,
