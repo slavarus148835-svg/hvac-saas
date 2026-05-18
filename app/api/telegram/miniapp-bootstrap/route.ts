@@ -1,9 +1,7 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
-import {
-  findUserByTelegramKeys,
-} from "@/lib/server/authDuplicateGuards";
+import { findUserByTelegramKeys } from "@/lib/server/authDuplicateGuards";
 import {
   linkBlockedMessage,
   linkTelegramToEmailUid,
@@ -19,9 +17,11 @@ import {
   telegramMiniAppPublicProfileFromUserDoc,
 } from "@/lib/server/telegram/telegramMiniAppSession";
 import { verifyTelegramInitData } from "@/lib/server/telegram/verifyTelegramInitData";
+import { isFirestoreCapacityError } from "@/lib/server/statsUsersSnapshot";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function hashClientIp(req: Request): string | undefined {
   const fwd = req.headers.get("x-forwarded-for");
@@ -39,10 +39,18 @@ function readStartParam(initData: string): string {
   }
 }
 
-function publicProfilePayload(
-  uid: string,
-  data: Record<string, unknown>
-) {
+function readAuthDateAgeSec(initData: string): number | null {
+  try {
+    const raw = new URLSearchParams(initData).get("auth_date");
+    const authDate = Number(raw);
+    if (!Number.isFinite(authDate)) return null;
+    return Math.floor(Date.now() / 1000) - Math.trunc(authDate);
+  } catch {
+    return null;
+  }
+}
+
+function publicProfilePayload(uid: string, data: Record<string, unknown>) {
   const profile = telegramMiniAppPublicProfileFromUserDoc(uid, data);
   return {
     uid: profile.uid,
@@ -56,29 +64,72 @@ function publicProfilePayload(
   };
 }
 
+function bootstrapErrorResponse(
+  status: number,
+  error: string,
+  message: string
+): NextResponse {
+  return NextResponse.json({ ok: false, error, message }, { status });
+}
+
 export async function POST(req: Request) {
-  console.log("MINIAPP_AUTH_START");
+  const startedAt = Date.now();
+  console.log("TG_MINIAPP_BOOTSTRAP_START");
+
   try {
     const app = getAdminApp();
     const db = getAdminDb();
     if (!app || !db) {
-      return NextResponse.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
+      console.log("TG_MINIAPP_BOOTSTRAP_ERROR", { error: "server_misconfigured" });
+      return bootstrapErrorResponse(
+        503,
+        "server_misconfigured",
+        "Сервис временно недоступен. Попробуйте позже."
+      );
     }
 
     let body: { initData?: string; linkToken?: string };
     try {
       body = (await req.json()) as { initData?: string; linkToken?: string };
     } catch {
-      return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+      console.log("TG_MINIAPP_BOOTSTRAP_ERROR", { error: "invalid_json" });
+      return bootstrapErrorResponse(400, "invalid_json", "Некорректный запрос.");
     }
 
     const initData = typeof body.initData === "string" ? body.initData.trim() : "";
+    console.log("TG_MINIAPP_INITDATA_RECEIVED", {
+      hasInitData: initData.length > 0,
+      initDataLength: initData.length,
+      authDateAgeSec: initData ? readAuthDateAgeSec(initData) : null,
+    });
+
+    if (!initData) {
+      return bootstrapErrorResponse(
+        400,
+        "missing_init_data",
+        "Нет данных Telegram. Откройте Mini App из бота."
+      );
+    }
+
     const verified = verifyTelegramInitData(initData);
     if (!verified.ok) {
-      console.log("MINIAPP_AUTH_VERIFIED", { ok: false, error: verified.error });
-      return NextResponse.json({ ok: false, error: "invalid_init_data" }, { status: 401 });
+      console.log("TG_MINIAPP_BOOTSTRAP_ERROR", {
+        error: verified.error,
+        stage: "initdata_invalid",
+      });
+      return bootstrapErrorResponse(
+        401,
+        verified.error,
+        verified.error === "auth_date_expired"
+          ? "Сессия Telegram устарела. Закройте Mini App и откройте снова из бота."
+          : "Ошибка проверки Telegram-сессии."
+      );
     }
-    console.log("MINIAPP_AUTH_VERIFIED", { ok: true, telegramUserId: verified.telegramUser.id });
+
+    console.log("TG_MINIAPP_INITDATA_VALID", {
+      telegramUserId: verified.telegramUser.id,
+      chatId: verified.chatId,
+    });
 
     const tgId = normalizeTelegramUserIdForMiniApp(verified.telegramUser.id);
     const chatKey =
@@ -87,8 +138,7 @@ export async function POST(req: Request) {
         : null;
 
     const startParam = readStartParam(initData);
-    let linkRaw =
-      typeof body.linkToken === "string" ? body.linkToken.trim() : "";
+    let linkRaw = typeof body.linkToken === "string" ? body.linkToken.trim() : "";
     if (!linkRaw && startParam.toLowerCase().startsWith(TELEGRAM_LINK_TOKEN_PREFIX)) {
       linkRaw = startParam.slice(TELEGRAM_LINK_TOKEN_PREFIX.length);
     }
@@ -106,7 +156,7 @@ export async function POST(req: Request) {
             : consumed.reason === "expired"
               ? "Ссылка для привязки истекла. Создайте новую в личном кабинете."
               : "Ссылка для привязки недействительна.";
-        return NextResponse.json({ ok: false, error: consumed.reason, message: msg }, { status: 410 });
+        return bootstrapErrorResponse(410, consumed.reason, msg);
       }
 
       const linked = await linkTelegramToEmailUid(db, app, {
@@ -119,18 +169,10 @@ export async function POST(req: Request) {
       if (!linked.ok) {
         const blockedReason =
           linked.reason === "telegram_bound_elsewhere" ? "merge_conflict" : linked.reason;
-        if (blockedReason === "merge_conflict") {
-          console.log("TELEGRAM_LINK_CONFLICT", { uid: consumed.uid, reason: linked.reason });
-        } else if (linked.reason === "target_has_other_telegram") {
-          console.log("TELEGRAM_LINK_BLOCKED_UID_HAS_OTHER_TELEGRAM", { uid: consumed.uid });
-        }
-        return NextResponse.json(
-          {
-            ok: false,
-            error: blockedReason,
-            message: linkBlockedMessage(blockedReason),
-          },
-          { status: 409 }
+        return bootstrapErrorResponse(
+          409,
+          blockedReason,
+          linkBlockedMessage(blockedReason)
         );
       }
 
@@ -147,10 +189,11 @@ export async function POST(req: Request) {
         () => null
       );
 
-      console.log("TELEGRAM_LINK_SUCCESS", {
+      console.log("TG_MINIAPP_BOOTSTRAP_SUCCESS", {
         uid: consumed.uid,
         telegramUserId: tgId,
-        mergedFromUid: linked.mergedFromUid ?? null,
+        authStatus: "linked_existing_email",
+        durationMs: Date.now() - startedAt,
       });
 
       return NextResponse.json({
@@ -166,11 +209,23 @@ export async function POST(req: Request) {
       });
     }
 
+    const lookupStarted = Date.now();
     const lookup = await findUserByTelegramKeys(db, tgId, chatKey);
+    console.log("TG_MINIAPP_USER_FOUND", {
+      kind: lookup.kind,
+      lookupMs: Date.now() - lookupStarted,
+      telegramUserId: tgId,
+    });
+
     if (lookup.kind === "ambiguous") {
-      return NextResponse.json(
-        { ok: false, authStatus: "duplicate_blocked", error: "telegram_lookup_ambiguous" },
-        { status: 409 }
+      console.log("TG_MINIAPP_BOOTSTRAP_ERROR", {
+        error: "telegram_lookup_ambiguous",
+        ids: lookup.ids,
+      });
+      return bootstrapErrorResponse(
+        409,
+        "telegram_lookup_ambiguous",
+        "Найдено несколько аккаунтов с этим Telegram. Напишите в поддержку."
       );
     }
 
@@ -184,6 +239,14 @@ export async function POST(req: Request) {
         userAgent: ua,
         ipHash,
       });
+
+      console.log("TG_MINIAPP_SESSION_CREATED", { uid: doc.id, telegramUserId: tgId });
+      console.log("TG_MINIAPP_BOOTSTRAP_SUCCESS", {
+        uid: doc.id,
+        authStatus: "existing_user_by_telegram",
+        durationMs: Date.now() - startedAt,
+      });
+
       return NextResponse.json({
         ok: true,
         authStatus: "existing_user_by_telegram",
@@ -200,6 +263,12 @@ export async function POST(req: Request) {
       chatId: verified.chatId,
     });
 
+    console.log("TG_MINIAPP_BOOTSTRAP_SUCCESS", {
+      authStatus: "pending_email_registration",
+      pendingSessionId: pending.sessionId,
+      durationMs: Date.now() - startedAt,
+    });
+
     return NextResponse.json({
       ok: true,
       authStatus: "pending_email_registration",
@@ -208,7 +277,27 @@ export async function POST(req: Request) {
       telegramUserId: tgId,
     });
   } catch (e) {
-    console.log("TELEGRAM_LINK_ERROR", { message: e instanceof Error ? e.message : String(e) });
-    return NextResponse.json({ ok: false, error: "internal_error" }, { status: 500 });
+    const stack = e instanceof Error ? e.stack : undefined;
+    const firestoreCapacity = isFirestoreCapacityError(e);
+    console.log("TG_MINIAPP_BOOTSTRAP_ERROR", {
+      firestoreCapacity,
+      message: e instanceof Error ? e.message : String(e),
+      stack,
+      durationMs: Date.now() - startedAt,
+    });
+
+    if (firestoreCapacity) {
+      return bootstrapErrorResponse(
+        503,
+        "firestore_quota",
+        "Сервис временно перегружен. Попробуйте позже."
+      );
+    }
+
+    return bootstrapErrorResponse(
+      500,
+      "internal_error",
+      "Не удалось войти через Telegram. Попробуйте снова."
+    );
   }
 }

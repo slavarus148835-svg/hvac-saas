@@ -38,10 +38,11 @@ export async function collectUserDocsByTelegramKeys(
 
   const push = (docs: QueryDocumentSnapshot[]) => {
     for (const d of docs) {
-      if (!seen.has(d.id)) {
-        seen.add(d.id);
-        out.push(d);
-      }
+      if (seen.has(d.id)) continue;
+      const data = d.data() as Record<string, unknown>;
+      if (data.isMergedDuplicate === true) continue;
+      seen.add(d.id);
+      out.push(d);
     }
   };
 

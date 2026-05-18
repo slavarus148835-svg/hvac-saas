@@ -1,5 +1,7 @@
+import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import type { StatsUsersSnapshot } from "@/lib/server/statsUsersSnapshot";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
 import {
   isPaidUserForStatsTotals,
@@ -40,23 +42,22 @@ function roundPercent(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
-  const db = getAdminDb();
-  if (!db) {
-    return {
-      totalUsers: 0,
-      activeTrialUsers: 0,
-      endedTrialUsers: 0,
-      endedWithoutPaymentUsers: 0,
-      paidUsers: 0,
-      accessPaidUsers: 0,
-      endedTrialConfirmedBankPaidUsers: 0,
-      conversionPercent: 0,
-      conversionFormula: "ended_trial_confirmed_bank_paid / ended_trial_users",
-    };
-  }
+const EMPTY_TRIAL: TrialStats = {
+  totalUsers: 0,
+  activeTrialUsers: 0,
+  endedTrialUsers: 0,
+  endedWithoutPaymentUsers: 0,
+  paidUsers: 0,
+  accessPaidUsers: 0,
+  endedTrialConfirmedBankPaidUsers: 0,
+  conversionPercent: 0,
+  conversionFormula: "ended_trial_confirmed_bank_paid / ended_trial_users",
+};
 
-  const snap = await db.collection(PRICING_FS.users).get();
+export function computeTrialStatsFromUserDocs(
+  docs: QueryDocumentSnapshot[],
+  nowMs: number
+): TrialStats {
   let totalUsers = 0;
   let activeTrialUsers = 0;
   let endedTrialUsers = 0;
@@ -65,7 +66,7 @@ export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
   let accessPaidUsers = 0;
   let endedTrialConfirmedBankPaidUsers = 0;
 
-  for (const doc of snap.docs) {
+  for (const doc of docs) {
     if (isStatsExcludedTelegramProvisionUid(doc.id)) continue;
 
     totalUsers++;
@@ -104,6 +105,19 @@ export async function getTrialStats(nowMs = Date.now()): Promise<TrialStats> {
     conversionPercent,
     conversionFormula: "ended_trial_confirmed_bank_paid / ended_trial_users",
   };
+}
+
+export async function getTrialStats(
+  nowMs = Date.now(),
+  usersSnapshot?: StatsUsersSnapshot
+): Promise<TrialStats> {
+  if (usersSnapshot) {
+    return computeTrialStatsFromUserDocs(usersSnapshot.docs, nowMs);
+  }
+  const db = getAdminDb();
+  if (!db) return { ...EMPTY_TRIAL };
+  const snap = await db.collection(PRICING_FS.users).get();
+  return computeTrialStatsFromUserDocs(snap.docs, nowMs);
 }
 
 export function buildTrialStatsTelegramBlock(stats: TrialStats): string {

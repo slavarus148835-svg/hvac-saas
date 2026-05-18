@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
-import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
+import { handleTelegramStatCommand } from "@/lib/server/telegram/handleStatCommand";
 import {
   handlePartnerManagerCallback,
   parseSlashPartnerAdminCode,
@@ -329,31 +329,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      try {
-        console.log("TELEGRAM_STAT_START");
-        const report = await buildTelegramFullStatsReportText(Date.now(), {
-          topPeriod: "yesterday",
-        });
-        console.log("TELEGRAM_STAT_BUILT");
-        const sendStat = await sendTelegramMessage(String(chatId), report);
-        console.log(
-          "[telegram/webhook] /stat sendTelegramMessage:",
-          safeJsonStringify(sendStat)
-        );
-        if (!sendStat.ok) {
-          console.error("TELEGRAM_STAT_ERROR", sendStat.error);
-          console.error("[telegram/webhook] /stat sendMessage failed", sendStat.error);
-        } else {
-          console.log("TELEGRAM_STAT_SENT");
-        }
-      } catch (e) {
-        console.error("TELEGRAM_STAT_ERROR", e);
-        console.error("[telegram/webhook] /stat stats failed", e);
-        await sendTelegramMessage(
-          String(chatId),
-          "Не удалось загрузить статистику. Попробуйте позже."
-        );
-      }
+      await handleTelegramStatCommand({
+        chatId: String(chatId),
+        telegramUserId: msg.from?.id,
+      });
       return NextResponse.json({ ok: true });
     }
 

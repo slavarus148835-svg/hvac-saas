@@ -1,5 +1,7 @@
+import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
+import type { StatsUsersSnapshot } from "@/lib/server/statsUsersSnapshot";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
 import {
   getConfirmedBankPaymentEventMs,
@@ -76,18 +78,16 @@ function inRange(ms: number, start: number, end: number): boolean {
  * activePaidAccess — число пользователей с широким доступом (`isPaidUserForStatsTotals`) на now.
  * conversion — paid / registrations * 100, если registrations > 0.
  */
-export async function getReport(period: StatsReportPeriod): Promise<StatsReport> {
-  const db = getAdminDb();
+export function computeReportFromUserDocs(
+  docs: QueryDocumentSnapshot[],
+  period: StatsReportPeriod,
+  nowMs = Date.now()
+): StatsReport {
   const { start, end } = getReportPeriodRange(period);
-  const nowMs = Date.now();
-  if (!db) {
-    return { registrations: 0, paid: 0, conversion: 0, activePaidAccess: 0 };
-  }
-  const snap = await db.collection(PRICING_FS.users).get();
   let registrations = 0;
   let paid = 0;
   let activePaidAccess = 0;
-  for (const doc of snap.docs) {
+  for (const doc of docs) {
     const d = doc.data() as Record<string, unknown>;
     if (inRange(registrationMs(d), start, end)) {
       registrations++;
@@ -105,4 +105,19 @@ export async function getReport(period: StatsReportPeriod): Promise<StatsReport>
   const conversion =
     registrations === 0 ? 0 : Math.round((paid / registrations) * 10000) / 100;
   return { registrations, paid, conversion, activePaidAccess };
+}
+
+export async function getReport(
+  period: StatsReportPeriod,
+  usersSnapshot?: StatsUsersSnapshot
+): Promise<StatsReport> {
+  if (usersSnapshot) {
+    return computeReportFromUserDocs(usersSnapshot.docs, period);
+  }
+  const db = getAdminDb();
+  if (!db) {
+    return { registrations: 0, paid: 0, conversion: 0, activePaidAccess: 0 };
+  }
+  const snap = await db.collection(PRICING_FS.users).get();
+  return computeReportFromUserDocs(snap.docs, period);
 }

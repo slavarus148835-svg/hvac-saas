@@ -1,6 +1,8 @@
+import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { PRICING_FS } from "@/lib/pricingFirestorePaths";
 import { firestoreTimeToMs } from "@/lib/server/firestoreTimeMs";
+import type { StatsUsersSnapshot } from "@/lib/server/statsUsersSnapshot";
 import {
   getConfirmedBankPaymentEventMs,
   isPaidUserForStatsTotals,
@@ -66,54 +68,16 @@ function bumpEarliestCalculationMs(map: Map<string, number>, uid: string | undef
   }
 }
 
-export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
-  const db = getAdminDb();
-  if (!db) {
-    return {
-      totalUsers: 0,
-      usersWithCalculation: 0,
-      endedTrialUsers: 0,
-      paidUsers: 0,
-      accessPaidUsers: 0,
-      endedTrialConfirmedBankPaidUsers: 0,
-      activeConfirmedBankSubscriptions: 0,
-      mrrRub: 0,
-      arpuRub: 0,
-      conversionSignupToCalc: 0,
-      conversionTrialEndToPaid: 0,
-      last7Days: {
-        newUsers: 0,
-        usersWithCalculation: 0,
-        paidUsers: 0,
-      },
-    };
-  }
-
-  const usersSnap = await db.collection(PRICING_FS.users).get();
-  const calcSnap = await db.collectionGroup(PRICING_FS.modelsSubcollection).get();
-  const calculationHistorySnap = await db.collection("calculationHistory").get();
-
+export function computeFunnelStatsFromUserDocs(
+  userDocs: QueryDocumentSnapshot[],
+  nowMs: number
+): FunnelStats {
   const userById = new Map<string, UserRecord>();
-  for (const doc of usersSnap.docs) {
+  for (const doc of userDocs) {
     userById.set(doc.id, doc.data() as UserRecord);
   }
 
   const firstCalculationAtMsByUser = new Map<string, number>();
-  for (const doc of calcSnap.docs) {
-    const userDocId = doc.ref.parent.parent?.id;
-    if (!userDocId) continue;
-
-    const d = doc.data() as UserRecord;
-    const calcMs = firestoreTimeToMs(d.createdAt);
-    bumpEarliestCalculationMs(firstCalculationAtMsByUser, userDocId, calcMs);
-  }
-
-  for (const doc of calculationHistorySnap.docs) {
-    const d = doc.data() as UserRecord & { uid?: unknown };
-    const uid = typeof d.uid === "string" ? d.uid.trim() : "";
-    const histMs = firestoreTimeToMs(d.createdAt);
-    bumpEarliestCalculationMs(firstCalculationAtMsByUser, uid || null, histMs);
-  }
 
   const sinceMs = nowMs - LAST_7_DAYS_MS;
   let totalUsers = 0;
@@ -188,6 +152,36 @@ export async function getFunnelStats(nowMs = Date.now()): Promise<FunnelStats> {
       paidUsers: paidUsers7d,
     },
   };
+}
+
+const EMPTY_FUNNEL: FunnelStats = {
+  totalUsers: 0,
+  usersWithCalculation: 0,
+  endedTrialUsers: 0,
+  paidUsers: 0,
+  accessPaidUsers: 0,
+  endedTrialConfirmedBankPaidUsers: 0,
+  activeConfirmedBankSubscriptions: 0,
+  mrrRub: 0,
+  arpuRub: 0,
+  conversionSignupToCalc: 0,
+  conversionTrialEndToPaid: 0,
+  last7Days: { newUsers: 0, usersWithCalculation: 0, paidUsers: 0 },
+};
+
+export async function getFunnelStats(
+  nowMs = Date.now(),
+  usersSnapshot?: StatsUsersSnapshot
+): Promise<FunnelStats> {
+  if (usersSnapshot) {
+    return computeFunnelStatsFromUserDocs(usersSnapshot.docs, nowMs);
+  }
+
+  const db = getAdminDb();
+  if (!db) return { ...EMPTY_FUNNEL };
+
+  const usersSnap = await db.collection(PRICING_FS.users).get();
+  return computeFunnelStatsFromUserDocs(usersSnap.docs, nowMs);
 }
 
 export function buildFunnelTelegramBlock(stats: FunnelStats): string {

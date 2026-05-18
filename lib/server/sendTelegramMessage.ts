@@ -21,6 +21,40 @@ export type SendTelegramMessageOptions = {
   parseMode?: "HTML" | "Markdown" | "MarkdownV2";
 };
 
+const TELEGRAM_MESSAGE_MAX_LEN = 4096;
+const TELEGRAM_CHUNK_SAFE_LEN = 3900;
+
+/** Разбивает длинный текст на части ≤ safeLen, по границам строк где возможно. */
+export function splitTelegramMessage(text: string, maxLen = TELEGRAM_CHUNK_SAFE_LEN): string[] {
+  const raw = String(text ?? "");
+  if (raw.length <= maxLen) return [raw];
+
+  const chunks: string[] = [];
+  let rest = raw;
+  while (rest.length > maxLen) {
+    let cut = rest.lastIndexOf("\n", maxLen);
+    if (cut < maxLen * 0.5) cut = maxLen;
+    chunks.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest.length) chunks.push(rest);
+  return chunks.length ? chunks : [raw.slice(0, maxLen)];
+}
+
+export async function sendTelegramMessageChunks(
+  chatId: string,
+  text: string,
+  options?: SendTelegramMessageOptions
+): Promise<SendTelegramMessageResult[]> {
+  const parts = splitTelegramMessage(text);
+  const results: SendTelegramMessageResult[] = [];
+  for (const part of parts) {
+    results.push(await sendTelegramMessage(chatId, part, options));
+    if (!results[results.length - 1]?.ok) break;
+  }
+  return results;
+}
+
 export async function sendTelegramMessage(
   chatId: string,
   text: string,
@@ -43,7 +77,11 @@ export async function sendTelegramMessage(
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   console.log("SENDING TG MESSAGE", id, text);
 
-  const body: Record<string, unknown> = { chat_id: id, text };
+  const safeText =
+    text.length > TELEGRAM_MESSAGE_MAX_LEN
+      ? `${text.slice(0, TELEGRAM_MESSAGE_MAX_LEN - 20)}…[truncated]`
+      : text;
+  const body: Record<string, unknown> = { chat_id: id, text: safeText };
   if (options?.replyMarkup) {
     body.reply_markup = options.replyMarkup;
   }

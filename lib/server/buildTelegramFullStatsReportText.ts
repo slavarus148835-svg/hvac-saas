@@ -1,3 +1,4 @@
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import {
   buildFunnelTelegramBlock,
   getFunnelStats,
@@ -9,6 +10,7 @@ import {
   type StatsReportPeriod,
 } from "@/lib/server/getStatsReport";
 import { formatRubForTelegram } from "@/lib/server/statsPaidUser";
+import { loadStatsUsersSnapshot } from "@/lib/server/statsUsersSnapshot";
 
 export type FullStatsTopPeriod = Extract<
   StatsReportPeriod,
@@ -26,14 +28,29 @@ function fmtPct(value: number): string {
  */
 export async function buildTelegramFullStatsReportText(
   nowMs = Date.now(),
-  opts?: { topPeriod?: FullStatsTopPeriod }
+  opts?: { topPeriod?: FullStatsTopPeriod; lightweight?: boolean }
 ): Promise<string> {
   const topPeriod: FullStatsTopPeriod = opts?.topPeriod ?? "yesterday";
+  const lightweight = opts?.lightweight !== false;
+
+  let usersSnapshot;
+  if (lightweight) {
+    const db = getAdminDb();
+    if (db) {
+      const t0 = Date.now();
+      usersSnapshot = await loadStatsUsersSnapshot(db);
+      console.log("STAT_COMMAND_FUNNEL_STARTED", {
+        usersCount: usersSnapshot.usersCount,
+        loadDurationMs: usersSnapshot.loadDurationMs,
+        totalMs: Date.now() - t0,
+      });
+    }
+  }
 
   const [report, trial, funnel] = await Promise.all([
-    getReport(topPeriod),
-    getTrialStats(nowMs),
-    getFunnelStats(nowMs),
+    getReport(topPeriod, usersSnapshot),
+    getTrialStats(nowMs, usersSnapshot),
+    getFunnelStats(nowMs, usersSnapshot),
   ]);
 
   const suf = statsReportPeriodSuffixRu(topPeriod);

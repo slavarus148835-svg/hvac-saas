@@ -86,6 +86,7 @@ type Props = {
   profile: TelegramMiniAppProfile | null;
   errorMessage?: string | null;
   onLinked?: (profile: TelegramMiniAppProfile) => void;
+  onRetryLogin?: () => void;
 };
 
 export function TgMiniAppGateShell({
@@ -94,6 +95,7 @@ export function TgMiniAppGateShell({
   profile,
   errorMessage,
   onLinked,
+  onRetryLogin,
 }: Props) {
   const router = useRouter();
 
@@ -126,6 +128,17 @@ export function TgMiniAppGateShell({
           <p style={{ margin: 0, color: "#b91c1c", fontSize: 15, lineHeight: 1.5 }}>
             {errorMessage || "Не удалось проверить аккаунт."}
           </p>
+          <button
+            type="button"
+            style={{ ...btn, marginTop: 16 }}
+            onClick={() => {
+              tgHapticButtonTap();
+              if (onRetryLogin) onRetryLogin();
+              else window.location.reload();
+            }}
+          >
+            🔄 Повторить вход
+          </button>
         </div>
       </div>
     );

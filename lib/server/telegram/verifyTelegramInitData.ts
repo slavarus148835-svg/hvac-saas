@@ -68,6 +68,17 @@ export function verifyTelegramInitData(initData: string): VerifyTelegramInitData
     return { ok: false, error: "hash_mismatch" };
   }
 
+  const authDateRaw = params.get("auth_date");
+  const authDate = Number(authDateRaw);
+  if (!Number.isFinite(authDate) || authDate <= 0) {
+    return { ok: false, error: "missing_auth_date" };
+  }
+  const authAgeSec = Math.floor(Date.now() / 1000) - Math.trunc(authDate);
+  const maxAuthAgeSec = Number(process.env.TELEGRAM_INITDATA_MAX_AGE_SEC || 86400);
+  if (authAgeSec > maxAuthAgeSec) {
+    return { ok: false, error: "auth_date_expired" };
+  }
+
   const userRaw = params.get("user");
   if (!userRaw) {
     return { ok: false, error: "missing_user" };

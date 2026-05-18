@@ -45,6 +45,7 @@ export function TgProtectedMiniApp({ children, onReady }: Props) {
         initData={access.initData}
         profile={access.profile}
         errorMessage={access.errorMessage}
+        onRetryLogin={() => access.refresh()}
         onLinked={() => {
           access.refresh();
         }}

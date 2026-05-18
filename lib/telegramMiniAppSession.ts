@@ -1,4 +1,5 @@
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
+import { mapMiniAppBootstrapError } from "@/lib/telegramMiniAppBootstrapErrors";
 import {
   clearPendingRegistrationSessionId,
   savePendingRegistrationSessionId,
@@ -144,28 +145,23 @@ export async function bootstrapMiniApp(
       return { ok: true, need_email_linking: true };
     }
 
-    if (typeof data.message === "string" && data.message.trim()) {
-      return { ok: false, error: data.message.trim() };
-    }
-
-    if (res.status === 409) {
-      return {
-        ok: false,
-        error:
-          "Конфликт привязки Telegram. Напишите в поддержку или войдите в существующий аккаунт.",
-      };
-    }
-
-    if (res.status === 401) {
-      return {
-        ok: false,
-        error: "Не удалось подтвердить Telegram. Откройте Mini App снова из бота.",
-      };
-    }
-
-    return { ok: false, error: "Не удалось войти через Telegram." };
-  } catch {
-    return { ok: false, error: "Нет соединения с сервером." };
+    const mapped = mapMiniAppBootstrapError({
+      status: res.status,
+      error: typeof data.error === "string" ? data.error : undefined,
+      message: typeof data.message === "string" ? data.message : undefined,
+    });
+    console.warn("[miniapp] bootstrap failed", {
+      status: res.status,
+      error: data.error,
+      authStatus: data.authStatus,
+    });
+    return { ok: false, error: mapped };
+  } catch (e) {
+    console.warn("[miniapp] bootstrap network error", e);
+    return {
+      ok: false,
+      error: mapMiniAppBootstrapError({ status: 0, error: "network" }),
+    };
   }
 }
 
