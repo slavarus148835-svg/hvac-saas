@@ -3,7 +3,15 @@ import { createHash } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { creditPartnerCommissionIfNeeded } from "@/lib/server/creditPartnerCommission";
+import {
+  reverseB2BPartnerManagerCommissionIfNeeded,
+  tryCreditB2BPartnerManagerPaymentIfVerified,
+} from "@/lib/server/partnerManager/partnerManagerB2b";
 import { resolveMonthlySubscriptionIntent } from "@/lib/server/tbankMonthlyPayment";
+import {
+  isTbankAcquiringPaymentSuccess,
+  isTbankAcquiringRefundLikeStatus,
+} from "@/lib/server/tbankPaymentStatus";
 import {
   buildPaymentSuccessNotificationHtml,
   sendTelegramNotification,
@@ -120,6 +128,50 @@ export async function POST(req: Request) {
 
     console.log("PAYMENT_USER_FOUND", { userId, orderId });
     const userData = userSnap.data() || {};
+
+    await userRef.set(
+      {
+        lastWebhook: {
+          orderId,
+          status: paymentStatus,
+          receivedAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    if (isTbankAcquiringRefundLikeStatus(paymentStatus)) {
+      try {
+        await reverseB2BPartnerManagerCommissionIfNeeded({
+          db: adminDb,
+          orderId,
+          userId,
+          paymentStatus,
+        });
+      } catch (e) {
+        console.error("[payment] b2b partner refund reversal failed", e);
+      }
+      console.log("PAYMENT_WEBHOOK_SUCCESS", {
+        outcome: "refund_like_processed",
+        orderId,
+        userId,
+        paymentStatus,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!isTbankAcquiringPaymentSuccess(paymentStatus)) {
+      console.log("PAYMENT_WEBHOOK_SUCCESS", {
+        outcome: "ignored_not_confirmed",
+        orderId,
+        userId,
+        paymentStatus,
+      });
+      console.log("[payment] callback success (no access change; status not success)");
+      return NextResponse.json({ ok: true });
+    }
+
     const intent = userData.lastPaymentIntent as
       | {
           orderId?: string;
@@ -162,29 +214,6 @@ export async function POST(req: Request) {
       email: resolved.email || String(userData.email || ""),
     };
 
-    await userRef.set(
-      {
-        lastWebhook: {
-          orderId,
-          status: paymentStatus,
-          receivedAt: new Date().toISOString(),
-        },
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-
-    if (paymentStatus !== "CONFIRMED") {
-      console.log("PAYMENT_WEBHOOK_SUCCESS", {
-        outcome: "ignored_not_confirmed",
-        orderId,
-        userId,
-        paymentStatus,
-      });
-      console.log("[payment] callback success (no access change; status not CONFIRMED)");
-      return NextResponse.json({ ok: true });
-    }
-
     const currentPaidUntil = Number(userData.paidUntil || 0);
     const newPaidUntil = addMonthsToPaidUntil(
       currentPaidUntil,
@@ -221,6 +250,12 @@ export async function POST(req: Request) {
     });
     console.log("PAYMENT_ACCESS_GRANTED", { userId, orderId, paidUntil: newPaidUntil });
 
+    const { bumpStatsCounters } = await import("@/lib/server/statsGlobalCounters");
+    bumpStatsCounters({
+      paidUsers: 1,
+      daily: { paid: 1 },
+    });
+
     const paymentIdRaw =
       body.PaymentId != null
         ? String(body.PaymentId)
@@ -238,6 +273,23 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       console.error("[payment] partner commission failed", e);
+    }
+
+    try {
+      const amountFromBank = Number.isFinite(bankAmountKopecks)
+        ? Math.round(bankAmountKopecks)
+        : paymentOrder.amount;
+      await tryCreditB2BPartnerManagerPaymentIfVerified({
+        db: adminDb,
+        paymentStatus,
+        orderId,
+        userId,
+        amountKopFromBank: amountFromBank,
+        expectedAmountKop: paymentOrder.amount,
+        paymentId: paymentIdRaw.trim() || undefined,
+      });
+    } catch (e) {
+      console.error("[payment] b2b partner manager commission failed", e);
     }
 
     console.log("[payment] access granted", {

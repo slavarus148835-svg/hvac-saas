@@ -118,13 +118,17 @@ export async function bootstrapMiniApp(
       clearPendingRegistrationSessionId();
       const profile = mapApiProfile(data.profile);
       if (profile) {
+        const degraded = data.degraded === true || data.authStatus === "degraded_quota";
         return {
           ok: true,
           profile,
-          accessAllowed: data.accessAllowed === true,
+          accessAllowed: data.accessAllowed === true || degraded,
           accessGate:
             typeof data.accessGate === "string" ? data.accessGate : undefined,
           emailVerifiedByCode: data.emailVerifiedByCode === true,
+          ...(degraded && typeof data.message === "string"
+            ? { error: undefined }
+            : {}),
         };
       }
       return { ok: false, error: "Профиль не получен после входа." };

@@ -925,6 +925,13 @@ export async function markFirstCalculationIfNeededAndRecordB2B(
 
   if (!wrote) return false;
 
+  const { bumpStatsCounters } = await import("@/lib/server/statsGlobalCounters");
+  bumpStatsCounters({
+    usersWithCalculation: 1,
+    totalCalculations: 1,
+    daily: { calculations: 1 },
+  });
+
   const after = await userRef.get();
   const u = after.data() ?? {};
   const partnerManagerId =

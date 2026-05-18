@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
+import { buildTelegramUltraLightStatsReport } from "@/lib/server/statsGlobalCounters";
 import { requireCronSecret } from "@/lib/server/requireCronSecret";
 import { sendTelegramMessage } from "@/lib/server/sendTelegramMessage";
 
@@ -14,9 +14,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "admin_telegram_chat_id_missing" }, { status: 503 });
   }
 
-  const text = await buildTelegramFullStatsReportText(Date.now(), {
-    topPeriod: "yesterday",
-  });
+  const built = await buildTelegramUltraLightStatsReport(Date.now());
+  const text = built.text;
   const send = await sendTelegramMessage(adminChat, text);
   if (!send.ok) {
     console.error("[cron/telegram-daily-report] send failed", send.error);

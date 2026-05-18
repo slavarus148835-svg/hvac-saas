@@ -18,6 +18,9 @@ export async function GET() {
       miniAppBootstrapV2: true,
       retryPolicy88ce754: true,
       statFailSafeCd87b5e: true,
+      statsGlobalUltraLight: true,
+      miniAppDegradedQuota: true,
+      firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
     },
   };
   return NextResponse.json(body, {

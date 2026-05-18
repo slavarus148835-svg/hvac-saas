@@ -196,6 +196,12 @@ export async function notifyAdminNewUserIfNeeded(
       },
       { merge: true }
     );
+    const { bumpStatsCounters } = await import("@/lib/server/statsGlobalCounters");
+    bumpStatsCounters({
+      totalUsers: 1,
+      telegramUsers: tgId ? 1 : 0,
+      daily: { registrations: 1 },
+    });
     return { sent: true };
   }
 

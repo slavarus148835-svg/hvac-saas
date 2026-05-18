@@ -13,6 +13,7 @@
     "agent": "node cursor-agent.js",
     "telegram": "node telegram-bot.js",
     "executor": "node executor.js",
+    "audit:duplicate-users": "tsx scripts/auditDuplicateUsers.ts",
     "cleanup:duplicate-users": "node scripts/cleanup-duplicate-users.mjs",
     "deploy:firestore-rules": "node scripts/deploy-firestore-rules.mjs",
     "verify:email-flow": "node scripts/verify-email-code-flow.mjs",
@@ -45,6 +46,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

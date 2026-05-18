@@ -161,6 +161,12 @@ export async function buildMiniAppLaunchCandidates(
   channelMode: MiniAppLaunchNotifyChannel,
   queueCache: MiniAppLaunchDeliveryQueueCache
 ): Promise<{ candidates: MiniAppLaunchCandidate[]; skipped: number }> {
+  const { isFirestoreSafeMode } = await import("@/lib/server/statsGlobalCounters");
+  if (isFirestoreSafeMode()) {
+    console.log("MINIAPP_LAUNCH_NOTIFY_SKIPPED_SAFE_MODE", { channel: channelMode });
+    return { candidates: [], skipped: 0 };
+  }
+
   await queueCache.load(db);
 
   const usersSnap = await db.collection(PRICING_FS.users).get();
@@ -431,6 +437,24 @@ export async function runMiniAppLaunchNotify(
   db: Firestore,
   body: MiniAppLaunchNotifyBody
 ): Promise<MiniAppLaunchNotifyResult> {
+  const { isFirestoreSafeMode } = await import("@/lib/server/statsGlobalCounters");
+  if (isFirestoreSafeMode() && body.dryRun === false) {
+    console.log("MINIAPP_LAUNCH_NOTIFY_BLOCKED_SAFE_MODE");
+    return {
+      campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,
+      dryRun: false,
+      totalCandidates: 0,
+      telegramCandidates: 0,
+      emailCandidates: 0,
+      skipped: 0,
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      skippedThisRun: 0,
+      sampleUsers: [],
+    };
+  }
+
   const dryRun = body.dryRun !== false;
   const limit = Math.min(500, Math.max(1, Math.trunc(Number(body.limit) || 50)));
   const channelMode: MiniAppLaunchNotifyChannel = body.channel ?? "auto";

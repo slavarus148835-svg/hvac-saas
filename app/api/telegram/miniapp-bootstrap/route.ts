@@ -2,6 +2,8 @@ import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import { findUserByTelegramKeys } from "@/lib/server/authDuplicateGuards";
+import { findUserByTelegramFast } from "@/lib/server/telegram/findUserByTelegramFast";
+import { tryMiniAppBootstrapDegraded } from "@/lib/server/telegram/miniAppBootstrapDegraded";
 import {
   linkBlockedMessage,
   linkTelegramToEmailUid,
@@ -72,9 +74,19 @@ function bootstrapErrorResponse(
   return NextResponse.json({ ok: false, error, message }, { status });
 }
 
+type BootstrapCtx = {
+  db: NonNullable<ReturnType<typeof getAdminDb>>;
+  app: NonNullable<ReturnType<typeof getAdminApp>>;
+  verified: Extract<ReturnType<typeof verifyTelegramInitData>, { ok: true }>;
+  tgId: string;
+  ua: string | null;
+  ipHash?: string;
+};
+
 export async function POST(req: Request) {
   const startedAt = Date.now();
   console.log("TG_MINIAPP_BOOTSTRAP_START");
+  let ctx: BootstrapCtx | null = null;
 
   try {
     const app = getAdminApp();
@@ -132,6 +144,10 @@ export async function POST(req: Request) {
     });
 
     const tgId = normalizeTelegramUserIdForMiniApp(verified.telegramUser.id);
+    const ua = req.headers.get("user-agent");
+    const ipHash = hashClientIp(req);
+    ctx = { db, app, verified, tgId, ua, ipHash };
+
     const chatKey =
       verified.chatId != null && Number.isFinite(verified.chatId)
         ? String(Math.trunc(verified.chatId)).replace(/\D/g, "")
@@ -142,9 +158,6 @@ export async function POST(req: Request) {
     if (!linkRaw && startParam.toLowerCase().startsWith(TELEGRAM_LINK_TOKEN_PREFIX)) {
       linkRaw = startParam.slice(TELEGRAM_LINK_TOKEN_PREFIX.length);
     }
-
-    const ua = req.headers.get("user-agent");
-    const ipHash = hashClientIp(req);
 
     if (linkRaw) {
       console.log("TELEGRAM_LINK_START", { telegramUserId: tgId });
@@ -158,6 +171,12 @@ export async function POST(req: Request) {
               : "Ссылка для привязки недействительна.";
         return bootstrapErrorResponse(410, consumed.reason, msg);
       }
+
+      const targetBefore = await db.collection(PRICING_FS.users).doc(consumed.uid).get();
+      const beforeData = (targetBefore.data() ?? {}) as Record<string, unknown>;
+      const hadTelegramBefore = Boolean(
+        beforeData.telegramUserId || beforeData.telegramId || beforeData.telegramChatId
+      );
 
       const linked = await linkTelegramToEmailUid(db, app, {
         targetUid: consumed.uid,
@@ -174,6 +193,11 @@ export async function POST(req: Request) {
           blockedReason,
           linkBlockedMessage(blockedReason)
         );
+      }
+
+      if (!hadTelegramBefore) {
+        const { bumpStatsCounters } = await import("@/lib/server/statsGlobalCounters");
+        bumpStatsCounters({ telegramUsers: 1 });
       }
 
       const userSnap = await db.collection(PRICING_FS.users).doc(consumed.uid).get();
@@ -210,11 +234,15 @@ export async function POST(req: Request) {
     }
 
     const lookupStarted = Date.now();
-    const lookup = await findUserByTelegramKeys(db, tgId, chatKey);
+    let lookup = await findUserByTelegramFast(db, tgId);
+    if (lookup.kind === "none" && chatKey && chatKey !== tgId) {
+      lookup = await findUserByTelegramKeys(db, tgId, chatKey);
+    }
     console.log("TG_MINIAPP_USER_FOUND", {
       kind: lookup.kind,
       lookupMs: Date.now() - lookupStarted,
       telegramUserId: tgId,
+      fastPath: true,
     });
 
     if (lookup.kind === "ambiguous") {
@@ -286,7 +314,32 @@ export async function POST(req: Request) {
       durationMs: Date.now() - startedAt,
     });
 
-    if (firestoreCapacity) {
+    if (firestoreCapacity && ctx) {
+      const degraded = await tryMiniAppBootstrapDegraded({
+        db: ctx.db,
+        telegramUserId: ctx.tgId,
+        telegramUser: ctx.verified.telegramUser,
+        userAgent: ctx.ua,
+        ipHash: ctx.ipHash,
+      });
+      if (degraded.ok) {
+        console.log("TG_MINIAPP_BOOTSTRAP_SUCCESS", {
+          authStatus: "degraded_quota",
+          uid: degraded.profile.uid,
+          durationMs: Date.now() - startedAt,
+        });
+        return NextResponse.json({
+          ok: true,
+          degraded: true,
+          authStatus: "degraded_quota",
+          sessionToken: degraded.sessionToken,
+          accessAllowed: true,
+          accessGate: "degraded_quota",
+          profile: degraded.profile,
+          message:
+            "Ограниченный режим: калькулятор доступен, часть данных временно недоступна.",
+        });
+      }
       return bootstrapErrorResponse(
         503,
         "firestore_quota",

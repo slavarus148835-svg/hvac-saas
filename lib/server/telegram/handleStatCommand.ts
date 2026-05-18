@@ -1,4 +1,4 @@
-import { buildTelegramFullStatsReportText } from "@/lib/server/buildTelegramFullStatsReportText";
+import { buildTelegramUltraLightStatsReport } from "@/lib/server/statsGlobalCounters";
 import { isFirestoreCapacityError } from "@/lib/server/statsUsersSnapshot";
 import {
   sendTelegramMessage,
@@ -42,11 +42,8 @@ export async function handleTelegramStatCommand(
     logStat("STAT_COMMAND_BUILD_STARTED", { chatId });
     const funnelStartedAt = Date.now();
 
-    const report = await Promise.race([
-      buildTelegramFullStatsReportText(Date.now(), {
-        topPeriod: "yesterday",
-        lightweight: true,
-      }),
+    const built = await Promise.race([
+      buildTelegramUltraLightStatsReport(Date.now()),
       new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error("STAT_BUILD_TIMEOUT")), STAT_BUILD_TIMEOUT_MS);
       }),
@@ -55,10 +52,13 @@ export async function handleTelegramStatCommand(
     logStat("STAT_COMMAND_FUNNEL_DONE", {
       chatId,
       funnelDurationMs: Date.now() - funnelStartedAt,
-      reportLength: report.length,
+      reportLength: built.text.length,
+      firestoreReads: built.meta.reads,
+      readDurationMs: built.meta.durationMs,
+      globalFound: built.meta.globalFound,
     });
 
-    const chunks = await sendTelegramMessageChunks(chatId, report);
+    const chunks = await sendTelegramMessageChunks(chatId, built.text);
     const allOk = chunks.every((c) => c.ok);
 
     if (!allOk) {

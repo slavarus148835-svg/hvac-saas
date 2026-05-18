@@ -28,6 +28,12 @@ export async function runTelegramMiniAppUserNotifications(db: Firestore): Promis
   sent: number;
   errors: number;
 }> {
+  const { isFirestoreSafeMode } = await import("@/lib/server/statsGlobalCounters");
+  if (isFirestoreSafeMode()) {
+    console.log("TG_MINIAPP_USER_NOTIFICATIONS_SKIPPED_SAFE_MODE");
+    return { scanned: 0, sent: 0, errors: 0 };
+  }
+
   let scanned = 0;
   let sent = 0;
   let errors = 0;
