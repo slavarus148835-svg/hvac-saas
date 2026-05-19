@@ -49,8 +49,23 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
 
+function envOn(name: string): boolean {
+  return String(process.env[name] || "").trim() === "1";
+}
+
+/** Legacy: blocks heavy scans AND counter bumps. Prefer split flags below. */
 export function isFirestoreSafeMode(): boolean {
-  return String(process.env.FIRESTORE_SAFE_MODE || "").trim() === "1";
+  return envOn("FIRESTORE_SAFE_MODE");
+}
+
+/** Campaign notify, cron user scans, debug funnel/trial full scans. */
+export function isFirestoreHeavyScansDisabled(): boolean {
+  return envOn("FIRESTORE_SAFE_MODE") || envOn("FIRESTORE_DISABLE_HEAVY_SCANS");
+}
+
+/** Incremental stats/global + stats/daily bumps (registration, payment, calc, tg link). */
+export function isFirestoreCounterBumpsDisabled(): boolean {
+  return envOn("FIRESTORE_SAFE_MODE") || envOn("FIRESTORE_DISABLE_COUNTER_BUMPS");
 }
 
 export function utcDateKey(ms = Date.now()): string {
@@ -93,7 +108,15 @@ export function bumpStatsCounters(
     dateKey?: string;
   }
 ): void {
-  if (isFirestoreSafeMode()) return;
+  if (isFirestoreCounterBumpsDisabled()) {
+    console.log("STATS_COUNTER_BUMP_SKIPPED", {
+      reason: envOn("FIRESTORE_SAFE_MODE")
+        ? "FIRESTORE_SAFE_MODE"
+        : "FIRESTORE_DISABLE_COUNTER_BUMPS",
+      patch: Object.keys(patch).filter((k) => k !== "daily" && k !== "dateKey"),
+    });
+    return;
+  }
   const db = getAdminDb();
   if (!db) return;
 

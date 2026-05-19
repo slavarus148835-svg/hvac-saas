@@ -161,8 +161,8 @@ export async function buildMiniAppLaunchCandidates(
   channelMode: MiniAppLaunchNotifyChannel,
   queueCache: MiniAppLaunchDeliveryQueueCache
 ): Promise<{ candidates: MiniAppLaunchCandidate[]; skipped: number }> {
-  const { isFirestoreSafeMode } = await import("@/lib/server/statsGlobalCounters");
-  if (isFirestoreSafeMode()) {
+  const { isFirestoreHeavyScansDisabled } = await import("@/lib/server/statsGlobalCounters");
+  if (isFirestoreHeavyScansDisabled()) {
     console.log("MINIAPP_LAUNCH_NOTIFY_SKIPPED_SAFE_MODE", { channel: channelMode });
     return { candidates: [], skipped: 0 };
   }
@@ -437,8 +437,8 @@ export async function runMiniAppLaunchNotify(
   db: Firestore,
   body: MiniAppLaunchNotifyBody
 ): Promise<MiniAppLaunchNotifyResult> {
-  const { isFirestoreSafeMode } = await import("@/lib/server/statsGlobalCounters");
-  if (isFirestoreSafeMode() && body.dryRun === false) {
+  const { isFirestoreHeavyScansDisabled } = await import("@/lib/server/statsGlobalCounters");
+  if (isFirestoreHeavyScansDisabled() && body.dryRun === false) {
     console.log("MINIAPP_LAUNCH_NOTIFY_BLOCKED_SAFE_MODE");
     return {
       campaignId: MINIAPP_LAUNCH_CAMPAIGN_ID,

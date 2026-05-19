@@ -21,6 +21,12 @@ export async function GET() {
       statsGlobalUltraLight: true,
       miniAppDegradedQuota: true,
       firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
+      firestoreHeavyScansDisabled:
+        process.env.FIRESTORE_SAFE_MODE === "1" ||
+        process.env.FIRESTORE_DISABLE_HEAVY_SCANS === "1",
+      firestoreCounterBumpsDisabled:
+        process.env.FIRESTORE_SAFE_MODE === "1" ||
+        process.env.FIRESTORE_DISABLE_COUNTER_BUMPS === "1",
     },
   };
   return NextResponse.json(body, {
