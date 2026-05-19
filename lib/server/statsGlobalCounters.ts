@@ -4,7 +4,11 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { isFirestoreCapacityError } from "@/lib/server/statsUsersSnapshot";
 
 export const STATS_GLOBAL_DOC_PATH = "stats/global";
-export const STATS_DAILY_COLLECTION = "stats/daily";
+
+/** stats/_daily/days/{YYYY-MM-DD} — subcollection (collection id cannot contain "/"). */
+export function statsDailyDocRef(db: Firestore, dateKey: string) {
+  return db.collection("stats").doc("_daily").collection("days").doc(dateKey);
+}
 
 export type StatsGlobalCounters = {
   totalUsers: number;
@@ -118,7 +122,7 @@ export function bumpStatsCounters(
             dailyInc[k] = FieldValue.increment(v);
           }
         }
-        await db.collection(STATS_DAILY_COLLECTION).doc(dateKey).set(dailyInc, { merge: true });
+        await statsDailyDocRef(db, dateKey).set(dailyInc, { merge: true });
       }
       globalCache = null;
     } catch (e) {
@@ -149,7 +153,7 @@ export async function readStatsDaily(
   db: Firestore,
   dateKey: string
 ): Promise<StatsDailyCounters> {
-  const snap = await db.collection(STATS_DAILY_COLLECTION).doc(dateKey).get();
+  const snap = await statsDailyDocRef(db, dateKey).get();
   return parseDaily(snap.exists ? (snap.data() as Record<string, unknown>) : undefined, dateKey);
 }
 
@@ -186,20 +190,24 @@ export async function buildTelegramUltraLightStatsReport(
   try {
     global = await readStatsGlobalCached(db);
     if (!hadGlobalCache) reads += 1;
-    const dSnap = await db.collection(STATS_DAILY_COLLECTION).doc(yKey).get();
+    const dSnap = await statsDailyDocRef(db, yKey).get();
     reads += 1;
     daily = parseDaily(dSnap.exists ? (dSnap.data() as Record<string, unknown>) : undefined, yKey);
   } catch (e) {
     const capacity = isFirestoreCapacityError(e);
+    const errMsg = e instanceof Error ? e.message : String(e);
     console.error("STAT_ULTRA_LIGHT_READ_ERROR", {
       capacity,
-      message: e instanceof Error ? e.message : String(e),
+      message: errMsg,
       stack: e instanceof Error ? e.stack : undefined,
     });
-    return {
-      text: capacity
+    const readHint = errMsg.includes("collectionPath")
+      ? "❌ Ошибка пути stats/daily (конфигурация)."
+      : capacity
         ? "❌ Firestore перегружен (quota). Статистика из счётчиков временно недоступна.\nПовторите через 30–60 мин."
-        : "❌ Ошибка чтения stats/global.",
+        : "❌ Ошибка чтения stats/global или stats/daily.";
+    return {
+      text: readHint,
       meta: {
         reads,
         durationMs: Date.now() - started,

@@ -12,8 +12,8 @@ import { isStatsExcludedTelegramProvisionUid } from "../lib/server/statsExcludeT
 import { userHasConfirmedBankPayment } from "../lib/server/statsPaidUser";
 import { firestoreTimeToMs } from "../lib/server/firestoreTimeMs";
 import {
-  STATS_DAILY_COLLECTION,
   STATS_GLOBAL_DOC_PATH,
+  statsDailyDocRef,
   utcDateKey,
   yesterdayUtcDateKey,
 } from "../lib/server/statsGlobalCounters";
@@ -127,11 +127,11 @@ async function main() {
   }
 
   await db.doc(STATS_GLOBAL_DOC_PATH).set(globalPayload, { merge: false });
-  await db.collection(STATS_DAILY_COLLECTION).doc(utcDateKey(now)).set(
+  await statsDailyDocRef(db, utcDateKey(now)).set(
     { calculations: 0, registrations: 0, paid: 0, updatedAt: new Date().toISOString() },
     { merge: true }
   );
-  await db.collection(STATS_DAILY_COLLECTION).doc(yesterdayUtcDateKey(now)).set(dailyPayload, {
+  await statsDailyDocRef(db, yesterdayUtcDateKey(now)).set(dailyPayload, {
     merge: true,
   });
 
