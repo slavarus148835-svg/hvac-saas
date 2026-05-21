@@ -50,6 +50,8 @@ import {
   shouldHideCalculatorAcModelsUi,
 } from "@/lib/calculator";
 import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
+import { normalizeStrobaMetersFromRaw } from "@/lib/calculator/strobaFields";
+import { CalculatorStrobaMeterFields } from "@/components/CalculatorStrobaMeterFields";
 import {
   MAX_CABLE_METERS,
   MAX_FLOORS,
@@ -110,10 +112,10 @@ type HistoryCalcDoc = {
   carryBlockCount?: string;
   manualDismantlingCost?: string;
 
-  strobaType?: "none" | "brick" | "concrete";
-  strobaMeters?: string;
-  strobaDrainType?: "none" | "brick" | "concrete";
-  strobaDrainMeters?: string;
+  strobaConcreteMeters?: string;
+  strobaBrickMeters?: string;
+  strobaDrainConcreteMeters?: string;
+  strobaDrainBrickMeters?: string;
   cable40Meters?: string;
   cable16Meters?: string;
 
@@ -190,15 +192,7 @@ function draftFromSavedHistoryRoom(entry: {
       typeof inp.manualDismantlingCost === "string"
         ? inp.manualDismantlingCost
         : String(inp.manualDismantlingCost ?? "0"),
-    strobaType:
-      inp.strobaType === "brick" || inp.strobaType === "concrete" ? inp.strobaType : "none",
-    strobaMeters: typeof inp.strobaMeters === "string" ? inp.strobaMeters : "0",
-    strobaDrainType:
-      inp.strobaDrainType === "brick" || inp.strobaDrainType === "concrete"
-        ? inp.strobaDrainType
-        : "none",
-    strobaDrainMeters:
-      typeof inp.strobaDrainMeters === "string" ? inp.strobaDrainMeters : "0",
+    ...normalizeStrobaMetersFromRaw(inp),
     cable40Meters: typeof inp.cable40Meters === "string" ? inp.cable40Meters : "0",
     cable16Meters: typeof inp.cable16Meters === "string" ? inp.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(inp.buyAcAndRouteFromUs),
@@ -273,14 +267,10 @@ function CalculatorPage() {
   const [carryBlockCount, setCarryBlockCount] = useState("0");
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
 
-  const [strobaType, setStrobaType] = useState<"none" | "brick" | "concrete">(
-    "none"
-  );
-  const [strobaMeters, setStrobaMeters] = useState("0");
-  const [strobaDrainType, setStrobaDrainType] = useState<"none" | "brick" | "concrete">(
-    "none"
-  );
-  const [strobaDrainMeters, setStrobaDrainMeters] = useState("0");
+  const [strobaConcreteMeters, setStrobaConcreteMeters] = useState("0");
+  const [strobaBrickMeters, setStrobaBrickMeters] = useState("0");
+  const [strobaDrainConcreteMeters, setStrobaDrainConcreteMeters] = useState("0");
+  const [strobaDrainBrickMeters, setStrobaDrainBrickMeters] = useState("0");
   const [cable40Meters, setCable40Meters] = useState("0");
   const [cable16Meters, setCable16Meters] = useState("0");
 
@@ -501,10 +491,13 @@ function CalculatorPage() {
             setCarryBlockCount(data.carryBlockCount || "0");
             setManualDismantlingCost(data.manualDismantlingCost || "0");
 
-            setStrobaType(data.strobaType || "none");
-            setStrobaMeters(data.strobaMeters || "0");
-            setStrobaDrainType(data.strobaDrainType || "none");
-            setStrobaDrainMeters(data.strobaDrainMeters || "0");
+            const strobaHist = normalizeStrobaMetersFromRaw(
+              data as unknown as Record<string, unknown>
+            );
+            setStrobaConcreteMeters(strobaHist.strobaConcreteMeters);
+            setStrobaBrickMeters(strobaHist.strobaBrickMeters);
+            setStrobaDrainConcreteMeters(strobaHist.strobaDrainConcreteMeters);
+            setStrobaDrainBrickMeters(strobaHist.strobaDrainBrickMeters);
             setCable40Meters(data.cable40Meters || "0");
             setCable16Meters(data.cable16Meters || "0");
 
@@ -701,10 +694,10 @@ function CalculatorPage() {
       carryToolFloors,
       carryBlockCount,
       manualDismantlingCost,
-      strobaType,
-      strobaMeters,
-      strobaDrainType,
-      strobaDrainMeters,
+      strobaConcreteMeters,
+      strobaBrickMeters,
+      strobaDrainConcreteMeters,
+      strobaDrainBrickMeters,
       cable40Meters,
       cable16Meters,
       buyAcAndRouteFromUs,
@@ -735,10 +728,10 @@ function CalculatorPage() {
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
-    strobaType,
-    strobaMeters,
-    strobaDrainType,
-    strobaDrainMeters,
+    strobaConcreteMeters,
+    strobaBrickMeters,
+    strobaDrainConcreteMeters,
+    strobaDrainBrickMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -835,10 +828,10 @@ function CalculatorPage() {
             carryToolFloors,
             carryBlockCount,
             manualDismantlingCost,
-            strobaType,
-            strobaMeters,
-            strobaDrainType,
-            strobaDrainMeters,
+            strobaConcreteMeters,
+            strobaBrickMeters,
+            strobaDrainConcreteMeters,
+            strobaDrainBrickMeters,
             cable40Meters,
             cable16Meters,
             buyAcAndRouteFromUs,
@@ -874,10 +867,10 @@ function CalculatorPage() {
       carryBlockCount: scalar.carryBlockCount,
       manualDismantlingCost: scalar.manualDismantlingCost,
 
-      strobaType: scalar.strobaType,
-      strobaMeters: scalar.strobaMeters,
-      strobaDrainType: scalar.strobaDrainType,
-      strobaDrainMeters: scalar.strobaDrainMeters,
+      strobaConcreteMeters: scalar.strobaConcreteMeters,
+      strobaBrickMeters: scalar.strobaBrickMeters,
+      strobaDrainConcreteMeters: scalar.strobaDrainConcreteMeters,
+      strobaDrainBrickMeters: scalar.strobaDrainBrickMeters,
       cable40Meters: scalar.cable40Meters,
       cable16Meters: scalar.cable16Meters,
 
@@ -930,10 +923,10 @@ function CalculatorPage() {
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
-    strobaType,
-    strobaMeters,
-    strobaDrainType,
-    strobaDrainMeters,
+    strobaConcreteMeters,
+    strobaBrickMeters,
+    strobaDrainConcreteMeters,
+    strobaDrainBrickMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -1026,10 +1019,10 @@ function CalculatorPage() {
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
-    strobaType,
-    strobaMeters,
-    strobaDrainType,
-    strobaDrainMeters,
+    strobaConcreteMeters,
+    strobaBrickMeters,
+    strobaDrainConcreteMeters,
+    strobaDrainBrickMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -1307,10 +1300,10 @@ function CalculatorPage() {
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
-        strobaType,
-        strobaMeters,
-        strobaDrainType,
-        strobaDrainMeters,
+        strobaConcreteMeters,
+        strobaBrickMeters,
+        strobaDrainConcreteMeters,
+        strobaDrainBrickMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -1344,10 +1337,10 @@ function CalculatorPage() {
       setCarryToolFloors(f.carryToolFloors);
       setCarryBlockCount(f.carryBlockCount);
       setManualDismantlingCost(f.manualDismantlingCost);
-      setStrobaType(f.strobaType);
-      setStrobaMeters(f.strobaMeters);
-      setStrobaDrainType(f.strobaDrainType);
-      setStrobaDrainMeters(f.strobaDrainMeters);
+      setStrobaConcreteMeters(f.strobaConcreteMeters);
+      setStrobaBrickMeters(f.strobaBrickMeters);
+      setStrobaDrainConcreteMeters(f.strobaDrainConcreteMeters);
+      setStrobaDrainBrickMeters(f.strobaDrainBrickMeters);
       setCable40Meters(f.cable40Meters);
       setCable16Meters(f.cable16Meters);
       setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
@@ -1779,76 +1772,34 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>2. Дополнительные работы</h2>
 
-            <div style={{ ...quickOptionsTitleStyle, marginTop: 0 }}>Штробы и кабель-каналы</div>
-
-            <Label text="Основная штроба — материал" note="Кирпич/газоблок или бетон">
-              <select
-                value={strobaType}
-                onChange={(e) =>
-                  setStrobaType(e.target.value as "none" | "brick" | "concrete")
-                }
-                style={inputStyle}
-              >
-                <option value="none">Без основной штробы</option>
-                <option value="brick">Кирпич / газоблок</option>
-                <option value="concrete">Бетон</option>
-              </select>
-            </Label>
-
-            <Label
-              text="Основная штроба, м"
-              note="Мин. 1 м на комнату по сумме основной и дренажной штроб"
-            >
-            <input
-                value={strobaMeters}
-                onChange={(e) =>
-                  onDecimalMetersFieldChange(
-                    "strobaMeters",
-                    e.target.value,
-                    MAX_STROBA_METERS,
-                    WARN_STROBA_METERS,
-                    setStrobaMeters
-                  )
-                }
-              style={inputStyle}
-              inputMode="decimal"
-            />
-          </Label>
-            <FieldMessage error={fieldErrors.strobaMeters} warning={fieldWarnings.strobaMeters} />
-
-            <Label text="Штроба под дренаж/кабель — материал">
-              <select
-                value={strobaDrainType}
-                onChange={(e) =>
-                  setStrobaDrainType(e.target.value as "none" | "brick" | "concrete")
-                }
-                style={inputStyle}
-              >
-                <option value="none">Без штробы под дренаж/кабель</option>
-                <option value="brick">Кирпич / газоблок</option>
-                <option value="concrete">Бетон</option>
-              </select>
-            </Label>
-
-            <Label text="Штроба под дренаж/кабель, м">
-            <input
-                value={strobaDrainMeters}
-                onChange={(e) =>
-                  onDecimalMetersFieldChange(
-                    "strobaDrainMeters",
-                    e.target.value,
-                    MAX_STROBA_METERS,
-                    WARN_STROBA_METERS,
-                    setStrobaDrainMeters
-                  )
-                }
-              style={inputStyle}
-              inputMode="decimal"
-            />
-          </Label>
-            <FieldMessage
-              error={fieldErrors.strobaDrainMeters}
-              warning={fieldWarnings.strobaDrainMeters}
+            <CalculatorStrobaMeterFields
+              variant="web"
+              values={{
+                strobaConcreteMeters,
+                strobaBrickMeters,
+                strobaDrainConcreteMeters,
+                strobaDrainBrickMeters,
+              }}
+              onPatch={(patch) => {
+                if (patch.strobaConcreteMeters != null)
+                  setStrobaConcreteMeters(patch.strobaConcreteMeters);
+                if (patch.strobaBrickMeters != null) setStrobaBrickMeters(patch.strobaBrickMeters);
+                if (patch.strobaDrainConcreteMeters != null)
+                  setStrobaDrainConcreteMeters(patch.strobaDrainConcreteMeters);
+                if (patch.strobaDrainBrickMeters != null)
+                  setStrobaDrainBrickMeters(patch.strobaDrainBrickMeters);
+              }}
+              fieldErrors={fieldErrors}
+              fieldWarnings={fieldWarnings}
+              onMetersFieldChange={(key, value, apply) => {
+                onDecimalMetersFieldChange(
+                  key,
+                  value,
+                  MAX_STROBA_METERS,
+                  WARN_STROBA_METERS,
+                  apply
+                );
+              }}
             />
 
             <Label text="Кабель-канал 40×40, м" note="При ненулевом значении минимум 1 м к расчёту; можно ввести доли метра">

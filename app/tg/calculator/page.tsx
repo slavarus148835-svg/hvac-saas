@@ -47,6 +47,7 @@ import {
   type QuickCalculationExtra,
   type UserCustomService,
 } from "@/lib/customServices";
+import { CalculatorStrobaMeterFields } from "@/components/CalculatorStrobaMeterFields";
 import type { CalculatorPriceList, SelectedExtraServiceMap } from "@/lib/calculator";
 import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
@@ -212,12 +213,10 @@ export default function TgCalculatorPage() {
   const [carryToolFloors, setCarryToolFloors] = useState("0");
   const [carryBlockCount, setCarryBlockCount] = useState("0");
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
-  const [strobaType, setStrobaType] = useState<"none" | "brick" | "concrete">("none");
-  const [strobaMeters, setStrobaMeters] = useState("0");
-  const [strobaDrainType, setStrobaDrainType] = useState<"none" | "brick" | "concrete">(
-    "none"
-  );
-  const [strobaDrainMeters, setStrobaDrainMeters] = useState("0");
+  const [strobaConcreteMeters, setStrobaConcreteMeters] = useState("0");
+  const [strobaBrickMeters, setStrobaBrickMeters] = useState("0");
+  const [strobaDrainConcreteMeters, setStrobaDrainConcreteMeters] = useState("0");
+  const [strobaDrainBrickMeters, setStrobaDrainBrickMeters] = useState("0");
   const [cable40Meters, setCable40Meters] = useState("0");
   const [cable16Meters, setCable16Meters] = useState("0");
   const [buyAcAndRouteFromUs, setBuyAcAndRouteFromUs] = useState(false);
@@ -498,10 +497,10 @@ export default function TgCalculatorPage() {
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
-        strobaType,
-        strobaMeters,
-        strobaDrainType,
-        strobaDrainMeters,
+        strobaConcreteMeters,
+        strobaBrickMeters,
+        strobaDrainConcreteMeters,
+        strobaDrainBrickMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -534,10 +533,10 @@ export default function TgCalculatorPage() {
     carryToolFloors,
     carryBlockCount,
     manualDismantlingCost,
-    strobaType,
-    strobaMeters,
-    strobaDrainType,
-    strobaDrainMeters,
+    strobaConcreteMeters,
+    strobaBrickMeters,
+    strobaDrainConcreteMeters,
+    strobaDrainBrickMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -695,10 +694,11 @@ export default function TgCalculatorPage() {
       if (h.carryToolFloors != null) setCarryToolFloors(h.carryToolFloors);
       if (h.carryBlockCount != null) setCarryBlockCount(h.carryBlockCount);
       if (h.manualDismantlingCost != null) setManualDismantlingCost(h.manualDismantlingCost);
-      if (h.strobaType) setStrobaType(h.strobaType);
-      if (h.strobaMeters != null) setStrobaMeters(h.strobaMeters);
-      if (h.strobaDrainType) setStrobaDrainType(h.strobaDrainType);
-      if (h.strobaDrainMeters != null) setStrobaDrainMeters(h.strobaDrainMeters);
+      if (h.strobaConcreteMeters != null) setStrobaConcreteMeters(h.strobaConcreteMeters);
+      if (h.strobaBrickMeters != null) setStrobaBrickMeters(h.strobaBrickMeters);
+      if (h.strobaDrainConcreteMeters != null)
+        setStrobaDrainConcreteMeters(h.strobaDrainConcreteMeters);
+      if (h.strobaDrainBrickMeters != null) setStrobaDrainBrickMeters(h.strobaDrainBrickMeters);
       if (h.cable40Meters != null) setCable40Meters(h.cable40Meters);
       if (h.cable16Meters != null) setCable16Meters(h.cable16Meters);
       if (h.buyAcAndRouteFromUs != null) setBuyAcAndRouteFromUs(h.buyAcAndRouteFromUs);
@@ -805,10 +805,10 @@ export default function TgCalculatorPage() {
     setCarryToolFloors(f.carryToolFloors);
     setCarryBlockCount(f.carryBlockCount);
     setManualDismantlingCost(f.manualDismantlingCost);
-    setStrobaType(f.strobaType);
-    setStrobaMeters(f.strobaMeters);
-    setStrobaDrainType(f.strobaDrainType);
-    setStrobaDrainMeters(f.strobaDrainMeters);
+    setStrobaConcreteMeters(f.strobaConcreteMeters);
+    setStrobaBrickMeters(f.strobaBrickMeters);
+    setStrobaDrainConcreteMeters(f.strobaDrainConcreteMeters);
+    setStrobaDrainBrickMeters(f.strobaDrainBrickMeters);
     setCable40Meters(f.cable40Meters);
     setCable16Meters(f.cable16Meters);
     setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
@@ -842,10 +842,10 @@ export default function TgCalculatorPage() {
         carryToolFloors,
         carryBlockCount,
         manualDismantlingCost,
-        strobaType,
-        strobaMeters,
-        strobaDrainType,
-        strobaDrainMeters,
+        strobaConcreteMeters,
+        strobaBrickMeters,
+        strobaDrainConcreteMeters,
+        strobaDrainBrickMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -1082,10 +1082,10 @@ export default function TgCalculatorPage() {
       carryToolFloors,
       carryBlockCount,
       manualDismantlingCost,
-      strobaType,
-      strobaMeters,
-      strobaDrainType,
-      strobaDrainMeters,
+      strobaConcreteMeters,
+      strobaBrickMeters,
+      strobaDrainConcreteMeters,
+      strobaDrainBrickMeters,
       cable40Meters,
       cable16Meters,
       buyAcAndRouteFromUs,
@@ -1698,53 +1698,24 @@ export default function TgCalculatorPage() {
                     variant="miniapp"
                   />
 
-                  <span style={label}>Основная штроба — материал</span>
-                  <select
-                    style={input}
-                    value={strobaType}
-                    onChange={(e) =>
-                      setStrobaType(e.target.value as "none" | "brick" | "concrete")
-                    }
-                  >
-                    <option value="none">Нет</option>
-                    <option value="brick">Кирпич/газоблок</option>
-                    <option value="concrete">Бетон</option>
-                  </select>
-                  <span style={label}>Основная штроба, м</span>
-                  <input
-                    style={input}
-                    inputMode="decimal"
-                    placeholder="Метры"
-                    value={strobaMeters}
-                    onChange={(e) =>
-                      setStrobaMeters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
-                      )
-                    }
-                  />
-                  <span style={label}>Штроба под дренаж/кабель — материал</span>
-                  <select
-                    style={input}
-                    value={strobaDrainType}
-                    onChange={(e) =>
-                      setStrobaDrainType(e.target.value as "none" | "brick" | "concrete")
-                    }
-                  >
-                    <option value="none">Нет</option>
-                    <option value="brick">Кирпич/газоблок</option>
-                    <option value="concrete">Бетон</option>
-                  </select>
-                  <span style={label}>Штроба под дренаж/кабель, м</span>
-                  <input
-                    style={input}
-                    inputMode="decimal"
-                    placeholder="Метры"
-                    value={strobaDrainMeters}
-                    onChange={(e) =>
-                      setStrobaDrainMeters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
-                      )
-                    }
+                  <CalculatorStrobaMeterFields
+                    variant="miniapp"
+                    values={{
+                      strobaConcreteMeters,
+                      strobaBrickMeters,
+                      strobaDrainConcreteMeters,
+                      strobaDrainBrickMeters,
+                    }}
+                    onPatch={(patch) => {
+                      if (patch.strobaConcreteMeters != null)
+                        setStrobaConcreteMeters(patch.strobaConcreteMeters);
+                      if (patch.strobaBrickMeters != null)
+                        setStrobaBrickMeters(patch.strobaBrickMeters);
+                      if (patch.strobaDrainConcreteMeters != null)
+                        setStrobaDrainConcreteMeters(patch.strobaDrainConcreteMeters);
+                      if (patch.strobaDrainBrickMeters != null)
+                        setStrobaDrainBrickMeters(patch.strobaDrainBrickMeters);
+                    }}
                   />
 
                   <span style={label}>Кабель-канал 40×40, м, мин. 1 м</span>

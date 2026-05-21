@@ -83,11 +83,10 @@ export type CalculatorComputeInput = {
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
-  /** Основная штроба (в старых данных — единственное поле strobaType/strobaMeters). */
-  strobaType: "none" | "brick" | "concrete";
-  strobaMeters: string;
-  strobaDrainType: "none" | "brick" | "concrete";
-  strobaDrainMeters: string;
+  strobaConcreteMeters: string;
+  strobaBrickMeters: string;
+  strobaDrainConcreteMeters: string;
+  strobaDrainBrickMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;

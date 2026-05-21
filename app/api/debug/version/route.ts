@@ -26,6 +26,8 @@ export async function GET() {
       calculatorStrobaDrainV2: true,
       /** Скрытие моделей в режиме «Закладка трасс» (ожидается с dd41e02+). */
       hideAcModelsRoughInV1: true,
+      /** 4 поля штробы (бетон + кирпич) без селектора материала. */
+      calculatorStrobaDualMaterialV1: true,
       firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
       firestoreHeavyScansDisabled:
         process.env.FIRESTORE_SAFE_MODE === "1" ||

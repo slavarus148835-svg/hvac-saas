@@ -1,6 +1,8 @@
 import { chargedMetersForBilling, parseDecimalMetersInput } from "@/lib/calculator/parse";
 import { MAX_STROBA_METERS } from "@/lib/calculator/constants";
+import type { StrobaMetersFields } from "@/lib/calculator/strobaFields";
 import type { CalculatorLineItem, CalculatorPriceList } from "@/lib/calculator/types";
+
 function formatMetersQtyRu(meters: number): string {
   if (!Number.isFinite(meters) || meters <= 0) return "0";
   const x = Math.round(meters * 10) / 10;
@@ -8,24 +10,14 @@ function formatMetersQtyRu(meters: number): string {
   return String(x).replace(".", ",");
 }
 
-export type StrobaMaterialType = "none" | "brick" | "concrete";
+export type StrobaMaterial = "brick" | "concrete";
 
-export type StrobaGrooveInput = {
-  strobaType: StrobaMaterialType;
-  strobaMeters: string;
-  strobaDrainType: StrobaMaterialType;
-  strobaDrainMeters: string;
-};
+export type StrobaGrooveInput = StrobaMetersFields;
 
-const MATERIAL_LABEL: Record<Exclude<StrobaMaterialType, "none">, string> = {
+const MATERIAL_LABEL: Record<StrobaMaterial, string> = {
   brick: "кирпич/газоблок",
   concrete: "бетон",
 };
-
-export function strobaMaterialLabel(type: StrobaMaterialType): string {
-  if (type === "none") return "";
-  return MATERIAL_LABEL[type];
-}
 
 const DRAIN_STROBA_LABEL_PLACEHOLDER = "\uE000DRAIN_STROBA\uE001";
 
@@ -43,14 +35,14 @@ export function normalizeLegacyStrobaLineItemTitle(title: string): string {
   return normalizeLegacyStrobaLabelsInQuoteText(title);
 }
 
-export function normalizeStrobaMaterialType(raw: unknown): StrobaMaterialType {
-  return raw === "brick" || raw === "concrete" ? raw : "none";
+export function strobaMaterialLabel(material: StrobaMaterial): string {
+  return MATERIAL_LABEL[material];
 }
 
 export function strobaPricePerMeter(
   prices: CalculatorPriceList,
   kind: "main" | "drain",
-  material: Exclude<StrobaMaterialType, "none">,
+  material: StrobaMaterial,
   isBigCapacity: boolean
 ): number {
   if (kind === "main") {
@@ -65,31 +57,64 @@ export function strobaPricePerMeter(
   return isBigCapacity ? prices.stroba_drain_concrete_big : prices.stroba_drain_concrete_small;
 }
 
+type StrobaBillingLane = {
+  kind: "main" | "drain";
+  material: StrobaMaterial;
+  raw: number;
+};
+
 /**
- * Минимум 1 м на комнату по сумме метров всех штроб; распределение по типам пропорционально вводу.
+ * Минимум 1 м на комнату по сумме всех заполненных полей;
+ * заряд распределяется пропорционально raw по каждому полю.
  */
-export function allocateChargedStrobaMeters(
-  mainRaw: number,
-  drainRaw: number
-): { mainCharged: number; drainCharged: number; totalCharged: number } {
-  const sumRaw = mainRaw + drainRaw;
-  if (sumRaw <= 0) {
-    return { mainCharged: 0, drainCharged: 0, totalCharged: 0 };
+export function allocateChargedStrobaMetersByLanes(
+  lanes: StrobaBillingLane[]
+): { lanes: (StrobaBillingLane & { charged: number })[]; totalCharged: number } {
+  const active = lanes.filter((l) => l.raw > 0);
+  if (active.length === 0) {
+    return { lanes: [], totalCharged: 0 };
   }
+  const sumRaw = active.reduce((s, l) => s + l.raw, 0);
   const totalCharged = chargedMetersForBilling(sumRaw);
-  if (mainRaw <= 0) {
-    return { mainCharged: 0, drainCharged: totalCharged, totalCharged };
+  const chargedList = active.map((l) =>
+    Math.round((totalCharged * (l.raw / sumRaw)) * 100) / 100
+  );
+  let drift = Math.round((totalCharged - chargedList.reduce((s, c) => s + c, 0)) * 100) / 100;
+  for (let i = chargedList.length - 1; i >= 0 && Math.abs(drift) > 1e-9; i--) {
+    chargedList[i] = Math.round((chargedList[i] + drift) * 100) / 100;
+    drift = Math.round((totalCharged - chargedList.reduce((s, c) => s + c, 0)) * 100) / 100;
   }
-  if (drainRaw <= 0) {
-    return { mainCharged: totalCharged, drainCharged: 0, totalCharged };
-  }
-  const mainCharged = Math.round((totalCharged * (mainRaw / sumRaw)) * 100) / 100;
-  const drainCharged = Math.round((totalCharged - mainCharged) * 100) / 100;
-  return { mainCharged, drainCharged, totalCharged };
+  const lanesOut = active.map((l, i) => ({ ...l, charged: chargedList[i] ?? 0 }));
+  return { lanes: lanesOut, totalCharged };
 }
 
 const STROBA_MIN_NOTE =
   "Сумма штроб в комнате: меньше 1 м → в расчёт 1 м; от 1 м — по фактической сумме метров";
+
+function parseStrobaLanes(input: StrobaGrooveInput): StrobaBillingLane[] {
+  return [
+    {
+      kind: "main",
+      material: "concrete",
+      raw: parseDecimalMetersInput(input.strobaConcreteMeters, MAX_STROBA_METERS),
+    },
+    {
+      kind: "main",
+      material: "brick",
+      raw: parseDecimalMetersInput(input.strobaBrickMeters, MAX_STROBA_METERS),
+    },
+    {
+      kind: "drain",
+      material: "concrete",
+      raw: parseDecimalMetersInput(input.strobaDrainConcreteMeters, MAX_STROBA_METERS),
+    },
+    {
+      kind: "drain",
+      material: "brick",
+      raw: parseDecimalMetersInput(input.strobaDrainBrickMeters, MAX_STROBA_METERS),
+    },
+  ];
+}
 
 export function appendStrobaLineItems(
   items: CalculatorLineItem[],
@@ -98,35 +123,17 @@ export function appendStrobaLineItems(
   isBigCapacity: boolean,
   fmt: (n: number) => string
 ): void {
-  const mainType = input.strobaType;
-  const drainType = input.strobaDrainType;
-  const mainRaw =
-    mainType !== "none"
-      ? parseDecimalMetersInput(input.strobaMeters, MAX_STROBA_METERS)
-      : 0;
-  const drainRaw =
-    drainType !== "none"
-      ? parseDecimalMetersInput(input.strobaDrainMeters, MAX_STROBA_METERS)
-      : 0;
+  const { lanes } = allocateChargedStrobaMetersByLanes(parseStrobaLanes(input));
 
-  const { mainCharged, drainCharged } = allocateChargedStrobaMeters(mainRaw, drainRaw);
-
-  if (mainType !== "none" && mainCharged > 0) {
-    const price = strobaPricePerMeter(prices, "main", mainType, isBigCapacity);
-    const mLabel = formatMetersQtyRu(mainCharged);
+  for (const lane of lanes) {
+    if (lane.charged <= 0) continue;
+    const price = strobaPricePerMeter(prices, lane.kind, lane.material, isBigCapacity);
+    const mLabel = formatMetersQtyRu(lane.charged);
+    const prefix =
+      lane.kind === "main" ? "Основная штроба" : "Штроба под дренаж/кабель";
     items.push({
-      title: `Основная штроба, ${strobaMaterialLabel(mainType)} × ${mLabel} м`,
-      amount: Math.round(mainCharged * price),
-      note: `Цена за 1 м: ${fmt(price)}. ${STROBA_MIN_NOTE}`,
-    });
-  }
-
-  if (drainType !== "none" && drainCharged > 0) {
-    const price = strobaPricePerMeter(prices, "drain", drainType, isBigCapacity);
-    const mLabel = formatMetersQtyRu(drainCharged);
-    items.push({
-      title: `Штроба под дренаж/кабель, ${strobaMaterialLabel(drainType)} × ${mLabel} м`,
-      amount: Math.round(drainCharged * price),
+      title: `${prefix}, ${strobaMaterialLabel(lane.material)} × ${mLabel} м`,
+      amount: Math.round(lane.charged * price),
       note: `Цена за 1 м: ${fmt(price)}. ${STROBA_MIN_NOTE}`,
     });
   }

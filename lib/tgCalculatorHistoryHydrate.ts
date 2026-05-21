@@ -6,6 +6,7 @@ import {
   effectiveSelectedAcModelIds,
   normalizeRoughInRouteCapacity,
 } from "@/lib/calculator/roughInMode";
+import { normalizeStrobaMetersFromRaw } from "@/lib/calculator/strobaFields";
 
 /** Поля формы /tg/calculator, восстанавливаемые из calculationHistory. */
 export type TgCalculatorHydratedFields = {
@@ -21,10 +22,10 @@ export type TgCalculatorHydratedFields = {
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
-  strobaType: "none" | "brick" | "concrete";
-  strobaMeters: string;
-  strobaDrainType: "none" | "brick" | "concrete";
-  strobaDrainMeters: string;
+  strobaConcreteMeters: string;
+  strobaBrickMeters: string;
+  strobaDrainConcreteMeters: string;
+  strobaDrainBrickMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;
@@ -54,9 +55,7 @@ export function hydrateTgCalculatorFromHistoryDoc(
 
   const mountType = data.mountType === "existing" ? "existing" : "standard";
   const baseWallType = data.baseWallType === "arm" ? "arm" : "normal";
-  const strobaRaw = data.strobaType;
-  const strobaType =
-    strobaRaw === "brick" || strobaRaw === "concrete" ? strobaRaw : "none";
+  const stroba = normalizeStrobaMetersFromRaw(data);
 
   const fromList = Array.isArray(data.selectedAcModelIds)
     ? (data.selectedAcModelIds as unknown[]).filter((x) => typeof x === "string")
@@ -107,14 +106,7 @@ export function hydrateTgCalculatorFromHistoryDoc(
     carryBlockCount: typeof data.carryBlockCount === "string" ? data.carryBlockCount : "0",
     manualDismantlingCost:
       typeof data.manualDismantlingCost === "string" ? data.manualDismantlingCost : "0",
-    strobaType,
-    strobaMeters: typeof data.strobaMeters === "string" ? data.strobaMeters : "0",
-    strobaDrainType:
-      data.strobaDrainType === "brick" || data.strobaDrainType === "concrete"
-        ? data.strobaDrainType
-        : "none",
-    strobaDrainMeters:
-      typeof data.strobaDrainMeters === "string" ? data.strobaDrainMeters : "0",
+    ...stroba,
     cable40Meters: typeof data.cable40Meters === "string" ? data.cable40Meters : "0",
     cable16Meters: typeof data.cable16Meters === "string" ? data.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(data.buyAcAndRouteFromUs),

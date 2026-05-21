@@ -240,10 +240,10 @@ export async function POST(req: Request) {
       carryBlockCount: computeInput.carryBlockCount,
       manualDismantlingCost: computeInput.manualDismantlingCost,
 
-      strobaType: computeInput.strobaType,
-      strobaMeters: computeInput.strobaMeters,
-      strobaDrainType: computeInput.strobaDrainType,
-      strobaDrainMeters: computeInput.strobaDrainMeters,
+      strobaConcreteMeters: computeInput.strobaConcreteMeters,
+      strobaBrickMeters: computeInput.strobaBrickMeters,
+      strobaDrainConcreteMeters: computeInput.strobaDrainConcreteMeters,
+      strobaDrainBrickMeters: computeInput.strobaDrainBrickMeters,
       cable40Meters: computeInput.cable40Meters,
       cable16Meters: computeInput.cable16Meters,
 

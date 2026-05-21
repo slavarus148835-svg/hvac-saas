@@ -4,6 +4,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { CalculatorHoleFieldsSection } from "@/components/CalculatorHoleFieldsSection";
 import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRoughInRouteCapacitySelect";
+import { CalculatorStrobaMeterFields } from "@/components/CalculatorStrobaMeterFields";
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import {
   newQuickExtraId,
@@ -465,69 +466,16 @@ export function RoomFormBlock({
         )}
       />
 
-      <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", margin: "16px 0 8px" }}>
-        Штробы и кабель-каналы
-      </div>
-
-      <Label text="Основная штроба — материал">
-        <select
-          value={draft.strobaType}
-          onChange={(e) =>
-            onPatch({ strobaType: e.target.value as "none" | "brick" | "concrete" })
-          }
-          style={inputStyle}
-        >
-          <option value="none">Без основной штробы</option>
-          <option value="brick">Кирпич / газоблок</option>
-          <option value="concrete">Бетон</option>
-        </select>
-      </Label>
-
-      <Label
-        text="Основная штроба, м"
-        note="Мин. 1 м на комнату по сумме всех штроб (основная + дренаж/кабель)"
-      >
-        <input
-          value={draft.strobaMeters}
-          onChange={(e) =>
-            onPatch({
-              strobaMeters: sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS),
-            })
-          }
-          style={inputStyle}
-          inputMode="decimal"
-        />
-      </Label>
-
-      <Label text="Штроба под дренаж/кабель — материал">
-        <select
-          value={draft.strobaDrainType}
-          onChange={(e) =>
-            onPatch({ strobaDrainType: e.target.value as "none" | "brick" | "concrete" })
-          }
-          style={inputStyle}
-        >
-          <option value="none">Без штробы под дренаж/кабель</option>
-          <option value="brick">Кирпич / газоблок</option>
-          <option value="concrete">Бетон</option>
-        </select>
-      </Label>
-
-      <Label text="Штроба под дренаж/кабель, м">
-        <input
-          value={draft.strobaDrainMeters}
-          onChange={(e) =>
-            onPatch({
-              strobaDrainMeters: sanitizeDecimalMetersString(
-                e.target.value,
-                MAX_STROBA_METERS
-              ),
-            })
-          }
-          style={inputStyle}
-          inputMode="decimal"
-        />
-      </Label>
+      <CalculatorStrobaMeterFields
+        variant="web"
+        values={{
+          strobaConcreteMeters: draft.strobaConcreteMeters,
+          strobaBrickMeters: draft.strobaBrickMeters,
+          strobaDrainConcreteMeters: draft.strobaDrainConcreteMeters,
+          strobaDrainBrickMeters: draft.strobaDrainBrickMeters,
+        }}
+        onPatch={onPatch}
+      />
 
       <Label text="Кабель-канал 40×40, м">
         <input

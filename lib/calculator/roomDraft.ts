@@ -5,6 +5,7 @@ import {
   effectiveSelectedAcModelIds,
   normalizeRoughInRouteCapacity,
 } from "./roughInMode";
+import { EMPTY_STROBA_METERS, normalizeStrobaMetersFromRaw } from "./strobaFields";
 
 /** Локальное состояние одной комнаты (без глобальных полей прайса). */
 export type CalculatorRoomDraft = {
@@ -35,10 +36,7 @@ export function createDefaultRoomDraft(roomLabel: string): CalculatorRoomDraft {
     carryToolFloors: "0",
     carryBlockCount: "0",
     manualDismantlingCost: "0",
-    strobaType: "none",
-    strobaMeters: "0",
-    strobaDrainType: "none",
-    strobaDrainMeters: "0",
+    ...EMPTY_STROBA_METERS,
     cable40Meters: "0",
     cable16Meters: "0",
     buyAcAndRouteFromUs: false,
@@ -87,10 +85,10 @@ export function flatCalculatorStateToRoomDraft(params: {
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
-  strobaType: "none" | "brick" | "concrete";
-  strobaMeters: string;
-  strobaDrainType: "none" | "brick" | "concrete";
-  strobaDrainMeters: string;
+  strobaConcreteMeters: string;
+  strobaBrickMeters: string;
+  strobaDrainConcreteMeters: string;
+  strobaDrainBrickMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;
@@ -104,6 +102,7 @@ export function flatCalculatorStateToRoomDraft(params: {
   selectedExtraServices: SelectedExtraServiceMap;
   quickCalculationExtras: QuickCalculationExtra[];
 }): CalculatorRoomDraft {
+  const stroba = normalizeStrobaMetersFromRaw(params as unknown as Record<string, unknown>);
   return {
     id: newRoomId(),
     roomName: params.roomName,
@@ -119,10 +118,7 @@ export function flatCalculatorStateToRoomDraft(params: {
     carryToolFloors: params.carryToolFloors,
     carryBlockCount: params.carryBlockCount,
     manualDismantlingCost: params.manualDismantlingCost,
-    strobaType: params.strobaType,
-    strobaMeters: params.strobaMeters,
-    strobaDrainType: params.strobaDrainType,
-    strobaDrainMeters: params.strobaDrainMeters,
+    ...stroba,
     cable40Meters: params.cable40Meters,
     cable16Meters: params.cable16Meters,
     buyAcAndRouteFromUs: params.buyAcAndRouteFromUs,
@@ -169,6 +165,7 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
       : typeof input.routeCapacity === "string"
         ? input.routeCapacity
         : "12";
+  const stroba = normalizeStrobaMetersFromRaw(input);
   return {
     id,
     roomName,
@@ -205,15 +202,7 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
       typeof input.manualDismantlingCost === "string"
         ? input.manualDismantlingCost
         : String(input.manualDismantlingCost ?? "0"),
-    strobaType:
-      input.strobaType === "brick" || input.strobaType === "concrete" ? input.strobaType : "none",
-    strobaMeters: typeof input.strobaMeters === "string" ? input.strobaMeters : "0",
-    strobaDrainType:
-      input.strobaDrainType === "brick" || input.strobaDrainType === "concrete"
-        ? input.strobaDrainType
-        : "none",
-    strobaDrainMeters:
-      typeof input.strobaDrainMeters === "string" ? input.strobaDrainMeters : "0",
+    ...stroba,
     cable40Meters: typeof input.cable40Meters === "string" ? input.cable40Meters : "0",
     cable16Meters: typeof input.cable16Meters === "string" ? input.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(input.buyAcAndRouteFromUs),
