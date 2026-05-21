@@ -48,7 +48,8 @@ import { CalculatorRoughInRouteCapacitySelect } from "@/components/CalculatorRou
 import { CalculatorTraceOnlyModeCard } from "@/components/CalculatorTraceOnlyModeCard";
 import { TgCalculatorRoomCardBound } from "@/app/tg/calculator/TgCalculatorRoomCard";
 import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
-import { buildTelegramShareUrl, buildWhatsAppShareUrl } from "@/lib/shareQuote";
+import { buildWhatsAppShareUrl } from "@/lib/shareQuote";
+import { copyQuoteThenOpenTelegramClient } from "@/lib/telegramClientContact";
 import {
   buildTelegramMiniAppClientQuoteText,
   mapMiniAppQuoteItemTitle,
@@ -208,6 +209,10 @@ export default function TgCalculatorPage() {
   const [manualDismantlingCost, setManualDismantlingCost] = useState("0");
   const [strobaType, setStrobaType] = useState<"none" | "brick" | "concrete">("none");
   const [strobaMeters, setStrobaMeters] = useState("0");
+  const [strobaDrainType, setStrobaDrainType] = useState<"none" | "brick" | "concrete">(
+    "none"
+  );
+  const [strobaDrainMeters, setStrobaDrainMeters] = useState("0");
   const [cable40Meters, setCable40Meters] = useState("0");
   const [cable16Meters, setCable16Meters] = useState("0");
   const [buyAcAndRouteFromUs, setBuyAcAndRouteFromUs] = useState(false);
@@ -472,6 +477,8 @@ export default function TgCalculatorPage() {
         manualDismantlingCost,
         strobaType,
         strobaMeters,
+        strobaDrainType,
+        strobaDrainMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -506,6 +513,8 @@ export default function TgCalculatorPage() {
     manualDismantlingCost,
     strobaType,
     strobaMeters,
+    strobaDrainType,
+    strobaDrainMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -662,6 +671,8 @@ export default function TgCalculatorPage() {
       if (h.manualDismantlingCost != null) setManualDismantlingCost(h.manualDismantlingCost);
       if (h.strobaType) setStrobaType(h.strobaType);
       if (h.strobaMeters != null) setStrobaMeters(h.strobaMeters);
+      if (h.strobaDrainType) setStrobaDrainType(h.strobaDrainType);
+      if (h.strobaDrainMeters != null) setStrobaDrainMeters(h.strobaDrainMeters);
       if (h.cable40Meters != null) setCable40Meters(h.cable40Meters);
       if (h.cable16Meters != null) setCable16Meters(h.cable16Meters);
       if (h.buyAcAndRouteFromUs != null) setBuyAcAndRouteFromUs(h.buyAcAndRouteFromUs);
@@ -761,6 +772,8 @@ export default function TgCalculatorPage() {
     setManualDismantlingCost(f.manualDismantlingCost);
     setStrobaType(f.strobaType);
     setStrobaMeters(f.strobaMeters);
+    setStrobaDrainType(f.strobaDrainType);
+    setStrobaDrainMeters(f.strobaDrainMeters);
     setCable40Meters(f.cable40Meters);
     setCable16Meters(f.cable16Meters);
     setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
@@ -796,6 +809,8 @@ export default function TgCalculatorPage() {
         manualDismantlingCost,
         strobaType,
         strobaMeters,
+        strobaDrainType,
+        strobaDrainMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -1034,6 +1049,8 @@ export default function TgCalculatorPage() {
       manualDismantlingCost,
       strobaType,
       strobaMeters,
+      strobaDrainType,
+      strobaDrainMeters,
       cable40Meters,
       cable16Meters,
       buyAcAndRouteFromUs,
@@ -1082,26 +1099,23 @@ export default function TgCalculatorPage() {
     window.setTimeout(() => setSaveToast(null), 4000);
   }
 
-  function shareTelegramNative() {
+  async function shareTelegramNative() {
     tgHapticButtonTap();
     const wa = window.Telegram?.WebApp;
-    const body = publicClientQuoteText;
-    const shareUrl = buildTelegramShareUrl(body);
-    try {
-      wa?.switchInlineQuery?.(body.slice(0, 200), ["users", "groups", "channels"]);
-    } catch {
-      /* */
+    const result = await copyQuoteThenOpenTelegramClient({
+      clientContact: clientContact.trim(),
+      quoteText: publicClientQuoteText,
+      telegramWebApp: wa ?? null,
+    });
+    if (result.kind === "opened_username") {
+      tgHapticNotification("success");
+    } else if (result.kind === "phone_only") {
+      tgHapticNotification("warning");
+    } else {
+      tgHapticNotification("error");
     }
-    try {
-      wa?.openTelegramLink?.(shareUrl);
-    } catch {
-      /* */
-    }
-    try {
-      wa?.openLink?.(shareUrl);
-    } catch {
-      window.open(shareUrl, "_blank");
-    }
+    setSaveToast(result.userMessage);
+    window.setTimeout(() => setSaveToast(null), 5000);
   }
 
   function scrollToTotalBlock() {
@@ -1647,7 +1661,7 @@ export default function TgCalculatorPage() {
                     variant="miniapp"
                   />
 
-                  <span style={label}>Штроба, м, мин. 1 м</span>
+                  <span style={label}>Основная штроба — материал</span>
                   <select
                     style={input}
                     value={strobaType}
@@ -1656,16 +1670,41 @@ export default function TgCalculatorPage() {
                     }
                   >
                     <option value="none">Нет</option>
-                    <option value="brick">Кирпич</option>
+                    <option value="brick">Кирпич/газоблок</option>
                     <option value="concrete">Бетон</option>
                   </select>
+                  <span style={label}>Основная штроба, м</span>
                   <input
                     style={input}
                     inputMode="decimal"
-                    placeholder="Метры штробления"
+                    placeholder="Метры"
                     value={strobaMeters}
                     onChange={(e) =>
                       setStrobaMeters(
+                        sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
+                      )
+                    }
+                  />
+                  <span style={label}>Штроба под дренаж/кабель — материал</span>
+                  <select
+                    style={input}
+                    value={strobaDrainType}
+                    onChange={(e) =>
+                      setStrobaDrainType(e.target.value as "none" | "brick" | "concrete")
+                    }
+                  >
+                    <option value="none">Нет</option>
+                    <option value="brick">Кирпич/газоблок</option>
+                    <option value="concrete">Бетон</option>
+                  </select>
+                  <span style={label}>Штроба под дренаж/кабель, м</span>
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    placeholder="Метры"
+                    value={strobaDrainMeters}
+                    onChange={(e) =>
+                      setStrobaDrainMeters(
                         sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS)
                       )
                     }

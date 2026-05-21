@@ -34,6 +34,10 @@ export type CalculatorPriceList = {
   stroba_brick_big: number;
   stroba_concrete_small: number;
   stroba_concrete_big: number;
+  stroba_drain_brick_small: number;
+  stroba_drain_brick_big: number;
+  stroba_drain_concrete_small: number;
+  stroba_drain_concrete_big: number;
 
   cable40: number;
   cable16: number;
@@ -79,8 +83,11 @@ export type CalculatorComputeInput = {
   carryToolFloors: string;
   carryBlockCount: string;
   manualDismantlingCost: string;
+  /** Основная штроба (в старых данных — единственное поле strobaType/strobaMeters). */
   strobaType: "none" | "brick" | "concrete";
   strobaMeters: string;
+  strobaDrainType: "none" | "brick" | "concrete";
+  strobaDrainMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;

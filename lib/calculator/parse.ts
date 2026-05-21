@@ -138,6 +138,12 @@ export function normalizeCalculatorComputeInput(
       ? raw.strobaType
       : "none";
   const strobaMeters = typeof raw.strobaMeters === "string" ? raw.strobaMeters : "0";
+  const strobaDrainType =
+    raw.strobaDrainType === "brick" || raw.strobaDrainType === "concrete"
+      ? raw.strobaDrainType
+      : "none";
+  const strobaDrainMeters =
+    typeof raw.strobaDrainMeters === "string" ? raw.strobaDrainMeters : "0";
   const cable40Meters = typeof raw.cable40Meters === "string" ? raw.cable40Meters : "0";
   const cable16Meters = typeof raw.cable16Meters === "string" ? raw.cable16Meters : "0";
   const percentDiscount =
@@ -169,6 +175,9 @@ export function normalizeCalculatorComputeInput(
       sanitizeNonNegativeMoneyString(manualDismantlingCost, MAX_MONEY) || "0",
     strobaType,
     strobaMeters: sanitizeDecimalMetersString(strobaMeters, MAX_STROBA_METERS) || "0",
+    strobaDrainType,
+    strobaDrainMeters:
+      sanitizeDecimalMetersString(strobaDrainMeters, MAX_STROBA_METERS) || "0",
     cable40Meters: sanitizeDecimalMetersString(cable40Meters, MAX_CABLE_METERS) || "0",
     cable16Meters: sanitizeDecimalMetersString(cable16Meters, MAX_CABLE_METERS) || "0",
     buyAcAndRouteFromUs: Boolean(raw.buyAcAndRouteFromUs),
@@ -213,6 +222,8 @@ type CalculatorComputeInputLoose = {
   manualDismantlingCost?: unknown;
   strobaType?: unknown;
   strobaMeters?: unknown;
+  strobaDrainType?: unknown;
+  strobaDrainMeters?: unknown;
   cable40Meters?: unknown;
   cable16Meters?: unknown;
   buyAcAndRouteFromUs?: unknown;

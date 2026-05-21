@@ -107,6 +107,8 @@ type HistoryCalcDoc = {
 
   strobaType?: "none" | "brick" | "concrete";
   strobaMeters?: string;
+  strobaDrainType?: "none" | "brick" | "concrete";
+  strobaDrainMeters?: string;
   cable40Meters?: string;
   cable16Meters?: string;
 
@@ -186,6 +188,12 @@ function draftFromSavedHistoryRoom(entry: {
     strobaType:
       inp.strobaType === "brick" || inp.strobaType === "concrete" ? inp.strobaType : "none",
     strobaMeters: typeof inp.strobaMeters === "string" ? inp.strobaMeters : "0",
+    strobaDrainType:
+      inp.strobaDrainType === "brick" || inp.strobaDrainType === "concrete"
+        ? inp.strobaDrainType
+        : "none",
+    strobaDrainMeters:
+      typeof inp.strobaDrainMeters === "string" ? inp.strobaDrainMeters : "0",
     cable40Meters: typeof inp.cable40Meters === "string" ? inp.cable40Meters : "0",
     cable16Meters: typeof inp.cable16Meters === "string" ? inp.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(inp.buyAcAndRouteFromUs),
@@ -228,10 +236,6 @@ function normalizeWhatsAppPhone(value: string) {
   return digits;
 }
 
-function normalizeUsername(value: string) {
-  return (value || "").replace(/^@/, "").trim();
-}
-
 function isMobileDevice() {
   if (typeof navigator === "undefined") return false;
   return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent);
@@ -265,6 +269,10 @@ function CalculatorPage() {
     "none"
   );
   const [strobaMeters, setStrobaMeters] = useState("0");
+  const [strobaDrainType, setStrobaDrainType] = useState<"none" | "brick" | "concrete">(
+    "none"
+  );
+  const [strobaDrainMeters, setStrobaDrainMeters] = useState("0");
   const [cable40Meters, setCable40Meters] = useState("0");
   const [cable16Meters, setCable16Meters] = useState("0");
 
@@ -470,6 +478,8 @@ function CalculatorPage() {
 
             setStrobaType(data.strobaType || "none");
             setStrobaMeters(data.strobaMeters || "0");
+            setStrobaDrainType(data.strobaDrainType || "none");
+            setStrobaDrainMeters(data.strobaDrainMeters || "0");
             setCable40Meters(data.cable40Meters || "0");
             setCable16Meters(data.cable16Meters || "0");
 
@@ -668,6 +678,8 @@ function CalculatorPage() {
       manualDismantlingCost,
       strobaType,
       strobaMeters,
+      strobaDrainType,
+      strobaDrainMeters,
       cable40Meters,
       cable16Meters,
       buyAcAndRouteFromUs,
@@ -700,6 +712,8 @@ function CalculatorPage() {
     manualDismantlingCost,
     strobaType,
     strobaMeters,
+    strobaDrainType,
+    strobaDrainMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -784,6 +798,8 @@ function CalculatorPage() {
             manualDismantlingCost,
             strobaType,
             strobaMeters,
+            strobaDrainType,
+            strobaDrainMeters,
             cable40Meters,
             cable16Meters,
             buyAcAndRouteFromUs,
@@ -821,6 +837,8 @@ function CalculatorPage() {
 
       strobaType: scalar.strobaType,
       strobaMeters: scalar.strobaMeters,
+      strobaDrainType: scalar.strobaDrainType,
+      strobaDrainMeters: scalar.strobaDrainMeters,
       cable40Meters: scalar.cable40Meters,
       cable16Meters: scalar.cable16Meters,
 
@@ -872,6 +890,8 @@ function CalculatorPage() {
     manualDismantlingCost,
     strobaType,
     strobaMeters,
+    strobaDrainType,
+    strobaDrainMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -966,6 +986,8 @@ function CalculatorPage() {
     manualDismantlingCost,
     strobaType,
     strobaMeters,
+    strobaDrainType,
+    strobaDrainMeters,
     cable40Meters,
     cable16Meters,
     buyAcAndRouteFromUs,
@@ -1122,49 +1144,18 @@ function CalculatorPage() {
     }
   }
 
-  function sendToTelegram() {
-    const raw = clientContact.trim();
-
-    if (!raw) {
-      alert("Укажите номер телефона или username клиента");
+  async function sendToTelegram() {
+    const { copyQuoteThenOpenTelegramClient } = await import("@/lib/telegramClientContact");
+    const result = await copyQuoteThenOpenTelegramClient({
+      clientContact: clientContact.trim(),
+      quoteText: shortenForMessenger(publicFinalClientText),
+      isMobile: isMobileDevice(),
+    });
+    if (result.kind === "opened_username" || result.kind === "phone_only") {
+      showToast(result.userMessage);
       return;
     }
-
-    const body = shortenForMessenger(publicFinalClientText);
-    const encoded = encodeURIComponent(body);
-    const phone = normalizeWhatsAppPhone(raw);
-    const username = normalizeUsername(raw);
-    const safeUser = username.replace(/[^a-zA-Z0-9_]/g, "");
-    const mobile = isMobileDevice();
-    const looksUsername =
-      raw.trim().startsWith("@") || (safeUser.length >= 3 && /[a-zA-Z_]/.test(safeUser));
-
-    if (looksUsername && safeUser.length >= 3) {
-      const appUrl = `tg://resolve?domain=${safeUser}&text=${encoded}`;
-      const webUrl = `https://t.me/${safeUser}?text=${encoded}`;
-      if (mobile) {
-        window.location.href = appUrl;
-      } else {
-        window.open(webUrl, "_blank", "noopener,noreferrer");
-      }
-      return;
-    }
-
-    if (phone.length >= 10) {
-      // Для номера без username Telegram не всегда позволяет адресно открыть чат,
-      // поэтому на мобильных открываем compose в приложении с текстом.
-      const appUrl = `tg://msg?text=${encoded}`;
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const webFallback = `https://t.me/share/url?url=${encodeURIComponent(origin || " ")}&text=${encoded}`;
-      if (mobile) {
-        window.location.href = appUrl;
-      } else {
-        window.open(webFallback, "_blank", "noopener,noreferrer");
-      }
-      return;
-    }
-
-    alert("Для Telegram укажите username вида @name или номер телефона (цифры, с кодом страны)");
+    alert(result.userMessage);
   }
 
   function addSelectedModelToCalculation() {
@@ -1276,6 +1267,8 @@ function CalculatorPage() {
         manualDismantlingCost,
         strobaType,
         strobaMeters,
+        strobaDrainType,
+        strobaDrainMeters,
         cable40Meters,
         cable16Meters,
         buyAcAndRouteFromUs,
@@ -1311,6 +1304,8 @@ function CalculatorPage() {
       setManualDismantlingCost(f.manualDismantlingCost);
       setStrobaType(f.strobaType);
       setStrobaMeters(f.strobaMeters);
+      setStrobaDrainType(f.strobaDrainType);
+      setStrobaDrainMeters(f.strobaDrainMeters);
       setCable40Meters(f.cable40Meters);
       setCable16Meters(f.cable16Meters);
       setBuyAcAndRouteFromUs(f.buyAcAndRouteFromUs);
@@ -1746,7 +1741,7 @@ function CalculatorPage() {
 
             <div style={{ ...quickOptionsTitleStyle, marginTop: 0 }}>Штроба и кабель-каналы</div>
 
-            <Label text="Штробление" note="Выбери тип материала">
+            <Label text="Основная штроба — материал" note="Кирпич/газоблок или бетон">
               <select
                 value={strobaType}
                 onChange={(e) =>
@@ -1754,15 +1749,15 @@ function CalculatorPage() {
                 }
                 style={inputStyle}
               >
-                <option value="none">Без штробы</option>
-                <option value="brick">Кирпич / газоблок / газобетон</option>
+                <option value="none">Без основной штробы</option>
+                <option value="brick">Кирпич / газоблок</option>
                 <option value="concrete">Бетон</option>
               </select>
             </Label>
 
             <Label
-              text="Штроба, м"
-              note="Можно ввести доли метра. Если больше 0 и меньше 1 м — в расчёт идёт 1 м; от 1 м — по факту без округления вверх до целого"
+              text="Основная штроба, м"
+              note="Мин. 1 м на комнату по сумме основной и дренажной штроб"
             >
             <input
                 value={strobaMeters}
@@ -1780,6 +1775,41 @@ function CalculatorPage() {
             />
           </Label>
             <FieldMessage error={fieldErrors.strobaMeters} warning={fieldWarnings.strobaMeters} />
+
+            <Label text="Штроба под дренаж/кабель — материал">
+              <select
+                value={strobaDrainType}
+                onChange={(e) =>
+                  setStrobaDrainType(e.target.value as "none" | "brick" | "concrete")
+                }
+                style={inputStyle}
+              >
+                <option value="none">Без штробы под дренаж/кабель</option>
+                <option value="brick">Кирпич / газоблок</option>
+                <option value="concrete">Бетон</option>
+              </select>
+            </Label>
+
+            <Label text="Штроба под дренаж/кабель, м">
+            <input
+                value={strobaDrainMeters}
+                onChange={(e) =>
+                  onDecimalMetersFieldChange(
+                    "strobaDrainMeters",
+                    e.target.value,
+                    MAX_STROBA_METERS,
+                    WARN_STROBA_METERS,
+                    setStrobaDrainMeters
+                  )
+                }
+              style={inputStyle}
+              inputMode="decimal"
+            />
+          </Label>
+            <FieldMessage
+              error={fieldErrors.strobaDrainMeters}
+              warning={fieldWarnings.strobaDrainMeters}
+            />
 
             <Label text="Кабель-канал 40×40, м" note="При ненулевом значении минимум 1 м к расчёту; можно ввести доли метра">
             <input

@@ -19,6 +19,7 @@ import {
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
 } from "./parse";
+import { appendStrobaLineItems } from "./strobaBilling";
 import {
   clientQuoteItemsWithRoughInHeader,
   effectiveGiftRouteMeters,
@@ -82,7 +83,6 @@ export function computeCalculatorLineItems(
   const manualDismantlingCostNum = Number(
     sanitizeNonNegativeMoneyString(input.manualDismantlingCost, MAX_MONEY) || 0
   );
-  const strobaMetersNum = parseDecimalMetersInput(input.strobaMeters, MAX_STROBA_METERS);
   const cable40Raw = parseDecimalMetersInput(input.cable40Meters, MAX_CABLE_METERS);
   const cable16Raw = parseDecimalMetersInput(input.cable16Meters, MAX_CABLE_METERS);
   const chargedCable40Meters = chargedMetersForBilling(cable40Raw);
@@ -95,8 +95,6 @@ export function computeCalculatorLineItems(
   const routePaidMeters = Math.max(0, chargedRouteMeters - giftM);
 
   const chargedToolFloors = chargedFloorsFromSecond(carryToolFloorsNum);
-  const chargedStrobaMeters = chargedMetersForBilling(strobaMetersNum);
-
   const roughIn = isCalculatorRoughInCapacity(input.capacity);
   const mountTierKey = calculatorCapacityTierKeyForPricelist(input.capacity);
   const routeTierKey = routeCapacityTierKeyForPricelist(input);
@@ -112,18 +110,6 @@ export function computeCalculatorLineItems(
   );
 
   const isBigCapacity = routeTierKey === "30" || routeTierKey === "36";
-
-  let strobaPricePerMeter = 0;
-  if (input.strobaType === "brick") {
-    strobaPricePerMeter = isBigCapacity
-      ? prices.stroba_brick_big
-      : prices.stroba_brick_small;
-  }
-  if (input.strobaType === "concrete") {
-    strobaPricePerMeter = isBigCapacity
-      ? prices.stroba_concrete_big
-      : prices.stroba_concrete_small;
-  }
 
   const items: CalculatorLineItem[] = [];
 
@@ -214,13 +200,7 @@ export function computeCalculatorLineItems(
     }
   }
 
-  if (input.strobaType !== "none" && chargedStrobaMeters > 0) {
-    items.push({
-      title: `Штробление × ${chargedStrobaMeters} м`,
-      amount: chargedStrobaMeters * strobaPricePerMeter,
-      note: `Цена за 1 м: ${fmt(strobaPricePerMeter)}. От 0 до 1 м (не включая 1) — в расчёт 1 м; от 1 м — по введённым метрам`,
-    });
-  }
+  appendStrobaLineItems(items, prices, input, isBigCapacity, fmt);
 
   if (chargedCable40Meters > 0) {
     const mLabel = formatMetersQtyRu(chargedCable40Meters);

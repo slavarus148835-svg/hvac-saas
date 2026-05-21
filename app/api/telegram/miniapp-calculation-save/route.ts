@@ -241,6 +241,8 @@ export async function POST(req: Request) {
 
       strobaType: computeInput.strobaType,
       strobaMeters: computeInput.strobaMeters,
+      strobaDrainType: computeInput.strobaDrainType,
+      strobaDrainMeters: computeInput.strobaDrainMeters,
       cable40Meters: computeInput.cable40Meters,
       cable16Meters: computeInput.cable16Meters,
 

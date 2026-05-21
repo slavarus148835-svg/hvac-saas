@@ -362,7 +362,7 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             variant="miniapp"
           />
 
-          <span style={label}>Штроба, м, мин. 1 м</span>
+          <span style={label}>Основная штроба — материал</span>
           <select
             style={input}
             value={draft.strobaType}
@@ -371,17 +371,45 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             }
           >
             <option value="none">Нет</option>
-            <option value="brick">Кирпич</option>
+            <option value="brick">Кирпич/газоблок</option>
             <option value="concrete">Бетон</option>
           </select>
+          <span style={label}>Основная штроба, м (мин. 1 м на комнату по сумме штроб)</span>
           <input
             style={input}
             inputMode="decimal"
-            placeholder="Метры штробления"
+            placeholder="Метры"
             value={draft.strobaMeters}
             onChange={(e) =>
               onPatch({
                 strobaMeters: sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS),
+              })
+            }
+          />
+          <span style={label}>Штроба под дренаж/кабель — материал</span>
+          <select
+            style={input}
+            value={draft.strobaDrainType}
+            onChange={(e) =>
+              onPatch({ strobaDrainType: e.target.value as "none" | "brick" | "concrete" })
+            }
+          >
+            <option value="none">Нет</option>
+            <option value="brick">Кирпич/газоблок</option>
+            <option value="concrete">Бетон</option>
+          </select>
+          <span style={label}>Штроба под дренаж/кабель, м</span>
+          <input
+            style={input}
+            inputMode="decimal"
+            placeholder="Метры"
+            value={draft.strobaDrainMeters}
+            onChange={(e) =>
+              onPatch({
+                strobaDrainMeters: sanitizeDecimalMetersString(
+                  e.target.value,
+                  MAX_STROBA_METERS
+                ),
               })
             }
           />

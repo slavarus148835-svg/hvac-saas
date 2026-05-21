@@ -33,6 +33,8 @@ export function createDefaultRoomDraft(roomLabel: string): CalculatorRoomDraft {
     manualDismantlingCost: "0",
     strobaType: "none",
     strobaMeters: "0",
+    strobaDrainType: "none",
+    strobaDrainMeters: "0",
     cable40Meters: "0",
     cable16Meters: "0",
     buyAcAndRouteFromUs: false,
@@ -79,6 +81,8 @@ export function flatCalculatorStateToRoomDraft(params: {
   manualDismantlingCost: string;
   strobaType: "none" | "brick" | "concrete";
   strobaMeters: string;
+  strobaDrainType: "none" | "brick" | "concrete";
+  strobaDrainMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;
@@ -109,6 +113,8 @@ export function flatCalculatorStateToRoomDraft(params: {
     manualDismantlingCost: params.manualDismantlingCost,
     strobaType: params.strobaType,
     strobaMeters: params.strobaMeters,
+    strobaDrainType: params.strobaDrainType,
+    strobaDrainMeters: params.strobaDrainMeters,
     cable40Meters: params.cable40Meters,
     cable16Meters: params.cable16Meters,
     buyAcAndRouteFromUs: params.buyAcAndRouteFromUs,
@@ -191,6 +197,12 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
     strobaType:
       input.strobaType === "brick" || input.strobaType === "concrete" ? input.strobaType : "none",
     strobaMeters: typeof input.strobaMeters === "string" ? input.strobaMeters : "0",
+    strobaDrainType:
+      input.strobaDrainType === "brick" || input.strobaDrainType === "concrete"
+        ? input.strobaDrainType
+        : "none",
+    strobaDrainMeters:
+      typeof input.strobaDrainMeters === "string" ? input.strobaDrainMeters : "0",
     cable40Meters: typeof input.cable40Meters === "string" ? input.cable40Meters : "0",
     cable16Meters: typeof input.cable16Meters === "string" ? input.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(input.buyAcAndRouteFromUs),

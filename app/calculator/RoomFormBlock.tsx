@@ -476,7 +476,7 @@ export function RoomFormBlock({
         Штроба и кабель-каналы
       </div>
 
-      <Label text="Штробление">
+      <Label text="Основная штроба — материал">
         <select
           value={draft.strobaType}
           onChange={(e) =>
@@ -484,18 +484,51 @@ export function RoomFormBlock({
           }
           style={inputStyle}
         >
-          <option value="none">Без штробы</option>
-          <option value="brick">Кирпич / газоблок / газобетон</option>
+          <option value="none">Без основной штробы</option>
+          <option value="brick">Кирпич / газоблок</option>
           <option value="concrete">Бетон</option>
         </select>
       </Label>
 
-      <Label text="Штроба, м">
+      <Label
+        text="Основная штроба, м"
+        note="Мин. 1 м на комнату по сумме всех штроб (основная + дренаж/кабель)"
+      >
         <input
           value={draft.strobaMeters}
           onChange={(e) =>
             onPatch({
               strobaMeters: sanitizeDecimalMetersString(e.target.value, MAX_STROBA_METERS),
+            })
+          }
+          style={inputStyle}
+          inputMode="decimal"
+        />
+      </Label>
+
+      <Label text="Штроба под дренаж/кабель — материал">
+        <select
+          value={draft.strobaDrainType}
+          onChange={(e) =>
+            onPatch({ strobaDrainType: e.target.value as "none" | "brick" | "concrete" })
+          }
+          style={inputStyle}
+        >
+          <option value="none">Без штробы под дренаж/кабель</option>
+          <option value="brick">Кирпич / газоблок</option>
+          <option value="concrete">Бетон</option>
+        </select>
+      </Label>
+
+      <Label text="Штроба под дренаж/кабель, м">
+        <input
+          value={draft.strobaDrainMeters}
+          onChange={(e) =>
+            onPatch({
+              strobaDrainMeters: sanitizeDecimalMetersString(
+                e.target.value,
+                MAX_STROBA_METERS
+              ),
             })
           }
           style={inputStyle}

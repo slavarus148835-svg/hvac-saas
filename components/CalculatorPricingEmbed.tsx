@@ -77,6 +77,10 @@ type PriceForm = {
   stroba_brick_big: string;
   stroba_concrete_small: string;
   stroba_concrete_big: string;
+  stroba_drain_brick_small: string;
+  stroba_drain_brick_big: string;
+  stroba_drain_concrete_small: string;
+  stroba_drain_concrete_big: string;
 
   cable40: string;
   cable16: string;
@@ -125,6 +129,10 @@ const defaultForm: PriceForm = {
   stroba_brick_big: "1200",
   stroba_concrete_small: "1500",
   stroba_concrete_big: "1600",
+  stroba_drain_brick_small: "1000",
+  stroba_drain_brick_big: "1200",
+  stroba_drain_concrete_small: "1500",
+  stroba_drain_concrete_big: "1600",
 
   cable40: "600",
   cable16: "200",
@@ -988,8 +996,8 @@ export default function CalculatorPricingEmbed() {
       </Section>
 
       <Section
-        title="Штроба"
-        subtitle="Цена за 1 метр штробы по материалу и мощности"
+        title="Основная штроба"
+        subtitle="Цена за 1 метр по материалу и мощности"
       >
         <PriceField
           label="Кирпич / газоблок до 24 мощности"
@@ -1017,6 +1025,40 @@ export default function CalculatorPricingEmbed() {
           note="Цена за 1 метр"
           value={form.stroba_concrete_big}
           onChange={(v) => updateField("stroba_concrete_big", v)}
+          suffix="₽/м"
+        />
+      </Section>
+
+      <Section
+        title="Штроба под дренаж/кабель"
+        subtitle="Цена за 1 метр по материалу и мощности"
+      >
+        <PriceField
+          label="Кирпич / газоблок до 24 мощности"
+          note="Цена за 1 метр"
+          value={form.stroba_drain_brick_small}
+          onChange={(v) => updateField("stroba_drain_brick_small", v)}
+          suffix="₽/м"
+        />
+        <PriceField
+          label="Кирпич / газоблок от 30 мощности"
+          note="Цена за 1 метр"
+          value={form.stroba_drain_brick_big}
+          onChange={(v) => updateField("stroba_drain_brick_big", v)}
+          suffix="₽/м"
+        />
+        <PriceField
+          label="Бетон до 24 мощности"
+          note="Цена за 1 метр"
+          value={form.stroba_drain_concrete_small}
+          onChange={(v) => updateField("stroba_drain_concrete_small", v)}
+          suffix="₽/м"
+        />
+        <PriceField
+          label="Бетон от 30 мощности"
+          note="Цена за 1 метр"
+          value={form.stroba_drain_concrete_big}
+          onChange={(v) => updateField("stroba_drain_concrete_big", v)}
           suffix="₽/м"
         />
       </Section>

@@ -14,6 +14,7 @@ import {
   CALCULATOR_ROUGH_IN_CAPACITY,
   CALCULATOR_ROUGH_IN_LABEL_RU,
 } from "@/lib/calculator";
+import { normalizeLegacyStrobaLabelsInQuoteText } from "@/lib/calculator/strobaBilling";
 
 type SavedCalculation = {
   id: string;
@@ -102,7 +103,9 @@ export default function CalculatorHistoryEmbed() {
     return items.filter((item) => {
       const name = normalizeSearch(item.clientName || "");
       const contact = normalizeSearch(item.clientContact || "");
-      const text = normalizeSearch(item.clientText || "");
+      const text = normalizeSearch(
+        normalizeLegacyStrobaLabelsInQuoteText(item.clientText || "")
+      );
       const capNorm =
         item.capacity === CALCULATOR_ROUGH_IN_CAPACITY
           ? `${CALCULATOR_ROUGH_IN_CAPACITY} ${CALCULATOR_ROUGH_IN_LABEL_RU.toLowerCase()}`
@@ -229,7 +232,9 @@ export default function CalculatorHistoryEmbed() {
                 </button>
 
                 <button
-                  onClick={() => handleCopy(item.clientText)}
+                  onClick={() =>
+                    handleCopy(normalizeLegacyStrobaLabelsInQuoteText(item.clientText))
+                  }
                   style={secondaryButton}
                 >
                   Копировать
@@ -245,7 +250,7 @@ export default function CalculatorHistoryEmbed() {
 
               {opened ? (
                 <textarea
-                  value={item.clientText}
+                  value={normalizeLegacyStrobaLabelsInQuoteText(item.clientText)}
                   readOnly
                   style={textareaStyle}
                 />

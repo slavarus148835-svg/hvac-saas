@@ -56,13 +56,23 @@ export const TG_MINI_APP_PRICE_SECTIONS: {
     keys: ["baseArmConcreteSurcharge", "extraHoleNormal", "extraHoleArm"],
   },
   {
-    title: "Штроба",
+    title: "Основная штроба",
     subtitle: "Цена за 1 м",
     keys: [
       "stroba_brick_small",
       "stroba_brick_big",
       "stroba_concrete_small",
       "stroba_concrete_big",
+    ],
+  },
+  {
+    title: "Штроба под дренаж/кабель",
+    subtitle: "Цена за 1 м",
+    keys: [
+      "stroba_drain_brick_small",
+      "stroba_drain_brick_big",
+      "stroba_drain_concrete_small",
+      "stroba_drain_concrete_big",
     ],
   },
   {
@@ -117,22 +127,42 @@ const LABELS: Partial<Record<keyof CalculatorPriceList, { label: string; hint?: 
     extraHoleNormal: { label: "Доп. отверстие обычное", hint: "Цена за 1 отверстие" },
     extraHoleArm: { label: "Доп. отверстие арм. бетон", hint: "Цена за 1 отверстие" },
     stroba_brick_small: {
-      label: `Штроба кирпич / газоблок до типоразмера ${capLabel("24")}`,
+      label: `Основная штроба, кирпич/газоблок до ${capLabel("24")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_brick_big: {
-      label: `Штроба кирпич / газоблок от типоразмера ${capLabel("30")}`,
+      label: `Основная штроба, кирпич/газоблок от ${capLabel("30")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_concrete_small: {
-      label: `Штроба бетон до типоразмера ${capLabel("24")}`,
+      label: `Основная штроба, бетон до ${capLabel("24")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },
     stroba_concrete_big: {
-      label: `Штроба бетон от типоразмера ${capLabel("30")}`,
+      label: `Основная штроба, бетон от ${capLabel("30")}`,
+      hint: "Цена за 1 м",
+      suffix: "₽/м",
+    },
+    stroba_drain_brick_small: {
+      label: `Штроба под дренаж/кабель, кирпич/газоблок до ${capLabel("24")}`,
+      hint: "Цена за 1 м",
+      suffix: "₽/м",
+    },
+    stroba_drain_brick_big: {
+      label: `Штроба под дренаж/кабель, кирпич/газоблок от ${capLabel("30")}`,
+      hint: "Цена за 1 м",
+      suffix: "₽/м",
+    },
+    stroba_drain_concrete_small: {
+      label: `Штроба под дренаж/кабель, бетон до ${capLabel("24")}`,
+      hint: "Цена за 1 м",
+      suffix: "₽/м",
+    },
+    stroba_drain_concrete_big: {
+      label: `Штроба под дренаж/кабель, бетон от ${capLabel("30")}`,
       hint: "Цена за 1 м",
       suffix: "₽/м",
     },

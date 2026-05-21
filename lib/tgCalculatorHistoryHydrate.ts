@@ -22,6 +22,8 @@ export type TgCalculatorHydratedFields = {
   manualDismantlingCost: string;
   strobaType: "none" | "brick" | "concrete";
   strobaMeters: string;
+  strobaDrainType: "none" | "brick" | "concrete";
+  strobaDrainMeters: string;
   cable40Meters: string;
   cable16Meters: string;
   buyAcAndRouteFromUs: boolean;
@@ -108,6 +110,12 @@ export function hydrateTgCalculatorFromHistoryDoc(
       typeof data.manualDismantlingCost === "string" ? data.manualDismantlingCost : "0",
     strobaType,
     strobaMeters: typeof data.strobaMeters === "string" ? data.strobaMeters : "0",
+    strobaDrainType:
+      data.strobaDrainType === "brick" || data.strobaDrainType === "concrete"
+        ? data.strobaDrainType
+        : "none",
+    strobaDrainMeters:
+      typeof data.strobaDrainMeters === "string" ? data.strobaDrainMeters : "0",
     cable40Meters: typeof data.cable40Meters === "string" ? data.cable40Meters : "0",
     cable16Meters: typeof data.cable16Meters === "string" ? data.cable16Meters : "0",
     buyAcAndRouteFromUs: Boolean(data.buyAcAndRouteFromUs),

@@ -33,6 +33,10 @@ export const DEFAULT_CALCULATOR_PRICES: CalculatorPriceList = {
   stroba_brick_big: 1200,
   stroba_concrete_small: 1500,
   stroba_concrete_big: 1600,
+  stroba_drain_brick_small: 1000,
+  stroba_drain_brick_big: 1200,
+  stroba_drain_concrete_small: 1500,
+  stroba_drain_concrete_big: 1600,
 
   cable40: 600,
   cable16: 200,
