@@ -3,6 +3,7 @@ import type { QuickCalculationExtra } from "@/lib/customServices";
 import {
   computeCalculatorEstimate,
   computeMultiRoomEstimate,
+  isCalculatorRoughInCapacity,
   normalizeCalculatorComputeInput,
   type CalculatorRoomInput,
   type SelectedExtraServiceMap,
@@ -259,7 +260,10 @@ export async function POST(req: Request) {
       quickCalculationExtras: computeInput.quickCalculationExtras,
       giftRouteMeters: ctx.giftRouteMeters,
       selectedAcModelIds: computeInput.selectedAcModelIds,
-      selectedAcModelId: computeInput.selectedAcModelIds[0] || "",
+      selectedAcModelId:
+        computeInput.selectedAcModelIds[0] && !isCalculatorRoughInCapacity(computeInput.capacity)
+          ? computeInput.selectedAcModelIds[0]
+          : "",
       ...(roomsForPayload
         ? {
             multiRoom: true,

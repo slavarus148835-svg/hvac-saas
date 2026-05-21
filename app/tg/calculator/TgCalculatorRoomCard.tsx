@@ -202,77 +202,80 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
             placeholder="Например: Зал"
           />
 
-          <span style={label}>Модель кондиционера</span>
-          {isCalculatorRoughInCapacity(draft.capacity) ? (
-            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
-              При закладке трасс модель не обязательна и не попадает в смету.
-            </p>
-          ) : null}
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <select
-              style={{ ...input, flex: 1, marginBottom: 0 }}
-              value={modelPick}
-              onChange={(e) => onModelPickChange(e.target.value)}
-              disabled={models.length === 0}
-            >
-              <option value="">Выберите</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id} disabled={draft.selectedAcModelIds.includes(m.id)}>
-                  {m.name} — {formatRubles(m.price)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              style={{ ...btn, width: "auto", padding: "12px 16px", marginBottom: 0 }}
-              onClick={() => {
-                tgHapticButtonTap();
-                onAddPickedModel();
-              }}
-              disabled={!modelPick}
-            >
-              +
-            </button>
-          </div>
-          {draft.selectedAcModelIds.length > 0 ? (
-            <div style={{ marginBottom: 12 }}>
-              {draft.selectedAcModelIds.map((id) => {
-                const m = models.find((x) => x.id === id);
-                if (!m) return null;
-                return (
-                  <div
-                    key={id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>
-                      {m.name} — {formatRubles(m.price)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        tgHapticButtonTap();
-                        onRemoveModelFromRoom(id);
-                      }}
-                      style={{
-                        background: "#fee2e2",
-                        color: "#991b1b",
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "8px 12px",
-                        fontWeight: 600,
-                      }}
+          {!traceOnly ? (
+            <>
+              <span style={label}>Модель кондиционера</span>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <select
+                  style={{ ...input, flex: 1, marginBottom: 0 }}
+                  value={modelPick}
+                  onChange={(e) => onModelPickChange(e.target.value)}
+                  disabled={models.length === 0}
+                >
+                  <option value="">Выберите</option>
+                  {models.map((m) => (
+                    <option
+                      key={m.id}
+                      value={m.id}
+                      disabled={draft.selectedAcModelIds.includes(m.id)}
                     >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      {m.name} — {formatRubles(m.price)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  style={{ ...btn, width: "auto", padding: "12px 16px", marginBottom: 0 }}
+                  onClick={() => {
+                    tgHapticButtonTap();
+                    onAddPickedModel();
+                  }}
+                  disabled={!modelPick}
+                >
+                  +
+                </button>
+              </div>
+              {draft.selectedAcModelIds.length > 0 ? (
+                <div style={{ marginBottom: 12 }}>
+                  {draft.selectedAcModelIds.map((id) => {
+                    const m = models.find((x) => x.id === id);
+                    if (!m) return null;
+                    return (
+                      <div
+                        key={id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: 14 }}>
+                          {m.name} — {formatRubles(m.price)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            tgHapticButtonTap();
+                            onRemoveModelFromRoom(id);
+                          }}
+                          style={{
+                            background: "#fee2e2",
+                            color: "#991b1b",
+                            border: "none",
+                            borderRadius: 8,
+                            padding: "8px 12px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           <CalculatorTraceOnlyModeCard

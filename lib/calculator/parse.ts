@@ -13,6 +13,7 @@ import type {
 import {
   CALCULATOR_BTU_ONLY_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  effectiveSelectedAcModelIds,
   isCalculatorRoughInCapacity,
   normalizeRoughInRouteCapacity,
 } from "./roughInMode";
@@ -190,9 +191,14 @@ export function normalizeCalculatorComputeInput(
     percentDiscount: sanitizeNonNegativeIntString(percentDiscount, 100) || "0",
     giftRouteMeters: Math.max(0, Math.floor(Number(raw.giftRouteMeters) || 0)),
     acModels: Array.isArray(raw.acModels) ? raw.acModels : [],
-    selectedAcModelIds: Array.isArray(raw.selectedAcModelIds)
-      ? raw.selectedAcModelIds.filter((x) => typeof x === "string")
-      : [],
+    selectedAcModelIds: effectiveSelectedAcModelIds(
+      capacity,
+      Array.isArray(raw.selectedAcModelIds)
+        ? raw.selectedAcModelIds.filter((x) => typeof x === "string")
+        : typeof raw.selectedAcModelId === "string" && raw.selectedAcModelId
+          ? [raw.selectedAcModelId]
+          : []
+    ),
     pricelistCustomServices: Array.isArray(raw.pricelistCustomServices)
       ? raw.pricelistCustomServices
       : [],
@@ -237,6 +243,7 @@ type CalculatorComputeInputLoose = {
   giftRouteMeters?: unknown;
   acModels?: unknown;
   selectedAcModelIds?: unknown;
+  selectedAcModelId?: unknown;
   pricelistCustomServices?: unknown;
   selectedExtraServices?: unknown;
   quickCalculationExtras?: unknown;

@@ -32,6 +32,44 @@ export function isCalculatorRoughInCapacity(capacity: string): boolean {
   return String(capacity ?? "").trim() === CALCULATOR_ROUGH_IN_CAPACITY;
 }
 
+/** В режиме «Закладка трасс» модели кондиционера не выбираются и не сохраняются. */
+export function effectiveSelectedAcModelIds(
+  capacity: string,
+  ids: readonly string[] | undefined | null
+): string[] {
+  if (isCalculatorRoughInCapacity(capacity)) return [];
+  if (!ids || !Array.isArray(ids)) return [];
+  return ids.filter((x): x is string => typeof x === "string" && x.length > 0);
+}
+
+export function isAcModelSelectionAllowed(capacity: string): boolean {
+  return !isCalculatorRoughInCapacity(capacity);
+}
+
+const AC_MODEL_LINE_RE = /^\s*(?:[-•]\s*)?Кондиционер:/;
+
+/** Старые расчёты: убрать строки модели из текста для клиента при закладке трасс. */
+export function filterAcModelLinesFromClientQuoteText(
+  text: string,
+  capacity: string
+): string {
+  if (!isCalculatorRoughInCapacity(capacity)) return text;
+  return String(text || "")
+    .split("\n")
+    .filter((line) => !AC_MODEL_LINE_RE.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function filterAcModelLineItems<T extends { title: string }>(
+  items: readonly T[],
+  capacity: string
+): T[] {
+  if (!isCalculatorRoughInCapacity(capacity)) return [...items];
+  return items.filter((it) => !it.title.startsWith("Кондиционер:"));
+}
+
 const ALLOWED_ROUGH_IN_ROUTE = new Set<string>(CALCULATOR_BTU_ONLY_OPTIONS);
 
 /** Нормализация типоразмера трассы в режиме закладки (fallback «12»). */

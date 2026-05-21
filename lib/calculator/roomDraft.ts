@@ -1,6 +1,10 @@
 import type { QuickCalculationExtra } from "@/lib/customServices";
 import type { CalculatorComputeInput, SelectedExtraServiceMap } from "./types";
-import { CALCULATOR_ROUGH_IN_CAPACITY, normalizeRoughInRouteCapacity } from "./roughInMode";
+import {
+  CALCULATOR_ROUGH_IN_CAPACITY,
+  effectiveSelectedAcModelIds,
+  normalizeRoughInRouteCapacity,
+} from "./roughInMode";
 
 /** Локальное состояние одной комнаты (без глобальных полей прайса). */
 export type CalculatorRoomDraft = {
@@ -57,6 +61,10 @@ export function roomDraftToComputeInput(
   const { id: _id, roomName: _name, ...rest } = draft;
   return {
     ...rest,
+    selectedAcModelIds: effectiveSelectedAcModelIds(
+      rest.capacity,
+      rest.selectedAcModelIds
+    ),
     giftRouteMeters: ctx.giftRouteMeters,
     acModels: ctx.acModels,
     pricelistCustomServices: ctx.pricelistCustomServices,
@@ -124,7 +132,10 @@ export function flatCalculatorStateToRoomDraft(params: {
     includeDrain: params.includeDrain,
     includePump: params.includePump,
     includeLadderConnection: params.includeLadderConnection,
-    selectedAcModelIds: [...params.selectedAcModelIds],
+    selectedAcModelIds: effectiveSelectedAcModelIds(
+      params.capacity,
+      params.selectedAcModelIds
+    ),
     selectedExtraServices: JSON.parse(JSON.stringify(params.selectedExtraServices)) as SelectedExtraServiceMap,
     quickCalculationExtras: params.quickCalculationExtras.map((x) => ({ ...x })),
   };
@@ -212,12 +223,14 @@ export function roomDraftFromFirestoreEntry(entry: unknown): CalculatorRoomDraft
     includeDrain: Boolean(input.includeDrain),
     includePump: Boolean(input.includePump),
     includeLadderConnection: Boolean(input.includeLadderConnection),
-    selectedAcModelIds:
-      capacity === CALCULATOR_ROUGH_IN_CAPACITY
-        ? []
-        : Array.isArray(input.selectedAcModelIds)
-          ? input.selectedAcModelIds.filter((x): x is string => typeof x === "string")
-          : [],
+    selectedAcModelIds: effectiveSelectedAcModelIds(
+      capacity,
+      Array.isArray(input.selectedAcModelIds)
+        ? input.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+        : typeof input.selectedAcModelId === "string" && input.selectedAcModelId
+          ? [input.selectedAcModelId]
+          : []
+    ),
     selectedExtraServices:
       input.selectedExtraServices &&
       typeof input.selectedExtraServices === "object" &&

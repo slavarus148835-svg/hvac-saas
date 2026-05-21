@@ -19,6 +19,9 @@ import {
   formatAmountRu,
   formatCapacityBtu,
   formatRubles,
+  effectiveSelectedAcModelIds,
+  filterAcModelLineItems,
+  filterAcModelLinesFromClientQuoteText,
   isCalculatorRoughInCapacity,
   MAX_CABLE_METERS,
   MAX_FLOORS,
@@ -238,6 +241,14 @@ export default function TgCalculatorPage() {
   const [multiRoomEnabled, setMultiRoomEnabled] = useState(false);
   const lastBtuCapacityRef = useRef("12");
   const traceOnlyMode = isCalculatorRoughInCapacity(capacity);
+
+  useEffect(() => {
+    if (traceOnlyMode) {
+      setSelectedAcModelIds([]);
+      setModelPick("");
+    }
+  }, [traceOnlyMode]);
+
   const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
     createDefaultRoomDraft("Комната 1"),
   ]);
@@ -561,8 +572,11 @@ export default function TgCalculatorPage() {
     if (multiRoomEnabled && multiEstimate) {
       return { items: multiEstimate.flatItems, total: multiEstimate.total };
     }
-    return singleResult;
-  }, [multiRoomEnabled, multiEstimate, singleResult]);
+    return {
+      ...singleResult,
+      items: filterAcModelLineItems(singleResult.items, capacity),
+    };
+  }, [multiRoomEnabled, multiEstimate, singleResult, capacity]);
 
   const roomSubtotalById = useMemo(() => {
     const m = new Map<string, number>();
@@ -582,7 +596,7 @@ export default function TgCalculatorPage() {
       t = buildTelegramMiniAppClientQuoteText({
         capacity,
         mountType,
-        items: singleResult.items.map((i) => ({
+        items: filterAcModelLineItems(singleResult.items, capacity).map((i) => ({
           title: i.title,
           amount: i.amount,
         })),
@@ -704,7 +718,11 @@ export default function TgCalculatorPage() {
         setMultiRoomEnabled(false);
         if (savedClientText) {
           setClientQuoteUserEdited(true);
-          setClientQuoteDraft(savedClientText);
+          const capForQuote =
+            typeof h.capacity === "string" ? h.capacity : CALCULATOR_ROUGH_IN_CAPACITY;
+          setClientQuoteDraft(
+            filterAcModelLinesFromClientQuoteText(savedClientText, capForQuote)
+          );
         } else {
           setClientQuoteUserEdited(false);
           setClientQuoteDraft("");
@@ -746,11 +764,14 @@ export default function TgCalculatorPage() {
         if (r.id !== roomId) return r;
         const merged = { ...r, ...patch };
         if (patch.capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
-          merged.selectedAcModelIds = [];
           if (!isCalculatorRoughInCapacity(r.capacity)) {
             merged.roughInRouteCapacity = normalizeRoughInRouteCapacity(r.capacity);
           }
         }
+        merged.selectedAcModelIds = effectiveSelectedAcModelIds(
+          merged.capacity,
+          merged.selectedAcModelIds
+        );
         return merged;
       })
     );
@@ -888,7 +909,7 @@ export default function TgCalculatorPage() {
 
   function collapsedModelSummary(draft: CalculatorRoomDraft): string {
     if (isCalculatorRoughInCapacity(draft.capacity)) {
-      if (!draft.selectedAcModelIds.length) return "Закладка трасс";
+      return CALCULATOR_ROUGH_IN_LABEL_RU;
     }
     if (!draft.selectedAcModelIds.length) return "Модель не выбрана";
     const parts: string[] = [];
@@ -1353,7 +1374,7 @@ export default function TgCalculatorPage() {
                       Пока нет моделей — добавьте кнопкой ниже.
                     </p>
                   ) : null}
-                  {!multiRoomEnabled ? (
+                  {!multiRoomEnabled && !traceOnlyMode ? (
                     <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                       <select
                         style={{ ...input, flex: 1, marginBottom: 0 }}
@@ -1469,7 +1490,7 @@ export default function TgCalculatorPage() {
                       ) : null}
                     </div>
                   )}
-                  {!multiRoomEnabled && selectedAcModelIds.length > 0 ? (
+                  {!multiRoomEnabled && !traceOnlyMode && selectedAcModelIds.length > 0 ? (
                     <div style={{ marginTop: 12 }}>
                       {selectedAcModelIds.map((id) => {
                         const m = models.find((x) => x.id === id);

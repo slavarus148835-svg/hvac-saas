@@ -3,6 +3,7 @@ import type { SelectedExtraServiceMap } from "@/lib/calculator";
 import {
   CALCULATOR_BTU_ONLY_OPTIONS,
   CALCULATOR_ROUGH_IN_CAPACITY,
+  effectiveSelectedAcModelIds,
   normalizeRoughInRouteCapacity,
 } from "@/lib/calculator/roughInMode";
 
@@ -61,12 +62,10 @@ export function hydrateTgCalculatorFromHistoryDoc(
     ? (data.selectedAcModelIds as unknown[]).filter((x) => typeof x === "string")
     : [];
   const fromLegacy = data.selectedAcModelId ? [String(data.selectedAcModelId)] : [];
-  let selectedAcModelIds = Array.from(
-    new Set([...(fromList as string[]), ...fromLegacy])
-  ) as string[];
-  if (capacity === CALCULATOR_ROUGH_IN_CAPACITY) {
-    selectedAcModelIds = [];
-  }
+  const selectedAcModelIds = effectiveSelectedAcModelIds(capacity, [
+    ...(fromList as string[]),
+    ...fromLegacy,
+  ]);
 
   let selectedExtraServices: SelectedExtraServiceMap = {};
   if (data.selectedExtraServices && typeof data.selectedExtraServices === "object") {

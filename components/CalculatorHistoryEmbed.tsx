@@ -13,8 +13,14 @@ import { resolveAuthUser } from "@/lib/resolveAuthUser";
 import {
   CALCULATOR_ROUGH_IN_CAPACITY,
   CALCULATOR_ROUGH_IN_LABEL_RU,
+  filterAcModelLinesFromClientQuoteText,
 } from "@/lib/calculator";
 import { normalizeLegacyStrobaLabelsInQuoteText } from "@/lib/calculator/strobaBilling";
+
+function formatHistoryClientText(item: SavedCalculation): string {
+  const base = normalizeLegacyStrobaLabelsInQuoteText(item.clientText);
+  return filterAcModelLinesFromClientQuoteText(base, item.capacity);
+}
 
 type SavedCalculation = {
   id: string;
@@ -233,7 +239,7 @@ export default function CalculatorHistoryEmbed() {
 
                 <button
                   onClick={() =>
-                    handleCopy(normalizeLegacyStrobaLabelsInQuoteText(item.clientText))
+                    handleCopy(formatHistoryClientText(item))
                   }
                   style={secondaryButton}
                 >
@@ -250,7 +256,7 @@ export default function CalculatorHistoryEmbed() {
 
               {opened ? (
                 <textarea
-                  value={normalizeLegacyStrobaLabelsInQuoteText(item.clientText)}
+                  value={formatHistoryClientText(item)}
                   readOnly
                   style={textareaStyle}
                 />

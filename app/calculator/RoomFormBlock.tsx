@@ -318,16 +318,9 @@ export function RoomFormBlock({
         />
       </Label>
 
-      {acModels.length > 0 ? (
+      {acModels.length > 0 && !isCalculatorRoughInCapacity(draft.capacity) ? (
         <div style={{ marginBottom: 16 }}>
-          <Label
-            text="Модель кондиционера"
-            note={
-              isCalculatorRoughInCapacity(draft.capacity)
-                ? "При закладке трасс модель не обязательна и не попадает в смету"
-                : "Сначала выберите модель из прайса"
-            }
-          >
+          <Label text="Модель кондиционера" note="Сначала выберите модель из прайса">
             <div className="calc-model-row" style={modelPickerRowStyle}>
               <select
                 value={modelPick}

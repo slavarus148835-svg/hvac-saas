@@ -42,6 +42,9 @@ import {
   flatCalculatorStateToRoomDraft,
   formatCapacityBtu,
   formatRubles,
+  effectiveSelectedAcModelIds,
+  filterAcModelLineItems,
+  filterAcModelLinesFromClientQuoteText,
   isCalculatorRoughInCapacity,
 } from "@/lib/calculator";
 import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
@@ -203,12 +206,14 @@ function draftFromSavedHistoryRoom(entry: {
     includeDrain: Boolean(inp.includeDrain),
     includePump: Boolean(inp.includePump),
     includeLadderConnection: Boolean(inp.includeLadderConnection),
-    selectedAcModelIds:
-      capacity === CALCULATOR_ROUGH_IN_CAPACITY
-        ? []
-        : Array.isArray(inp.selectedAcModelIds)
-          ? inp.selectedAcModelIds.filter((x): x is string => typeof x === "string")
-          : [],
+    selectedAcModelIds: effectiveSelectedAcModelIds(
+      capacity,
+      Array.isArray(inp.selectedAcModelIds)
+        ? inp.selectedAcModelIds.filter((x): x is string => typeof x === "string")
+        : typeof inp.selectedAcModelId === "string" && inp.selectedAcModelId
+          ? [inp.selectedAcModelId]
+          : []
+    ),
     selectedExtraServices:
       inp.selectedExtraServices && typeof inp.selectedExtraServices === "object" && !Array.isArray(inp.selectedExtraServices)
         ? (inp.selectedExtraServices as SelectedExtraServiceMap)
@@ -254,6 +259,7 @@ function CalculatorPage() {
   const [roughInRouteCapacity, setRoughInRouteCapacity] = useState("12");
   const lastBtuCapacityRef = useRef("12");
   const traceOnlyMode = isCalculatorRoughInCapacity(capacity);
+
   const [mountType, setMountType] = useState<"standard" | "existing">("standard");
   const [routeMeters, setRouteMeters] = useState("0");
   const [baseWallType, setBaseWallType] = useState<"normal" | "arm">("normal");
@@ -289,6 +295,13 @@ function CalculatorPage() {
   const [acModels, setAcModels] = useState<{ id: string; name: string; price: number }[]>([]);
   const [selectedAcModelPick, setSelectedAcModelPick] = useState("");
   const [selectedAcModelIds, setSelectedAcModelIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (traceOnlyMode) {
+      setSelectedAcModelIds([]);
+      setSelectedAcModelPick("");
+    }
+  }, [traceOnlyMode]);
   const [newAcModelName, setNewAcModelName] = useState("");
   const [newAcModelPrice, setNewAcModelPrice] = useState("");
   const [modelBusy, setModelBusy] = useState(false);
@@ -771,7 +784,16 @@ function CalculatorPage() {
     return singleEstimate;
   }, [multiEstimate, singleEstimate]);
 
-  const finalClientText = result.autoClientText.trim();
+  const finalClientText = useMemo(() => {
+    const raw = result.autoClientText.trim();
+    if (multiRoomEnabled) return raw;
+    return filterAcModelLinesFromClientQuoteText(raw, capacity);
+  }, [result.autoClientText, multiRoomEnabled, capacity]);
+
+  const breakdownItems = useMemo(() => {
+    if (multiRoomEnabled) return result.items;
+    return filterAcModelLineItems(result.items, capacity);
+  }, [result.items, multiRoomEnabled, capacity]);
 
   const publicFinalClientText = useMemo(
     () => stripClientIdentityLinesFromPublicQuote(finalClientText),
@@ -856,7 +878,10 @@ function CalculatorPage() {
       giftRouteMeters,
       roughInRouteCapacity: scalar.roughInRouteCapacity,
       selectedAcModelIds: scalar.selectedAcModelIds,
-      selectedAcModelId: scalar.selectedAcModelIds[0] || "",
+      selectedAcModelId:
+        scalar.selectedAcModelIds[0] && !isCalculatorRoughInCapacity(scalar.capacity)
+          ? scalar.selectedAcModelIds[0]
+          : "",
       ...(multiRoomEnabled && roomDrafts.length > 0
         ? {
             multiRoom: true,
@@ -1536,15 +1561,11 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
-        {acModels.length > 0 ? (
+        {acModels.length > 0 && !traceOnlyMode ? (
           <div style={selectedModelsBlockStyle}>
             <Label
               text="Модели кондиционеров"
-              note={
-                isCalculatorRoughInCapacity(capacity)
-                  ? "При закладке трасс модель не обязательна и не попадает в смету"
-                  : "Сначала выберите модель — она попадёт в смету и расчёт"
-              }
+              note="Сначала выберите модель — она попадёт в смету и расчёт"
             >
               <div className="calc-model-row" style={modelPickerRowStyle}>
                 <select
@@ -2064,7 +2085,19 @@ function CalculatorPage() {
               pricelistCustomServices={pricelistCustomServices}
               fmt={fmt}
               onPatch={(patch) =>
-                setRoomDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+                setRoomDrafts((prev) =>
+                  prev.map((r, i) => {
+                    if (i !== idx) return r;
+                    const merged = { ...r, ...patch };
+                    return {
+                      ...merged,
+                      selectedAcModelIds: effectiveSelectedAcModelIds(
+                        merged.capacity,
+                        merged.selectedAcModelIds
+                      ),
+                    };
+                  })
+                )
               }
               onRemove={() => removeRoomAt(idx)}
               onDuplicate={() => duplicateRoomAt(idx)}
@@ -2090,7 +2123,7 @@ function CalculatorPage() {
               </span>
             </div>
           ) : null}
-          {result.items.map((item, index) => {
+          {breakdownItems.map((item, index) => {
             const hideAmount =
               item.title === CALCULATOR_ROUGH_IN_LABEL_RU && item.amount === 0;
             return (
@@ -2098,7 +2131,7 @@ function CalculatorPage() {
               key={index}
               style={{
                 ...calcBreakdownRowStyle,
-                marginBottom: index === result.items.length - 1 ? 0 : 10,
+                marginBottom: index === breakdownItems.length - 1 ? 0 : 10,
               }}
             >
               <span style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>{item.title}</span>
