@@ -7,8 +7,10 @@ export const runtime = "nodejs";
  * Без секретов. После деплоя открыть GET /api/debug/version
  */
 export async function GET() {
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? null;
   const body = {
-    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    commit,
+    commitShort: commit ? commit.slice(0, 7) : null,
     branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
     env: process.env.VERCEL_ENV ?? null,
     time: new Date().toISOString(),
@@ -20,6 +22,10 @@ export async function GET() {
       statFailSafeCd87b5e: true,
       statsGlobalUltraLight: true,
       miniAppDegradedQuota: true,
+      /** Основная + дренажная штроба, мин. 1 м/комната (ожидается с 28cb18f+). */
+      calculatorStrobaDrainV2: true,
+      /** Скрытие моделей в режиме «Закладка трасс» (ожидается с dd41e02+). */
+      hideAcModelsRoughInV1: true,
       firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
       firestoreHeavyScansDisabled:
         process.env.FIRESTORE_SAFE_MODE === "1" ||

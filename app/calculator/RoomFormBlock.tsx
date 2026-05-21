@@ -466,7 +466,7 @@ export function RoomFormBlock({
       />
 
       <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a", margin: "16px 0 8px" }}>
-        Штроба и кабель-каналы
+        Штробы и кабель-каналы
       </div>
 
       <Label text="Основная штроба — материал">

@@ -1,4 +1,5 @@
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
+import { normalizeLegacyStrobaLabelsInQuoteText } from "@/lib/calculator/strobaBilling";
 
 export type QuoteLineItem = {
   title: string;
@@ -25,12 +26,16 @@ export type BuildClientQuoteTextParams = {
  * Заголовки позиций должны уже содержать полные BTU, если там указана мощность.
  */
 export function buildClientQuoteText(params: BuildClientQuoteTextParams): string {
-  return buildStructuredClientQuoteMessage({
-    items: params.items.map((i) => ({ title: i.title, amount: i.amount })),
+  const text = buildStructuredClientQuoteMessage({
+    items: params.items.map((i) => ({
+      title: normalizeLegacyStrobaLabelsInQuoteText(i.title),
+      amount: i.amount,
+    })),
     total: params.total,
     clientName: params.clientName,
     clientContact: params.clientContact,
   });
+  return normalizeLegacyStrobaLabelsInQuoteText(text);
 }
 
 function encode(text: string): string {
@@ -45,7 +50,10 @@ export function buildWhatsAppShareUrl(phoneDigits: string, text: string): string
   return `https://wa.me/${n}?text=${encode(text)}`;
 }
 
-/** Поделиться текстом в Telegram (внешняя ссылка). */
+/**
+ * Общий share (не диалог с клиентом). Для отправки клиенту используйте
+ * copyQuoteThenOpenTelegramClient из @/lib/telegramClientContact.
+ */
 export function buildTelegramShareUrl(text: string, url?: string): string {
   const u = (url ?? "").trim();
   return `https://t.me/share/url?url=${encode(u)}&text=${encode(text)}`;

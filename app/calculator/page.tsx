@@ -1779,7 +1779,7 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>2. Дополнительные работы</h2>
 
-            <div style={{ ...quickOptionsTitleStyle, marginTop: 0 }}>Штроба и кабель-каналы</div>
+            <div style={{ ...quickOptionsTitleStyle, marginTop: 0 }}>Штробы и кабель-каналы</div>
 
             <Label text="Основная штроба — материал" note="Кирпич/газоблок или бетон">
               <select
