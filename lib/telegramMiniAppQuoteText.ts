@@ -1,4 +1,5 @@
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
+import { normalizeLegacyStrobaLineItemTitle } from "@/lib/calculator/strobaBilling";
 import { clientQuoteItemsWithRoughInHeader } from "@/lib/calculator/roughInMode";
 
 export type MiniAppQuoteLineInput = {
@@ -17,7 +18,8 @@ const TITLE_DISPLAY: Record<string, string> = {
 };
 
 export function mapMiniAppQuoteItemTitle(computeTitle: string): string {
-  return TITLE_DISPLAY[computeTitle] ?? computeTitle;
+  const mapped = TITLE_DISPLAY[computeTitle] ?? computeTitle;
+  return normalizeLegacyStrobaLineItemTitle(mapped);
 }
 
 /**

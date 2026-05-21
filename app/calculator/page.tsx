@@ -46,6 +46,8 @@ import {
   filterAcModelLineItems,
   filterAcModelLinesFromClientQuoteText,
   isCalculatorRoughInCapacity,
+  normalizeLegacyStrobaLabelsInQuoteText,
+  shouldHideCalculatorAcModelsUi,
 } from "@/lib/calculator";
 import { CALCULATOR_ROUGH_IN_LABEL_RU } from "@/lib/calculator/roughInMode";
 import {
@@ -325,6 +327,16 @@ function CalculatorPage() {
   const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
     createDefaultRoomDraft("Комната 1"),
   ]);
+
+  const hideAcModelsUi = useMemo(
+    () =>
+      shouldHideCalculatorAcModelsUi({
+        singleRoomTraceOnly: traceOnlyMode,
+        multiRoomEnabled,
+        roomCapacities: roomDrafts.map((r) => r.capacity),
+      }),
+    [traceOnlyMode, multiRoomEnabled, roomDrafts]
+  );
 
   const historyIdFromUrl = searchParams.get("historyId")?.trim();
   const [hasSavedCalculation, setHasSavedCalculation] = useState<boolean | null>(null);
@@ -785,14 +797,19 @@ function CalculatorPage() {
   }, [multiEstimate, singleEstimate]);
 
   const finalClientText = useMemo(() => {
-    const raw = result.autoClientText.trim();
+    const raw = normalizeLegacyStrobaLabelsInQuoteText(result.autoClientText.trim());
     if (multiRoomEnabled) return raw;
     return filterAcModelLinesFromClientQuoteText(raw, capacity);
   }, [result.autoClientText, multiRoomEnabled, capacity]);
 
   const breakdownItems = useMemo(() => {
-    if (multiRoomEnabled) return result.items;
-    return filterAcModelLineItems(result.items, capacity);
+    const items = multiRoomEnabled
+      ? result.items
+      : filterAcModelLineItems(result.items, capacity);
+    return items.map((it) => ({
+      ...it,
+      title: normalizeLegacyStrobaLabelsInQuoteText(it.title),
+    }));
   }, [result.items, multiRoomEnabled, capacity]);
 
   const publicFinalClientText = useMemo(
@@ -1469,6 +1486,7 @@ function CalculatorPage() {
         </button>
       </div>
 
+      {!hideAcModelsUi ? (
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Быстро добавить модель кондиционера</h2>
         <p style={{ ...smallTextStyle, marginTop: 0, marginBottom: 10 }}>
@@ -1506,6 +1524,7 @@ function CalculatorPage() {
           </button>
         </div>
       </div>
+      ) : null}
 
       <div style={cardStyle}>
         <h2 style={sectionTitle}>Режим расчёта</h2>
@@ -1561,7 +1580,7 @@ function CalculatorPage() {
       <div style={cardStyle}>
         <h2 style={sectionTitle}>1. Основные параметры</h2>
 
-        {acModels.length > 0 && !traceOnlyMode ? (
+        {acModels.length > 0 && !hideAcModelsUi ? (
           <div style={selectedModelsBlockStyle}>
             <Label
               text="Модели кондиционеров"

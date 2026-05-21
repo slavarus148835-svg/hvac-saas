@@ -46,6 +46,27 @@ export function isAcModelSelectionAllowed(capacity: string): boolean {
   return !isCalculatorRoughInCapacity(capacity);
 }
 
+/**
+ * Скрыть в калькуляторе блоки «Модели кондиционеров» (прайс/выбор/добавление):
+ * — однокомнатный режим «Закладка трасс»;
+ * — несколько комнат, если у всех закладка трасс.
+ */
+export function shouldHideCalculatorAcModelsUi(params: {
+  singleRoomTraceOnly: boolean;
+  multiRoomEnabled: boolean;
+  roomCapacities: readonly string[];
+}): boolean {
+  if (params.singleRoomTraceOnly) return true;
+  if (
+    params.multiRoomEnabled &&
+    params.roomCapacities.length > 0 &&
+    params.roomCapacities.every((c) => isCalculatorRoughInCapacity(c))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 const AC_MODEL_LINE_RE = /^\s*(?:[-•]\s*)?Кондиционер:/;
 
 /** Старые расчёты: убрать строки модели из текста для клиента при закладке трасс. */

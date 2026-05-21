@@ -15,6 +15,10 @@ export {
   WARN_STROBA_METERS,
 } from "./constants";
 export {
+  normalizeLegacyStrobaLabelsInQuoteText,
+  normalizeLegacyStrobaLineItemTitle,
+} from "./strobaBilling";
+export {
   capacityToBtuNumber,
   formatCapacityBtu,
   formatCapacityLabel,
@@ -36,6 +40,7 @@ export {
   isCalculatorRoughInCapacity,
   normalizeRoughInRouteCapacity,
   routeCapacityTierKeyForPricelist,
+  shouldHideCalculatorAcModelsUi,
   ROUGH_IN_HOLE_ARM_CONCRETE_LABEL,
   ROUGH_IN_HOLE_BRICK_LABEL,
 } from "./roughInMode";

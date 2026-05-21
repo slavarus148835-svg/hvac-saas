@@ -23,6 +23,8 @@ import {
   filterAcModelLineItems,
   filterAcModelLinesFromClientQuoteText,
   isCalculatorRoughInCapacity,
+  normalizeLegacyStrobaLabelsInQuoteText,
+  shouldHideCalculatorAcModelsUi,
   MAX_CABLE_METERS,
   MAX_FLOORS,
   MAX_HOLES,
@@ -252,6 +254,16 @@ export default function TgCalculatorPage() {
   const [roomDrafts, setRoomDrafts] = useState<CalculatorRoomDraft[]>(() => [
     createDefaultRoomDraft("Комната 1"),
   ]);
+
+  const hideAcModelsUi = useMemo(
+    () =>
+      shouldHideCalculatorAcModelsUi({
+        singleRoomTraceOnly: traceOnlyMode,
+        multiRoomEnabled,
+        roomCapacities: roomDrafts.map((r) => r.capacity),
+      }),
+    [traceOnlyMode, multiRoomEnabled, roomDrafts]
+  );
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
   const [modelPickByRoom, setModelPickByRoom] = useState<Record<string, string>>({});
   const [quickSvcName, setQuickSvcName] = useState("");
@@ -612,7 +624,7 @@ export default function TgCalculatorPage() {
       tail.push(textSettings.quoteFooterTemplate.trim());
     }
     if (tail.length) t = `${t}\n\n${tail.join("\n\n")}`;
-    return t;
+    return normalizeLegacyStrobaLabelsInQuoteText(t);
   }, [
     multiRoomEnabled,
     multiEstimate,
@@ -709,7 +721,7 @@ export default function TgCalculatorPage() {
         setModelPickByRoom({});
         if (savedClientText) {
           setClientQuoteUserEdited(true);
-          setClientQuoteDraft(savedClientText);
+          setClientQuoteDraft(normalizeLegacyStrobaLabelsInQuoteText(savedClientText));
         } else {
           setClientQuoteUserEdited(false);
           setClientQuoteDraft("");
@@ -721,7 +733,9 @@ export default function TgCalculatorPage() {
           const capForQuote =
             typeof h.capacity === "string" ? h.capacity : CALCULATOR_ROUGH_IN_CAPACITY;
           setClientQuoteDraft(
-            filterAcModelLinesFromClientQuoteText(savedClientText, capForQuote)
+            normalizeLegacyStrobaLabelsInQuoteText(
+              filterAcModelLinesFromClientQuoteText(savedClientText, capForQuote)
+            )
           );
         } else {
           setClientQuoteUserEdited(false);
@@ -1367,6 +1381,7 @@ export default function TgCalculatorPage() {
 
             {showCalculatorForm ? (
               <>
+                {!hideAcModelsUi ? (
                 <div style={card}>
                   <span style={label}>Модели кондиционеров из прайса</span>
                   {models.length === 0 ? (
@@ -1528,6 +1543,7 @@ export default function TgCalculatorPage() {
                     </div>
                   ) : null}
                 </div>
+                ) : null}
 
                 <label
                   style={{

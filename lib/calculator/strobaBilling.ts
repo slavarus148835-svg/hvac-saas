@@ -27,9 +27,20 @@ export function strobaMaterialLabel(type: StrobaMaterialType): string {
   return MATERIAL_LABEL[type];
 }
 
-/** Старые строки сметы / истории: «Штробление» → «Основная штроба». */
+const DRAIN_STROBA_LABEL_PLACEHOLDER = "\uE000DRAIN_STROBA\uE001";
+
+/** Старые подписи в смете / истории / share: «Штроба» → «Основная штроба» (кроме дренажной). */
 export function normalizeLegacyStrobaLabelsInQuoteText(text: string): string {
-  return String(text || "").replace(/Штробление/g, "Основная штроба");
+  let s = String(text || "");
+  s = s.replace(/Штробление/g, "Основная штроба");
+  s = s.replace(/Штроба под дренаж\/кабель/g, DRAIN_STROBA_LABEL_PLACEHOLDER);
+  s = s.replace(/Штроба/g, "Основная штроба");
+  s = s.replaceAll(DRAIN_STROBA_LABEL_PLACEHOLDER, "Штроба под дренаж/кабель");
+  return s;
+}
+
+export function normalizeLegacyStrobaLineItemTitle(title: string): string {
+  return normalizeLegacyStrobaLabelsInQuoteText(title);
 }
 
 export function normalizeStrobaMaterialType(raw: unknown): StrobaMaterialType {
