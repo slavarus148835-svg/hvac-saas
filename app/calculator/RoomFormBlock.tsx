@@ -27,6 +27,7 @@ import {
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
+  bindZeroReplacingNumericInput,
 } from "@/lib/calculator";
 import type { SelectedExtraServiceMap } from "@/lib/calculator/types";
 
@@ -441,12 +442,15 @@ export function RoomFormBlock({
         note={calculatorRouteMetersRoomNote(draft.capacity, giftRouteMeters)}
       >
         <input
-          value={draft.routeMeters}
-          onChange={(e) =>
-            onPatch({ routeMeters: sanitizeDecimalMetersString(e.target.value, MAX_ROUTE_METERS) })
-          }
           style={inputStyle}
-          inputMode="decimal"
+          value={draft.routeMeters}
+          {...bindZeroReplacingNumericInput({
+            value: draft.routeMeters,
+            onChange: (v) => onPatch({ routeMeters: v }),
+            sanitize: (raw) =>
+              sanitizeDecimalMetersString(raw, MAX_ROUTE_METERS, draft.routeMeters) || "0",
+            isDecimal: true,
+          })}
         />
       </Label>
 
@@ -479,27 +483,29 @@ export function RoomFormBlock({
 
       <Label text="Кабель-канал 40×40, м">
         <input
-          value={draft.cable40Meters}
-          onChange={(e) =>
-            onPatch({
-              cable40Meters: sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS),
-            })
-          }
           style={inputStyle}
-          inputMode="decimal"
+          value={draft.cable40Meters}
+          {...bindZeroReplacingNumericInput({
+            value: draft.cable40Meters,
+            onChange: (v) => onPatch({ cable40Meters: v }),
+            sanitize: (raw) =>
+              sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, draft.cable40Meters) || "0",
+            isDecimal: true,
+          })}
         />
       </Label>
 
       <Label text="Кабель-канал 16×16, м">
         <input
-          value={draft.cable16Meters}
-          onChange={(e) =>
-            onPatch({
-              cable16Meters: sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS),
-            })
-          }
           style={inputStyle}
-          inputMode="decimal"
+          value={draft.cable16Meters}
+          {...bindZeroReplacingNumericInput({
+            value: draft.cable16Meters,
+            onChange: (v) => onPatch({ cable16Meters: v }),
+            sanitize: (raw) =>
+              sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, draft.cable16Meters) || "0",
+            isDecimal: true,
+          })}
         />
       </Label>
 
@@ -518,14 +524,14 @@ export function RoomFormBlock({
 
       <Label text="Подъём инструмента (начиная с 3 этажа)">
         <input
-          value={draft.carryToolFloors}
-          onChange={(e) =>
-            onPatch({
-              carryToolFloors: sanitizeNonNegativeIntString(e.target.value, MAX_FLOORS) || "0",
-            })
-          }
           style={inputStyle}
-          inputMode="numeric"
+          value={draft.carryToolFloors}
+          {...bindZeroReplacingNumericInput({
+            value: draft.carryToolFloors,
+            onChange: (v) => onPatch({ carryToolFloors: v }),
+            sanitize: (raw) =>
+              sanitizeNonNegativeIntString(raw, MAX_FLOORS, draft.carryToolFloors) || "0",
+          })}
         />
       </Label>
 
@@ -537,14 +543,14 @@ export function RoomFormBlock({
 
       <Label text="Демонтаж, ₽">
         <input
-          value={draft.manualDismantlingCost}
-          onChange={(e) =>
-            onPatch({
-              manualDismantlingCost: sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY) || "0",
-            })
-          }
           style={inputStyle}
-          inputMode="numeric"
+          value={draft.manualDismantlingCost}
+          {...bindZeroReplacingNumericInput({
+            value: draft.manualDismantlingCost,
+            onChange: (v) => onPatch({ manualDismantlingCost: v }),
+            sanitize: (raw) =>
+              sanitizeNonNegativeMoneyString(raw, MAX_MONEY, draft.manualDismantlingCost) || "0",
+          })}
         />
       </Label>
 
@@ -587,18 +593,22 @@ export function RoomFormBlock({
                 </label>
                 {state.checked ? (
                   <input
-                    value={state.qty}
-                    onChange={(e) => {
-                      const qty = sanitizeNonNegativeIntString(e.target.value, 999) || "1";
-                      onPatch({
-                        selectedExtraServices: {
-                          ...draft.selectedExtraServices,
-                          [service.id]: { ...state, checked: true, qty },
-                        },
-                      });
-                    }}
                     style={qtyInputStyle}
-                    inputMode="numeric"
+                    value={state.qty}
+                    {...bindZeroReplacingNumericInput({
+                      value: state.qty,
+                      onChange: (qty) => {
+                        onPatch({
+                          selectedExtraServices: {
+                            ...draft.selectedExtraServices,
+                            [service.id]: { ...state, checked: true, qty },
+                          },
+                        });
+                      },
+                      sanitize: (raw) =>
+                        sanitizeNonNegativeIntString(raw, 999, state.qty) || "1",
+                      emptyDefault: "1",
+                    })}
                   />
                 ) : null}
               </div>
@@ -616,13 +626,14 @@ export function RoomFormBlock({
           style={inputStyle}
         />
         <input
-          value={quickPrice}
-          onChange={(e) =>
-            setQuickPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
-          }
           placeholder="Цена, ₽"
           style={inputStyle}
-          inputMode="numeric"
+          value={quickPrice}
+          {...bindZeroReplacingNumericInput({
+            value: quickPrice,
+            onChange: setQuickPrice,
+            sanitize: (raw) => sanitizeNonNegativeMoneyString(raw, MAX_MONEY, quickPrice) || "0",
+          })}
         />
         <button type="button" onClick={handleQuickAdd} style={secondaryButtonStyle}>
           Добавить в расчёт

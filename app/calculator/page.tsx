@@ -69,6 +69,8 @@ import {
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
+  handleZeroReplacingNumericFocus,
+  numericInputBlurValue,
   WARN_CABLE_METERS,
   WARN_FLOORS,
   WARN_HOLES,
@@ -600,13 +602,14 @@ function CalculatorPage() {
 
   function onIntFieldChange(
     key: string,
+    previous: string,
     raw: string,
     max: number,
     warnAt: number,
     setter: (value: string) => void
   ) {
     const hadNonDigits = /\D/.test(String(raw || ""));
-    const next = sanitizeNonNegativeIntString(raw, max);
+    const next = sanitizeNonNegativeIntString(raw, max, previous);
     setter(next);
 
     if (String(raw || "").trim() !== "" && next === "") {
@@ -627,13 +630,14 @@ function CalculatorPage() {
 
   function onDecimalMetersFieldChange(
     key: string,
+    previous: string,
     raw: string,
     max: number,
     warnAt: number,
     setter: (value: string) => void
   ) {
     const hadInvalid = /[^\d.,\s]/.test(String(raw || "").replace(/\s/g, ""));
-    const next = sanitizeDecimalMetersString(raw, max);
+    const next = sanitizeDecimalMetersString(raw, max, previous);
     setter(next);
 
     if (String(raw || "").trim() !== "" && next === "" && String(raw || "").trim() !== ".") {
@@ -654,13 +658,14 @@ function CalculatorPage() {
 
   function onMoneyFieldChange(
     key: string,
+    previous: string,
     raw: string,
     max: number,
     warnAt: number,
     setter: (value: string) => void
   ) {
     const hadNonDigits = /\D/.test(String(raw || ""));
-    const next = sanitizeNonNegativeMoneyString(raw, max);
+    const next = sanitizeNonNegativeMoneyString(raw, max, previous);
     setter(next);
 
     if (String(raw || "").trim() !== "" && next === "") {
@@ -1499,7 +1504,9 @@ function CalculatorPage() {
           <input
             value={newAcModelPrice}
             onChange={(e) => {
-              setNewAcModelPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY));
+              setNewAcModelPrice(
+                sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY, newAcModelPrice)
+              );
               clearError("newAcModelPrice");
             }}
             placeholder="Цена"
@@ -1676,12 +1683,18 @@ function CalculatorPage() {
             onChange={(e) =>
               onDecimalMetersFieldChange(
                 "routeMeters",
+                routeMeters,
                 e.target.value,
                 MAX_ROUTE_METERS,
                 WARN_ROUTE_METERS,
                 setRouteMeters
               )
             }
+            onFocus={handleZeroReplacingNumericFocus}
+            onBlur={() => {
+              const v = numericInputBlurValue(routeMeters, "0", true);
+              if (v !== routeMeters) setRouteMeters(v);
+            }}
             style={inputStyle}
             inputMode="decimal"
           />
@@ -1700,6 +1713,7 @@ function CalculatorPage() {
             if (patch.extraHolesNormal != null) {
               onIntFieldChange(
                 "extraHolesNormal",
+                extraHolesNormal,
                 patch.extraHolesNormal,
                 MAX_HOLES,
                 WARN_HOLES,
@@ -1709,6 +1723,7 @@ function CalculatorPage() {
             if (patch.extraHolesArm != null) {
               onIntFieldChange(
                 "extraHolesArm",
+                extraHolesArm,
                 patch.extraHolesArm,
                 MAX_HOLES,
                 WARN_HOLES,
@@ -1718,6 +1733,7 @@ function CalculatorPage() {
             if (patch.roughInHolesBrick != null) {
               onIntFieldChange(
                 "roughInHolesBrick",
+                roughInHolesBrick,
                 patch.roughInHolesBrick,
                 MAX_HOLES,
                 WARN_HOLES,
@@ -1727,6 +1743,7 @@ function CalculatorPage() {
             if (patch.roughInHolesArmConcrete != null) {
               onIntFieldChange(
                 "roughInHolesArmConcrete",
+                roughInHolesArmConcrete,
                 patch.roughInHolesArmConcrete,
                 MAX_HOLES,
                 WARN_HOLES,
@@ -1792,8 +1809,17 @@ function CalculatorPage() {
               fieldErrors={fieldErrors}
               fieldWarnings={fieldWarnings}
               onMetersFieldChange={(key, value, apply) => {
+                const prev =
+                  key === "strobaConcreteMeters"
+                    ? strobaConcreteMeters
+                    : key === "strobaBrickMeters"
+                      ? strobaBrickMeters
+                      : key === "strobaDrainConcreteMeters"
+                        ? strobaDrainConcreteMeters
+                        : strobaDrainBrickMeters;
                 onDecimalMetersFieldChange(
                   key,
+                  prev,
                   value,
                   MAX_STROBA_METERS,
                   WARN_STROBA_METERS,
@@ -1808,12 +1834,18 @@ function CalculatorPage() {
                 onChange={(e) =>
                   onDecimalMetersFieldChange(
                     "cable40Meters",
+                    cable40Meters,
                     e.target.value,
                     MAX_CABLE_METERS,
                     WARN_CABLE_METERS,
                     setCable40Meters
                   )
                 }
+              onFocus={handleZeroReplacingNumericFocus}
+              onBlur={() => {
+                const v = numericInputBlurValue(cable40Meters, "0", true);
+                if (v !== cable40Meters) setCable40Meters(v);
+              }}
               style={inputStyle}
               inputMode="decimal"
             />
@@ -1826,12 +1858,18 @@ function CalculatorPage() {
                 onChange={(e) =>
                   onDecimalMetersFieldChange(
                     "cable16Meters",
+                    cable16Meters,
                     e.target.value,
                     MAX_CABLE_METERS,
                     WARN_CABLE_METERS,
                     setCable16Meters
                   )
                 }
+              onFocus={handleZeroReplacingNumericFocus}
+              onBlur={() => {
+                const v = numericInputBlurValue(cable16Meters, "0", true);
+                if (v !== cable16Meters) setCable16Meters(v);
+              }}
               style={inputStyle}
               inputMode="decimal"
             />
@@ -1903,7 +1941,11 @@ function CalculatorPage() {
                         <input
                           value={state.qty}
                           onChange={(e) => {
-                            const next = sanitizeNonNegativeIntString(e.target.value, 999);
+                            const next = sanitizeNonNegativeIntString(
+                              e.target.value,
+                              999,
+                              state.qty
+                            );
                             setSelectedExtraServices((prev) => ({
                               ...prev,
                               [service.id]: {
@@ -1953,12 +1995,18 @@ function CalculatorPage() {
               onChange={(e) =>
               onIntFieldChange(
                 "carryToolFloors",
+                carryToolFloors,
                 e.target.value,
                 MAX_FLOORS,
                 WARN_FLOORS,
                 setCarryToolFloors
               )
               }
+              onFocus={handleZeroReplacingNumericFocus}
+              onBlur={() => {
+                const v = numericInputBlurValue(carryToolFloors);
+                if (v !== carryToolFloors) setCarryToolFloors(v);
+              }}
               style={inputStyle}
             inputMode="numeric"
           />
@@ -1971,12 +2019,18 @@ function CalculatorPage() {
             onChange={(e) =>
               onMoneyFieldChange(
                 "manualDismantlingCost",
+                manualDismantlingCost,
                 e.target.value,
                 MAX_MONEY,
                 WARN_MONEY,
                 setManualDismantlingCost
               )
             }
+              onFocus={handleZeroReplacingNumericFocus}
+              onBlur={() => {
+                const v = numericInputBlurValue(manualDismantlingCost);
+                if (v !== manualDismantlingCost) setManualDismantlingCost(v);
+              }}
               style={inputStyle}
               inputMode="numeric"
             />
@@ -2006,12 +2060,18 @@ function CalculatorPage() {
               onChange={(e) =>
                 onMoneyFieldChange(
                   "quickServicePrice",
+                  quickServicePrice,
                   e.target.value,
                   MAX_MONEY,
                   WARN_MONEY,
                   setQuickServicePrice
                 )
               }
+              onFocus={handleZeroReplacingNumericFocus}
+              onBlur={() => {
+                const v = numericInputBlurValue(quickServicePrice);
+                if (v !== quickServicePrice) setQuickServicePrice(v);
+              }}
               placeholder="Цена, ₽"
               style={inputStyle}
               inputMode="numeric"

@@ -18,17 +18,30 @@ import {
   normalizeRoughInRouteCapacity,
 } from "./roughInMode";
 import { normalizeStrobaMetersFromRaw } from "./strobaFields";
+import { normalizeNumericInputValue } from "./numericInput";
 
-export function sanitizeNonNegativeIntString(raw: string, max: number) {
-  const digits = String(raw || "").replace(/\D/g, "");
+export function sanitizeNonNegativeIntString(
+  raw: string,
+  max: number,
+  previous?: string
+) {
+  const src =
+    previous !== undefined ? normalizeNumericInputValue(previous, raw) : raw;
+  const digits = String(src || "").replace(/\D/g, "");
   if (!digits) return "";
   const n = Number(digits);
   if (!Number.isFinite(n)) return "";
   return String(Math.min(Math.max(0, Math.trunc(n)), max));
 }
 
-export function sanitizeNonNegativeMoneyString(raw: string, max: number) {
-  const digits = String(raw || "").replace(/\D/g, "");
+export function sanitizeNonNegativeMoneyString(
+  raw: string,
+  max: number,
+  previous?: string
+) {
+  const src =
+    previous !== undefined ? normalizeNumericInputValue(previous, raw) : raw;
+  const digits = String(src || "").replace(/\D/g, "");
   if (!digits) return "";
   const n = Number(digits);
   if (!Number.isFinite(n)) return "";
@@ -50,8 +63,14 @@ export function parseDecimalMetersInput(raw: string, max: number): number {
   return Math.min(n, max);
 }
 
-export function sanitizeDecimalMetersString(raw: string, max: number): string {
-  const t = String(raw ?? "")
+export function sanitizeDecimalMetersString(
+  raw: string,
+  max: number,
+  previous?: string
+): string {
+  const src =
+    previous !== undefined ? normalizeNumericInputValue(previous, raw) : raw;
+  const t = String(src ?? "")
     .trim()
     .replace(",", ".")
     .replace(/[^\d.]/g, "");

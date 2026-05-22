@@ -1,5 +1,12 @@
 import { buildStructuredClientQuoteMessage } from "@/lib/clientQuoteStandard";
+import { normalizeLegacyRoughInHoleLabelsInQuoteText } from "@/lib/calculator/roughInMode";
 import { normalizeLegacyStrobaLabelsInQuoteText } from "@/lib/calculator/strobaBilling";
+
+function normalizeQuoteDisplayText(text: string): string {
+  return normalizeLegacyRoughInHoleLabelsInQuoteText(
+    normalizeLegacyStrobaLabelsInQuoteText(text)
+  );
+}
 
 export type QuoteLineItem = {
   title: string;
@@ -28,14 +35,14 @@ export type BuildClientQuoteTextParams = {
 export function buildClientQuoteText(params: BuildClientQuoteTextParams): string {
   const text = buildStructuredClientQuoteMessage({
     items: params.items.map((i) => ({
-      title: normalizeLegacyStrobaLabelsInQuoteText(i.title),
+      title: normalizeQuoteDisplayText(i.title),
       amount: i.amount,
     })),
     total: params.total,
     clientName: params.clientName,
     clientContact: params.clientContact,
   });
-  return normalizeLegacyStrobaLabelsInQuoteText(text);
+  return normalizeQuoteDisplayText(text);
 }
 
 function encode(text: string): string {

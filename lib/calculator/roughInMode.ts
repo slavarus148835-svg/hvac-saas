@@ -6,7 +6,18 @@ export const CALCULATOR_ROUGH_IN_LABEL_RU = "Закладка трасс";
 
 /** Отверстия только в режиме «Закладка трасс» (фиксированные цены, не из прайса). */
 export const ROUGH_IN_HOLE_BRICK_LABEL = "Отверстие кирпич/пеноблок";
-export const ROUGH_IN_HOLE_ARM_CONCRETE_LABEL = "Армированный бетон/монолит";
+export const ROUGH_IN_HOLE_ARM_CONCRETE_LABEL =
+  "Отверстие армированный бетон/монолит";
+
+const LEGACY_ROUGH_IN_ARM_HOLE_RE = /Армированный бетон\/монолит/g;
+
+/** Старые сметы / share / история без слова «Отверстие». */
+export function normalizeLegacyRoughInHoleLabelsInQuoteText(text: string): string {
+  return String(text || "").replace(
+    LEGACY_ROUGH_IN_ARM_HOLE_RE,
+    ROUGH_IN_HOLE_ARM_CONCRETE_LABEL
+  );
+}
 export const ROUGH_IN_HOLE_BRICK_PRICE_RUB = 1000;
 export const ROUGH_IN_HOLE_ARM_CONCRETE_PRICE_RUB = 5000;
 

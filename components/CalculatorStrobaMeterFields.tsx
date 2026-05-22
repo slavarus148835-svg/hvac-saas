@@ -2,6 +2,7 @@
 
 import type { StrobaMetersFields } from "@/lib/calculator/strobaFields";
 import { MAX_STROBA_METERS } from "@/lib/calculator/constants";
+import { bindZeroReplacingNumericInput } from "@/lib/calculator/numericInput";
 import { sanitizeDecimalMetersString } from "@/lib/calculator/parse";
 
 const STROBA_MIN_NOTE =
@@ -28,7 +29,7 @@ const webInputStyle: React.CSSProperties = {
   padding: "12px 14px",
   borderRadius: 12,
   border: "1px solid #e2e8f0",
-  fontSize: 15,
+  fontSize: 16,
   marginBottom: 12,
   boxSizing: "border-box",
 };
@@ -38,7 +39,7 @@ const miniInputStyle: React.CSSProperties = {
   padding: "12px 14px",
   borderRadius: 12,
   border: "1px solid #e2e8f0",
-  fontSize: 15,
+  fontSize: 16,
   marginBottom: 12,
   boxSizing: "border-box",
 };
@@ -59,19 +60,27 @@ const labelMini: React.CSSProperties = {
   marginTop: 4,
 };
 
-function patchMeters(
+function strobaMetersInputProps(
   key: keyof StrobaMetersFields,
-  value: string,
+  values: StrobaMetersFields,
   onPatch: (p: Patch) => void,
   onMetersFieldChange?: CalculatorStrobaMeterFieldsProps["onMetersFieldChange"]
 ) {
   const apply = (v: string) =>
     onPatch({ [key]: sanitizeDecimalMetersString(v, MAX_STROBA_METERS) || "0" });
-  if (onMetersFieldChange) {
-    onMetersFieldChange(key, value, apply);
-  } else {
-    apply(value);
-  }
+  const bind = bindZeroReplacingNumericInput({
+    value: values[key],
+    onChange: (v) => {
+      if (onMetersFieldChange) {
+        onMetersFieldChange(key, v, apply);
+      } else {
+        apply(v);
+      }
+    },
+    sanitize: (raw) => sanitizeDecimalMetersString(raw, MAX_STROBA_METERS, values[key]) || "0",
+    isDecimal: true,
+  });
+  return { value: values[key], inputMode: "decimal" as const, ...bind };
 }
 
 export function CalculatorStrobaMeterFields({
@@ -105,10 +114,8 @@ export function CalculatorStrobaMeterFields({
               {label}
             </label>
             <input
-              value={values[key]}
-              onChange={(e) => patchMeters(key, e.target.value, onPatch, onMetersFieldChange)}
               style={inputStyle}
-              inputMode="decimal"
+              {...strobaMetersInputProps(key, values, onPatch, onMetersFieldChange)}
             />
             {fieldErrors?.[key] ? (
               <p style={{ color: "#b91c1c", fontSize: 12, margin: "0 0 8px" }}>{fieldErrors[key]}</p>
@@ -135,10 +142,8 @@ export function CalculatorStrobaMeterFields({
           <span style={labelMini}>{label}</span>
           <input
             style={inputStyle}
-            inputMode="decimal"
             placeholder="0"
-            value={values[key]}
-            onChange={(e) => patchMeters(key, e.target.value, onPatch, onMetersFieldChange)}
+            {...strobaMetersInputProps(key, values, onPatch, onMetersFieldChange)}
           />
         </span>
       ))}

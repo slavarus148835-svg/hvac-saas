@@ -28,6 +28,8 @@ export async function GET() {
       hideAcModelsRoughInV1: true,
       /** 4 поля штробы (бетон + кирпич) без селектора материала. */
       calculatorStrobaDualMaterialV1: true,
+      calculatorNumericInputV1: true,
+      calculatorRoughInHoleLabelV1: true,
       firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
       firestoreHeavyScansDisabled:
         process.env.FIRESTORE_SAFE_MODE === "1" ||

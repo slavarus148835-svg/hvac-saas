@@ -43,6 +43,7 @@ export {
   shouldHideCalculatorAcModelsUi,
   ROUGH_IN_HOLE_ARM_CONCRETE_LABEL,
   ROUGH_IN_HOLE_BRICK_LABEL,
+  normalizeLegacyRoughInHoleLabelsInQuoteText,
 } from "./roughInMode";
 export { computeCalculatorEstimate, computeCalculatorLineItems, formatMetersQtyRu } from "./compute";
 export { computeMultiRoomEstimate } from "./computeMultiRoomEstimate";
@@ -70,6 +71,15 @@ export {
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
 } from "./parse";
+export {
+  bindZeroReplacingNumericInput,
+  CALCULATOR_FORM_CONTROL_FONT_SIZE_PX,
+  calculatorFormControlStyle,
+  handleZeroReplacingNumericChange,
+  handleZeroReplacingNumericFocus,
+  normalizeNumericInputValue,
+  numericInputBlurValue,
+} from "./numericInput";
 export type {
   CalculatorComputeInput,
   CalculatorComputeResult,

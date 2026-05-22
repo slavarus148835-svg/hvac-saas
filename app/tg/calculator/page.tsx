@@ -23,6 +23,7 @@ import {
   filterAcModelLineItems,
   filterAcModelLinesFromClientQuoteText,
   isCalculatorRoughInCapacity,
+  normalizeLegacyRoughInHoleLabelsInQuoteText,
   normalizeLegacyStrobaLabelsInQuoteText,
   shouldHideCalculatorAcModelsUi,
   MAX_CABLE_METERS,
@@ -40,6 +41,7 @@ import {
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
+  bindZeroReplacingNumericInput,
 } from "@/lib/calculator";
 import type { CalculatorRoomDraft } from "@/lib/calculator";
 import {
@@ -623,7 +625,9 @@ export default function TgCalculatorPage() {
       tail.push(textSettings.quoteFooterTemplate.trim());
     }
     if (tail.length) t = `${t}\n\n${tail.join("\n\n")}`;
-    return normalizeLegacyStrobaLabelsInQuoteText(t);
+    return normalizeLegacyRoughInHoleLabelsInQuoteText(
+      normalizeLegacyStrobaLabelsInQuoteText(t)
+    );
   }, [
     multiRoomEnabled,
     multiEstimate,
@@ -721,7 +725,11 @@ export default function TgCalculatorPage() {
         setModelPickByRoom({});
         if (savedClientText) {
           setClientQuoteUserEdited(true);
-          setClientQuoteDraft(normalizeLegacyStrobaLabelsInQuoteText(savedClientText));
+          setClientQuoteDraft(
+            normalizeLegacyRoughInHoleLabelsInQuoteText(
+              normalizeLegacyStrobaLabelsInQuoteText(savedClientText)
+            )
+          );
         } else {
           setClientQuoteUserEdited(false);
           setClientQuoteDraft("");
@@ -733,8 +741,10 @@ export default function TgCalculatorPage() {
           const capForQuote =
             typeof h.capacity === "string" ? h.capacity : CALCULATOR_ROUGH_IN_CAPACITY;
           setClientQuoteDraft(
-            normalizeLegacyStrobaLabelsInQuoteText(
-              filterAcModelLinesFromClientQuoteText(savedClientText, capForQuote)
+            normalizeLegacyRoughInHoleLabelsInQuoteText(
+              normalizeLegacyStrobaLabelsInQuoteText(
+                filterAcModelLinesFromClientQuoteText(savedClientText, capForQuote)
+              )
             )
           );
         } else {
@@ -1468,11 +1478,13 @@ export default function TgCalculatorPage() {
                       <input
                         style={input}
                         placeholder="Цена, ₽"
-                        inputMode="numeric"
                         value={newMdlPrice}
-                        onChange={(e) =>
-                          setNewMdlPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
-                        }
+                        {...bindZeroReplacingNumericInput({
+                          value: newMdlPrice,
+                          onChange: setNewMdlPrice,
+                          sanitize: (raw) =>
+                            sanitizeNonNegativeMoneyString(raw, MAX_MONEY, newMdlPrice) || "0",
+                        })}
                       />
                       <input
                         style={input}
@@ -1669,13 +1681,14 @@ export default function TgCalculatorPage() {
                   </span>
                   <input
                     style={input}
-                    inputMode="decimal"
                     value={routeMeters}
-                    onChange={(e) =>
-                      setRouteMeters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_ROUTE_METERS)
-                      )
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: routeMeters,
+                      onChange: setRouteMeters,
+                      sanitize: (raw) =>
+                        sanitizeDecimalMetersString(raw, MAX_ROUTE_METERS, routeMeters) || "0",
+                      isDecimal: true,
+                    })}
                   />
 
                   <CalculatorHoleFieldsSection
@@ -1721,49 +1734,52 @@ export default function TgCalculatorPage() {
                   <span style={label}>Кабель-канал 40×40, м, мин. 1 м</span>
                   <input
                     style={input}
-                    inputMode="decimal"
                     value={cable40Meters}
-                    onChange={(e) =>
-                      setCable40Meters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS)
-                      )
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: cable40Meters,
+                      onChange: setCable40Meters,
+                      sanitize: (raw) =>
+                        sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, cable40Meters) || "0",
+                      isDecimal: true,
+                    })}
                   />
 
                   <span style={label}>Кабель-канал 16×16, м, мин. 1 м</span>
                   <input
                     style={input}
-                    inputMode="decimal"
                     value={cable16Meters}
-                    onChange={(e) =>
-                      setCable16Meters(
-                        sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS)
-                      )
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: cable16Meters,
+                      onChange: setCable16Meters,
+                      sanitize: (raw) =>
+                        sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, cable16Meters) || "0",
+                      isDecimal: true,
+                    })}
                   />
 
                   <span style={label}>Подъём инструмента (начиная с 3 этажа)</span>
                   <input
                     style={input}
-                    inputMode="numeric"
                     value={carryToolFloors}
-                    onChange={(e) =>
-                      setCarryToolFloors(
-                        sanitizeNonNegativeIntString(e.target.value, MAX_FLOORS)
-                      )
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: carryToolFloors,
+                      onChange: setCarryToolFloors,
+                      sanitize: (raw) =>
+                        sanitizeNonNegativeIntString(raw, MAX_FLOORS, carryToolFloors) || "0",
+                    })}
                   />
 
                   <span style={label}>Демонтаж вручную, ₽</span>
                   <input
                     style={input}
-                    inputMode="numeric"
                     value={manualDismantlingCost}
-                    onChange={(e) =>
-                      setManualDismantlingCost(
-                        sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY)
-                      )
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: manualDismantlingCost,
+                      onChange: setManualDismantlingCost,
+                      sanitize: (raw) =>
+                        sanitizeNonNegativeMoneyString(raw, MAX_MONEY, manualDismantlingCost) ||
+                        "0",
+                    })}
                   />
 
                   {(
@@ -1821,11 +1837,13 @@ export default function TgCalculatorPage() {
                   <input
                     style={input}
                     placeholder="Цена, ₽"
-                    inputMode="numeric"
                     value={quickSvcPrice}
-                    onChange={(e) =>
-                      setQuickSvcPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
-                    }
+                    {...bindZeroReplacingNumericInput({
+                      value: quickSvcPrice,
+                      onChange: setQuickSvcPrice,
+                      sanitize: (raw) =>
+                        sanitizeNonNegativeMoneyString(raw, MAX_MONEY, quickSvcPrice) || "0",
+                    })}
                   />
                   <button type="button" style={btnSecondary} onClick={addQuickServiceToCalc}>
                     Добавить услугу
@@ -1906,18 +1924,19 @@ export default function TgCalculatorPage() {
                           {st.checked ? (
                             <input
                               style={{ ...input, marginBottom: 0 }}
-                              inputMode="numeric"
                               placeholder="Кол-во"
                               value={st.qty}
-                              onChange={(e) =>
-                                setSelectedExtraServices((prev) => ({
-                                  ...prev,
-                                  [s.id]: {
-                                    ...st,
-                                    qty: sanitizeNonNegativeIntString(e.target.value, 999),
-                                  },
-                                }))
-                              }
+                              {...bindZeroReplacingNumericInput({
+                                value: st.qty,
+                                onChange: (qty) =>
+                                  setSelectedExtraServices((prev) => ({
+                                    ...prev,
+                                    [s.id]: { ...st, qty },
+                                  })),
+                                sanitize: (raw) =>
+                                  sanitizeNonNegativeIntString(raw, 999, st.qty) || "1",
+                                emptyDefault: "1",
+                              })}
                             />
                           ) : null}
                         </div>
@@ -2010,13 +2029,13 @@ export default function TgCalculatorPage() {
                         background: "#fff",
                         color: "#0f172a",
                       }}
-                      inputMode="numeric"
                       value={percentDiscount}
-                      onChange={(e) =>
-                        setPercentDiscount(
-                          sanitizeNonNegativeIntString(e.target.value, 100)
-                        )
-                      }
+                      {...bindZeroReplacingNumericInput({
+                        value: percentDiscount,
+                        onChange: setPercentDiscount,
+                        sanitize: (raw) =>
+                          sanitizeNonNegativeIntString(raw, 100, percentDiscount) || "0",
+                      })}
                     />
                   </div>
                 </div>

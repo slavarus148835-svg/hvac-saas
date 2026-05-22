@@ -24,6 +24,7 @@ import {
   sanitizeDecimalMetersString,
   sanitizeNonNegativeIntString,
   sanitizeNonNegativeMoneyString,
+  bindZeroReplacingNumericInput,
 } from "@/lib/calculator";
 import {
   newQuickExtraId,
@@ -346,13 +347,14 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
           </span>
           <input
             style={input}
-            inputMode="decimal"
             value={draft.routeMeters}
-            onChange={(e) =>
-              onPatch({
-                routeMeters: sanitizeDecimalMetersString(e.target.value, MAX_ROUTE_METERS),
-              })
-            }
+            {...bindZeroReplacingNumericInput({
+              value: draft.routeMeters,
+              onChange: (v) => onPatch({ routeMeters: v }),
+              sanitize: (raw) =>
+                sanitizeDecimalMetersString(raw, MAX_ROUTE_METERS, draft.routeMeters) || "0",
+              isDecimal: true,
+            })}
           />
 
           <CalculatorHoleFieldsSection
@@ -380,50 +382,52 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
           <span style={label}>Кабель-канал 40×40, м, мин. 1 м</span>
           <input
             style={input}
-            inputMode="decimal"
             value={draft.cable40Meters}
-            onChange={(e) =>
-              onPatch({
-                cable40Meters: sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS),
-              })
-            }
+            {...bindZeroReplacingNumericInput({
+              value: draft.cable40Meters,
+              onChange: (v) => onPatch({ cable40Meters: v }),
+              sanitize: (raw) =>
+                sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, draft.cable40Meters) || "0",
+              isDecimal: true,
+            })}
           />
 
           <span style={label}>Кабель-канал 16×16, м, мин. 1 м</span>
           <input
             style={input}
-            inputMode="decimal"
             value={draft.cable16Meters}
-            onChange={(e) =>
-              onPatch({
-                cable16Meters: sanitizeDecimalMetersString(e.target.value, MAX_CABLE_METERS),
-              })
-            }
+            {...bindZeroReplacingNumericInput({
+              value: draft.cable16Meters,
+              onChange: (v) => onPatch({ cable16Meters: v }),
+              sanitize: (raw) =>
+                sanitizeDecimalMetersString(raw, MAX_CABLE_METERS, draft.cable16Meters) || "0",
+              isDecimal: true,
+            })}
           />
 
           <span style={label}>Подъём инструмента (начиная с 3 этажа)</span>
           <input
             style={input}
-            inputMode="numeric"
             value={draft.carryToolFloors}
-            onChange={(e) =>
-              onPatch({
-                carryToolFloors: sanitizeNonNegativeIntString(e.target.value, MAX_FLOORS) || "0",
-              })
-            }
+            {...bindZeroReplacingNumericInput({
+              value: draft.carryToolFloors,
+              onChange: (v) => onPatch({ carryToolFloors: v }),
+              sanitize: (raw) =>
+                sanitizeNonNegativeIntString(raw, MAX_FLOORS, draft.carryToolFloors) || "0",
+            })}
           />
 
           <span style={label}>Демонтаж вручную, ₽</span>
           <input
             style={input}
-            inputMode="numeric"
             value={draft.manualDismantlingCost}
-            onChange={(e) =>
-              onPatch({
-                manualDismantlingCost:
-                  sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY) || "0",
-              })
-            }
+            {...bindZeroReplacingNumericInput({
+              value: draft.manualDismantlingCost,
+              onChange: (v) => onPatch({ manualDismantlingCost: v }),
+              sanitize: (raw) =>
+                sanitizeNonNegativeMoneyString(raw, MAX_MONEY, draft.manualDismantlingCost) ||
+                "0",
+            })}
           />
 
           {(
@@ -496,18 +500,22 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
                     {st.checked ? (
                       <input
                         style={{ ...input, marginBottom: 0 }}
-                        inputMode="numeric"
                         placeholder="Кол-во"
                         value={st.qty}
-                        onChange={(e) => {
-                          const qty = sanitizeNonNegativeIntString(e.target.value, 999) || "1";
-                          onPatch({
-                            selectedExtraServices: {
-                              ...draft.selectedExtraServices,
-                              [s.id]: { ...st, checked: true, qty },
-                            },
-                          });
-                        }}
+                        {...bindZeroReplacingNumericInput({
+                          value: st.qty,
+                          onChange: (qty) => {
+                            onPatch({
+                              selectedExtraServices: {
+                                ...draft.selectedExtraServices,
+                                [s.id]: { ...st, checked: true, qty },
+                              },
+                            });
+                          },
+                          sanitize: (raw) =>
+                            sanitizeNonNegativeIntString(raw, 999, st.qty) || "1",
+                          emptyDefault: "1",
+                        })}
                       />
                     ) : null}
                   </div>
@@ -526,11 +534,12 @@ function TgCalculatorRoomCardInner(props: TgCalculatorRoomCardProps) {
           <input
             style={input}
             placeholder="Цена, ₽"
-            inputMode="numeric"
             value={qPrice}
-            onChange={(e) =>
-              setQPrice(sanitizeNonNegativeMoneyString(e.target.value, MAX_MONEY))
-            }
+            {...bindZeroReplacingNumericInput({
+              value: qPrice,
+              onChange: setQPrice,
+              sanitize: (raw) => sanitizeNonNegativeMoneyString(raw, MAX_MONEY, qPrice) || "0",
+            })}
           />
           <button type="button" style={btnSecondary} onClick={addQuick}>
             Добавить услугу

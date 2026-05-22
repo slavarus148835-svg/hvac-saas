@@ -7,7 +7,26 @@ import {
   ROUGH_IN_HOLE_BRICK_LABEL,
   ROUGH_IN_HOLE_BRICK_PRICE_RUB,
 } from "@/lib/calculator/roughInMode";
-import { MAX_HOLES, sanitizeNonNegativeIntString } from "@/lib/calculator";
+import {
+  bindZeroReplacingNumericInput,
+  MAX_HOLES,
+  sanitizeNonNegativeIntString,
+} from "@/lib/calculator";
+
+function holeCountInputProps(
+  value: string,
+  onValue: (v: string) => void
+): React.InputHTMLAttributes<HTMLInputElement> {
+  return {
+    value,
+    inputMode: "numeric",
+    ...bindZeroReplacingNumericInput({
+      value,
+      onChange: onValue,
+      sanitize: (raw) => sanitizeNonNegativeIntString(raw, MAX_HOLES) || "0",
+    }),
+  };
+}
 
 const labelWeb: React.CSSProperties = {
   display: "block",
@@ -134,15 +153,10 @@ export function CalculatorHoleFieldsSection({
             fieldKey: "roughInHolesBrick",
             children: (
               <input
-                value={roughInHolesBrick}
-                onChange={(e) =>
-                  onPatch({
-                    roughInHolesBrick:
-                      sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-                  })
-                }
                 style={inputStyle}
-                inputMode="numeric"
+                {...holeCountInputProps(roughInHolesBrick, (v) =>
+                  onPatch({ roughInHolesBrick: v })
+                )}
               />
             ),
           })
@@ -153,15 +167,10 @@ export function CalculatorHoleFieldsSection({
             ) : null}
             <input
               style={inputStyle}
-              inputMode="numeric"
-              value={roughInHolesBrick}
               aria-label={ROUGH_IN_HOLE_BRICK_LABEL}
-              onChange={(e) =>
-                onPatch({
-                  roughInHolesBrick:
-                    sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-                })
-              }
+              {...holeCountInputProps(roughInHolesBrick, (v) =>
+                onPatch({ roughInHolesBrick: v })
+              )}
             />
           </>
         )}
@@ -180,15 +189,10 @@ export function CalculatorHoleFieldsSection({
             fieldKey: "roughInHolesArmConcrete",
             children: (
               <input
-                value={roughInHolesArmConcrete}
-                onChange={(e) =>
-                  onPatch({
-                    roughInHolesArmConcrete:
-                      sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-                  })
-                }
                 style={inputStyle}
-                inputMode="numeric"
+                {...holeCountInputProps(roughInHolesArmConcrete, (v) =>
+                  onPatch({ roughInHolesArmConcrete: v })
+                )}
               />
             ),
           })
@@ -199,15 +203,10 @@ export function CalculatorHoleFieldsSection({
             ) : null}
             <input
               style={inputStyle}
-              inputMode="numeric"
-              value={roughInHolesArmConcrete}
               aria-label={ROUGH_IN_HOLE_ARM_CONCRETE_LABEL}
-              onChange={(e) =>
-                onPatch({
-                  roughInHolesArmConcrete:
-                    sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-                })
-              }
+              {...holeCountInputProps(roughInHolesArmConcrete, (v) =>
+                onPatch({ roughInHolesArmConcrete: v })
+              )}
             />
           </>
         )}
@@ -236,15 +235,10 @@ export function CalculatorHoleFieldsSection({
       <>
         <WebLabel text={ROUGH_IN_HOLE_BRICK_LABEL} note={brickNote} labelStyle={labelStyle} noteStyle={noteStyle}>
           <input
-            value={roughInHolesBrick}
-            onChange={(e) =>
-              onPatch({
-                roughInHolesBrick:
-                  sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-              })
-            }
             style={inputStyle}
-            inputMode="numeric"
+            {...holeCountInputProps(roughInHolesBrick, (v) =>
+              onPatch({ roughInHolesBrick: v })
+            )}
           />
         </WebLabel>
         <WebLabel
@@ -254,15 +248,10 @@ export function CalculatorHoleFieldsSection({
           noteStyle={noteStyle}
         >
           <input
-            value={roughInHolesArmConcrete}
-            onChange={(e) =>
-              onPatch({
-                roughInHolesArmConcrete:
-                  sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-              })
-            }
             style={inputStyle}
-            inputMode="numeric"
+            {...holeCountInputProps(roughInHolesArmConcrete, (v) =>
+              onPatch({ roughInHolesArmConcrete: v })
+            )}
           />
         </WebLabel>
       </>
@@ -319,13 +308,7 @@ export function CalculatorHoleFieldsSection({
       <span style={labelStyle}>Доп. отверстия обычные</span>
       <input
         style={inputStyle}
-        inputMode="numeric"
-        value={extraHolesNormal}
-        onChange={(e) =>
-          onPatch({
-            extraHolesNormal: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-          })
-        }
+        {...holeCountInputProps(extraHolesNormal, (v) => onPatch({ extraHolesNormal: v }))}
       />
     </>
   ) : renderWebField ? (
@@ -335,14 +318,8 @@ export function CalculatorHoleFieldsSection({
       fieldKey: "extraHolesNormal",
       children: (
         <input
-          value={extraHolesNormal}
-          onChange={(e) =>
-            onPatch({
-              extraHolesNormal: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-            })
-          }
           style={inputStyle}
-          inputMode="numeric"
+          {...holeCountInputProps(extraHolesNormal, (v) => onPatch({ extraHolesNormal: v }))}
         />
       ),
     })
@@ -353,13 +330,7 @@ export function CalculatorHoleFieldsSection({
       <span style={labelStyle}>Доп. отверстия арм. бетон</span>
       <input
         style={inputStyle}
-        inputMode="numeric"
-        value={extraHolesArm}
-        onChange={(e) =>
-          onPatch({
-            extraHolesArm: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-          })
-        }
+        {...holeCountInputProps(extraHolesArm, (v) => onPatch({ extraHolesArm: v }))}
       />
     </>
   ) : renderWebField ? (
@@ -369,14 +340,8 @@ export function CalculatorHoleFieldsSection({
       fieldKey: "extraHolesArm",
       children: (
         <input
-          value={extraHolesArm}
-          onChange={(e) =>
-            onPatch({
-              extraHolesArm: sanitizeNonNegativeIntString(e.target.value, MAX_HOLES) || "0",
-            })
-          }
           style={inputStyle}
-          inputMode="numeric"
+          {...holeCountInputProps(extraHolesArm, (v) => onPatch({ extraHolesArm: v }))}
         />
       ),
     })
