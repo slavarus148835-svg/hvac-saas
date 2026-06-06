@@ -11,6 +11,7 @@ import {
   isValidPartnerManagerCode,
   normalizePartnerManagerCode,
 } from "@/lib/partner/partnerManagerCode";
+import { isTelegramAdminUserId } from "@/lib/server/telegram/telegramAdminAuth";
 import { allocateUniquePartnerManagerCode } from "@/lib/server/partnerManager/generateRandomPartnerCode";
 
 export { normalizePartnerManagerCode } from "@/lib/partner/partnerManagerCode";
@@ -71,9 +72,22 @@ export type AttachPartnerResult =
   | {
       ok: true;
       attached: boolean;
-      reason?: "already_attached" | "invalid_code" | "inactive_manager";
+      reason?:
+        | "already_attached"
+        | "invalid_code"
+        | "inactive_manager"
+        | "admin_excluded"
+        | "self_manager"
+        | "no_referral_intent";
     }
   | { ok: false; error: string };
+
+function userTelegramUserId(data: Record<string, unknown>): number | null {
+  const raw = data.telegramUserId ?? data.telegramId;
+  const n = Number(String(raw ?? "").replace(/\D/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
 
 /**
  * Закрепление B2B-менеджера один раз (не трогает referrerId / пользовательскую рефералку).
@@ -83,8 +97,12 @@ export async function attachPartnerToUserIfEmpty(
   uid: string,
   rawCode: string,
   source: PartnerSource,
-  options?: { firstTouchMs?: number }
+  options?: { firstTouchMs?: number; referralIntent?: boolean }
 ): Promise<AttachPartnerResult> {
+  if (options?.referralIntent !== true) {
+    return { ok: true, attached: false, reason: "no_referral_intent" };
+  }
+
   const code = normalizePartnerManagerCode(rawCode);
   if (!isValidPartnerManagerCode(code)) {
     return { ok: true, attached: false, reason: "invalid_code" };
@@ -99,6 +117,25 @@ export async function attachPartnerToUserIfEmpty(
   }
 
   const userRef = db.collection(PRICING_FS.users).doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    return { ok: false, error: "user_not_found" };
+  }
+  const userData = userSnap.data() ?? {};
+  const existingMid =
+    typeof userData.partnerManagerId === "string" ? userData.partnerManagerId.trim() : "";
+  if (existingMid) {
+    return { ok: true, attached: false, reason: "already_attached" };
+  }
+
+  const tgUid = userTelegramUserId(userData);
+  if (tgUid != null && isTelegramAdminUserId(tgUid)) {
+    return { ok: true, attached: false, reason: "admin_excluded" };
+  }
+  if (tgUid != null && manager.data.telegramUserId === tgUid) {
+    return { ok: true, attached: false, reason: "self_manager" };
+  }
+
   const firstTouchMs =
     typeof options?.firstTouchMs === "number" &&
     Number.isFinite(options.firstTouchMs) &&
@@ -113,9 +150,9 @@ export async function attachPartnerToUserIfEmpty(
         throw new Error("user_not_found");
       }
       const u = uSnap.data() ?? {};
-      const existingMid =
+      const mid =
         typeof u.partnerManagerId === "string" ? u.partnerManagerId.trim() : "";
-      if (existingMid) {
+      if (mid) {
         return { kind: "skip" as const, reason: "already_attached" as const };
       }
 
@@ -968,4 +1005,39 @@ export async function markFirstCalculationIfNeededAndRecordB2B(
   }
 
   return true;
+}
+
+const PARTNER_USER_FIELD_KEYS = [
+  "partnerCode",
+  "partnerManagerId",
+  "partnerAttachedAt",
+  "partnerSource",
+  "partnerLastTouchAt",
+  "partnerAttributionType",
+  "partnerAttributionLocked",
+  "partnerAttributionLockedAt",
+  "partnerFirstTouchAt",
+] as const;
+
+/** Снять ошибочную B2B-привязку с пользователя (без удаления referrerId). */
+export async function clearPartnerAttributionFromUser(
+  db: Firestore,
+  uid: string
+): Promise<{ ok: true; cleared: boolean } | { ok: false; error: string }> {
+  const ref = db.collection(PRICING_FS.users).doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "user_not_found" };
+  const data = snap.data() ?? {};
+  const had =
+    typeof data.partnerManagerId === "string" && data.partnerManagerId.trim().length > 0;
+  if (!had) return { ok: true, cleared: false };
+
+  const patch: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+  for (const key of PARTNER_USER_FIELD_KEYS) {
+    patch[key] = FieldValue.delete();
+  }
+  await ref.set(patch, { merge: true });
+  return { ok: true, cleared: true };
 }

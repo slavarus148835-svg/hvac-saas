@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { firestoreFieldToIsoUtc } from "@/lib/server/telegram/firestoreTimeIso";
 import type { UserTrialFields } from "@/lib/trialSubscription";
 import { evaluateMiniAppAccessGate } from "@/lib/server/telegram/evaluateMiniAppAccessGate";
+import { evaluateMiniAppSubscriptionAccess } from "@/lib/server/evaluateMiniAppSubscriptionAccess";
 import {
   loadUserDocByUid,
   telegramMiniAppPublicProfileFromUserDoc,
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
 
     const profile = telegramMiniAppPublicProfileFromUserDoc(v.uid, loaded.data);
     const access = evaluateMiniAppAccessGate(v.uid, loaded.data);
+    const subscription = evaluateMiniAppSubscriptionAccess(loaded.data);
     const d = loaded.data;
     const trialUser = d as UserTrialFields;
     const subscriptionStatus =
@@ -54,7 +56,12 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       accessAllowed: access.allowed,
-      accessGate: access.reason,
+      subscriptionAllowed: subscription.allowed,
+      accessGate: !access.allowed
+        ? access.reason
+        : !subscription.allowed
+          ? subscription.reason
+          : access.reason,
       emailVerifiedByCode: access.emailVerifiedByCode,
       profile: {
         uid: profile.uid,

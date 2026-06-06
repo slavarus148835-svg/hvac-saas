@@ -2,6 +2,9 @@
 
 export const PARTNER_MANAGER_STORAGE_KEY = "hvac_b2b_partner_code";
 export const PARTNER_MANAGER_FIRST_TOUCH_MS_KEY = "hvac_b2b_partner_first_touch_ms";
+/** Partner code только для текущей сессии (referral intent в этом заходе). */
+export const PARTNER_MANAGER_SESSION_CODE_KEY = "hvac_b2b_partner_session_code";
+export const PARTNER_MANAGER_SESSION_TOUCH_MS_KEY = "hvac_b2b_partner_session_touch_ms";
 
 export const PARTNER_MANAGERS_COLLECTION = "partnerManagers";
 export const PARTNER_EVENTS_COLLECTION = "partnerEvents";

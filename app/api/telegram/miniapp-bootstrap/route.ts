@@ -13,6 +13,7 @@ import {
 } from "@/lib/server/telegram/telegramLinkShared";
 import { consumeTelegramLinkToken } from "@/lib/server/telegram/telegramLinkTokens";
 import { evaluateMiniAppAccessGate } from "@/lib/server/telegram/evaluateMiniAppAccessGate";
+import { evaluateMiniAppSubscriptionAccess } from "@/lib/server/evaluateMiniAppSubscriptionAccess";
 import {
   createTelegramMiniAppSession,
   normalizeTelegramUserIdForMiniApp,
@@ -275,12 +276,19 @@ export async function POST(req: Request) {
         durationMs: Date.now() - startedAt,
       });
 
+      const subscription = evaluateMiniAppSubscriptionAccess(userData);
+
       return NextResponse.json({
         ok: true,
         authStatus: "existing_user_by_telegram",
         sessionToken,
         accessAllowed: access.allowed,
-        accessGate: access.reason,
+        subscriptionAllowed: subscription.allowed,
+        accessGate: !access.allowed
+          ? access.reason
+          : !subscription.allowed
+            ? subscription.reason
+            : access.reason,
         emailVerifiedByCode: access.emailVerifiedByCode,
         profile: publicProfilePayload(doc.id, userData),
       });

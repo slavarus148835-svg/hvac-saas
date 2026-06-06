@@ -18,6 +18,8 @@ import {
   getVerificationResendCooldownLeftSec,
   recordVerificationEmailSentAtNow,
 } from "@/lib/emailVerification";
+import { CABINET_MONTHLY_PRICE_RUB } from "@/lib/subscriptionVisibility";
+import { getTelegramWebApp } from "@/lib/telegramMiniApp";
 import type { TgProtectedPhase } from "@/lib/miniAppAccessGate";
 import { tgHapticButtonTap } from "@/lib/telegramHaptic";
 
@@ -160,6 +162,10 @@ export function TgMiniAppGateShell({
     );
   }
 
+  if (phase === "subscription_expired") {
+    return <TgSubscriptionExpiredScreen />;
+  }
+
   if (phase === "need_verify") {
     return (
       <TgVerifyEmailScreen
@@ -220,6 +226,44 @@ export function TgMiniAppGateShell({
   }
 
   return null;
+}
+
+function TgSubscriptionExpiredScreen() {
+  const openBilling = () => {
+    tgHapticButtonTap();
+    const origin =
+      typeof window !== "undefined" && window.location.origin
+        ? window.location.origin
+        : "https://hvac-saas-lovat.vercel.app";
+    const url = `${origin}/billing?reason=expired_trial&from=tg`;
+    const wa = getTelegramWebApp();
+    if (wa?.openLink) {
+      wa.openLink(url, { try_instant_view: false });
+      return;
+    }
+    window.location.href = url;
+  };
+
+  return (
+    <div style={page}>
+      <h1 style={title}>Пробный период закончился</h1>
+      <div style={card}>
+        <p style={{ margin: "0 0 14px", fontSize: 15, color: "#64748b", lineHeight: 1.5 }}>
+          Доступ к калькулятору, прайсу и истории закрыт. Оформите подписку, чтобы продолжить
+          работу в сервисе.
+        </p>
+        <p style={{ margin: "0 0 18px", fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
+          {CABINET_MONTHLY_PRICE_RUB} ₽ / мес
+        </p>
+        <button type="button" style={btn} onClick={openBilling}>
+          Оформить подписку
+        </button>
+        <Link href="/tg/cabinet" style={{ ...btnSecondary, marginTop: 12 }}>
+          Личный кабинет
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function TgVerifyEmailScreen({

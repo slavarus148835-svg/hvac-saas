@@ -22,28 +22,34 @@ export type TgMiniAppAccessState = {
 
 function accessFromResolved(resolved: {
   accessAllowed?: boolean;
+  subscriptionAllowed?: boolean;
   accessGate?: string;
   emailVerifiedByCode?: boolean;
 }): MiniAppAccessStatus {
-  const reason =
+  const gateReason =
     typeof resolved.accessGate === "string"
       ? (resolved.accessGate as MiniAppAccessStatus["reason"])
       : resolved.emailVerifiedByCode === true
         ? "ok"
         : "email_not_verified";
+  const identityOk = resolved.accessAllowed === true;
+  const subscriptionAllowed = resolved.subscriptionAllowed !== false;
   return {
-    allowed: resolved.accessAllowed === true,
-    reason,
+    allowed: identityOk && subscriptionAllowed,
+    reason: gateReason,
     emailVerifiedByCode: resolved.emailVerifiedByCode === true,
+    subscriptionAllowed,
   };
 }
 
 export function useTgMiniAppAccess(options?: {
   enabled?: boolean;
   requireTelegram?: boolean;
+  requireSubscription?: boolean;
 }): TgMiniAppAccessState {
   const enabled = options?.enabled !== false;
   const requireTelegram = options?.requireTelegram !== false;
+  const requireSubscription = options?.requireSubscription !== false;
   const [phase, setPhase] = useState<TgProtectedPhase>("loading");
   const [initData, setInitData] = useState("");
   const [profile, setProfile] = useState<TelegramMiniAppProfile | null>(null);
@@ -121,7 +127,12 @@ export function useTgMiniAppAccess(options?: {
       }
 
       if (resolved.status === "profile") {
-        const accessStatus = accessFromResolved(resolved);
+        const accessStatus = accessFromResolved({
+          accessAllowed: resolved.accessAllowed,
+          subscriptionAllowed: resolved.subscriptionAllowed,
+          accessGate: resolved.accessGate,
+          emailVerifiedByCode: resolved.emailVerifiedByCode,
+        });
         setProfile(resolved.profile);
         setAccess(accessStatus);
         setPendingRegistration(false);
@@ -131,6 +142,7 @@ export function useTgMiniAppAccess(options?: {
             profile: resolved.profile,
             access: accessStatus,
             pendingRegistration: false,
+            requireSubscription,
           })
         );
       }
@@ -139,7 +151,7 @@ export function useTgMiniAppAccess(options?: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, requireTelegram, tick]);
+  }, [enabled, requireTelegram, requireSubscription, tick]);
 
   return {
     phase,

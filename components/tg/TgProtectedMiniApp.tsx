@@ -10,14 +10,23 @@ import { prepareTelegramMiniAppShell } from "@/lib/telegramMiniApp";
 type Props = {
   children: ReactNode;
   onReady?: (profile: TelegramMiniAppProfile) => void;
+  /** false для /tg/cabinet — кабинет без подписки, сервисы с assertMiniAppServiceAccess. */
+  requireSubscription?: boolean;
 };
 
 /**
  * Обёртка для защищённых страниц Mini App (/tg/calculator, history, …).
- * Показывает gate (link / verify), пока нет verified email.
  */
-export function TgProtectedMiniApp({ children, onReady }: Props) {
-  const access = useTgMiniAppAccess({ enabled: true, requireTelegram: true });
+export function TgProtectedMiniApp({
+  children,
+  onReady,
+  requireSubscription = true,
+}: Props) {
+  const access = useTgMiniAppAccess({
+    enabled: true,
+    requireTelegram: true,
+    requireSubscription,
+  });
 
   if (access.phase === "ready" && access.profile) {
     onReady?.(access.profile);

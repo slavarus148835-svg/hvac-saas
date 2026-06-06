@@ -46,7 +46,8 @@ export async function POST(req: Request) {
     return NextResponse.json(auth.data, { status: auth.status });
   }
 
-  let body: { code?: string; source?: string; firstTouchMs?: number } = {};
+  let body: { code?: string; source?: string; firstTouchMs?: number; referralIntent?: boolean } =
+    {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
         typeof body.firstTouchMs === "number" && Number.isFinite(body.firstTouchMs)
           ? body.firstTouchMs
           : undefined,
+      referralIntent: body.referralIntent === true,
     }
   );
 

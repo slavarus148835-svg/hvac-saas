@@ -302,7 +302,7 @@ export default function TgCabinetPage() {
       authUi === "no_tg");
 
   return (
-    <TgProtectedMiniApp>
+    <TgProtectedMiniApp requireSubscription={false}>
     <>
       <Script
         src="https://telegram.org/js/telegram-web-app.js"

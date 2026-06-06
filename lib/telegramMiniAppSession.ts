@@ -64,6 +64,7 @@ export type CreateMiniAppSessionResult = {
   pending_email_registration?: boolean;
   pendingSessionId?: string;
   accessAllowed?: boolean;
+  subscriptionAllowed?: boolean;
   accessGate?: string;
   emailVerifiedByCode?: boolean;
   error?: string;
@@ -123,6 +124,7 @@ export async function bootstrapMiniApp(
           ok: true,
           profile,
           accessAllowed: data.accessAllowed === true || degraded,
+          subscriptionAllowed: data.subscriptionAllowed !== false,
           accessGate:
             typeof data.accessGate === "string" ? data.accessGate : undefined,
           emailVerifiedByCode: data.emailVerifiedByCode === true,
@@ -180,6 +182,7 @@ export type GetMiniAppMeResult = {
   ok: boolean;
   profile?: TelegramMiniAppProfile;
   accessAllowed?: boolean;
+  subscriptionAllowed?: boolean;
   accessGate?: string;
   emailVerifiedByCode?: boolean;
   error?: string;
@@ -253,6 +256,7 @@ export async function getMiniAppMe(): Promise<GetMiniAppMeResult> {
           profile,
           status: res.status,
           accessAllowed: data.accessAllowed === true,
+          subscriptionAllowed: data.subscriptionAllowed !== false,
           accessGate:
             typeof data.accessGate === "string" ? data.accessGate : undefined,
           emailVerifiedByCode: data.emailVerifiedByCode === true,
@@ -278,6 +282,7 @@ export type EnsureMiniAppProfileResult =
       status: "profile";
       profile: TelegramMiniAppProfile;
       accessAllowed?: boolean;
+      subscriptionAllowed?: boolean;
       accessGate?: string;
       emailVerifiedByCode?: boolean;
     }
@@ -300,6 +305,7 @@ export async function ensureTelegramMiniAppProfile(
         status: "profile",
         profile: me.profile,
         accessAllowed: me.accessAllowed,
+        subscriptionAllowed: me.subscriptionAllowed,
         accessGate: me.accessGate,
         emailVerifiedByCode: me.emailVerifiedByCode,
       };
@@ -317,6 +323,7 @@ export async function ensureTelegramMiniAppProfile(
       status: "profile",
       profile: created.profile,
       accessAllowed: created.accessAllowed,
+      subscriptionAllowed: created.subscriptionAllowed,
       accessGate: created.accessGate,
       emailVerifiedByCode: created.emailVerifiedByCode,
     };

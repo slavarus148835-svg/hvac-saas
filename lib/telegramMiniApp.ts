@@ -1,8 +1,8 @@
-import {
-  PARTNER_MANAGER_FIRST_TOUCH_MS_KEY,
-  PARTNER_MANAGER_STORAGE_KEY,
-} from "@/lib/partner/b2bConstants";
 import { extractPartnerCodeFromMiniAppStartParam } from "@/lib/partner/partnerManagerCode";
+import {
+  clearPartnerReferralStorage,
+  savePartnerReferralCodeForSession,
+} from "@/lib/partner/clientPartnerReferralStorage";
 
 /** Типы Telegram WebApp (минимально нужные для Mini App). */
 export type TelegramWebAppUser = {
@@ -50,10 +50,9 @@ export function prepareTelegramMiniAppShell(wa: TelegramWebApp | null) {
       const sp = String(wa.initDataUnsafe?.start_param ?? "").trim();
       const code = extractPartnerCodeFromMiniAppStartParam(sp);
       if (code) {
-        localStorage.setItem(PARTNER_MANAGER_STORAGE_KEY, code);
-        if (!localStorage.getItem(PARTNER_MANAGER_FIRST_TOUCH_MS_KEY)) {
-          localStorage.setItem(PARTNER_MANAGER_FIRST_TOUCH_MS_KEY, String(Date.now()));
-        }
+        savePartnerReferralCodeForSession(code);
+      } else {
+        clearPartnerReferralStorage();
       }
     } catch {
       /* */

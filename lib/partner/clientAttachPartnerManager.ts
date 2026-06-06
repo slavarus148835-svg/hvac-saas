@@ -1,7 +1,7 @@
 import {
-  PARTNER_MANAGER_FIRST_TOUCH_MS_KEY,
-  PARTNER_MANAGER_STORAGE_KEY,
-} from "@/lib/partner/b2bConstants";
+  readPartnerReferralCodeFromSession,
+  readPartnerReferralFirstTouchMsFromSession,
+} from "@/lib/partner/clientPartnerReferralStorage";
 import { getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 
 const SESSION_ATTACHED_PREFIX = "hvac_b2b_partner_attached:";
@@ -11,7 +11,8 @@ function sessionAttachedKey(uid: string): string {
 }
 
 /**
- * Однократно отправляет сохранённый B2B partner code на сервер (не трогает ?ref= / рефералку).
+ * Отправляет partner code на сервер только если в текущей сессии есть referral intent
+ * (start_param Mini App или ?partner= на web в этой вкладке).
  */
 export async function tryAttachPartnerManagerFromStorage(
   uid: string,
@@ -25,22 +26,10 @@ export async function tryAttachPartnerManagerFromStorage(
     /* ignore */
   }
 
-  let code = "";
-  try {
-    code = String(localStorage.getItem(PARTNER_MANAGER_STORAGE_KEY) || "").trim();
-  } catch {
-    return;
-  }
+  const code = readPartnerReferralCodeFromSession();
   if (!code) return;
 
-  let firstTouchMs: number | undefined;
-  try {
-    const raw = localStorage.getItem(PARTNER_MANAGER_FIRST_TOUCH_MS_KEY);
-    const n = raw ? Number(raw) : NaN;
-    if (Number.isFinite(n) && n > 0) firstTouchMs = Math.floor(n);
-  } catch {
-    /* */
-  }
+  const firstTouchMs = readPartnerReferralFirstTouchMsFromSession();
 
   let token: string | null = null;
   try {
@@ -65,7 +54,7 @@ export async function tryAttachPartnerManagerFromStorage(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ code, source, firstTouchMs }),
+      body: JSON.stringify({ code, source, firstTouchMs, referralIntent: true }),
       cache: "no-store",
     });
     if (res.ok) {

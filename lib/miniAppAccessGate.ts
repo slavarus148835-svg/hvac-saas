@@ -6,24 +6,29 @@ export type MiniAppAccessGateReason =
   | "no_email"
   | "email_not_verified"
   | "telegram_not_linked"
-  | "provision_account";
+  | "provision_account"
+  | "subscription_expired";
 
 export type MiniAppAccessStatus = {
   allowed: boolean;
   reason: MiniAppAccessGateReason;
   emailVerifiedByCode: boolean;
+  subscriptionAllowed: boolean;
 };
 
 export function accessStatusFromApi(raw: unknown): MiniAppAccessStatus | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   const reason = o.accessGate ?? o.reason;
-  const allowed = o.accessAllowed === true || reason === "ok";
+  const identityOk = o.accessAllowed === true || reason === "ok";
+  const subscriptionAllowed =
+    o.subscriptionAllowed !== false && reason !== "subscription_expired";
   if (typeof reason !== "string") return null;
   return {
-    allowed,
-    reason: reason as MiniAppAccessGateReason,
+    allowed: identityOk && subscriptionAllowed,
+    reason: reason as MiniAppAccessStatus["reason"],
     emailVerifiedByCode: o.emailVerifiedByCode === true,
+    subscriptionAllowed,
   };
 }
 
@@ -35,6 +40,7 @@ export type TgProtectedPhase =
   | "need_link"
   | "need_verify"
   | "blocked"
+  | "subscription_expired"
   | "ready";
 
 export function resolveTgProtectedPhase(params: {
@@ -43,6 +49,7 @@ export function resolveTgProtectedPhase(params: {
   access: MiniAppAccessStatus | null;
   pendingRegistration: boolean;
   errorMessage?: string | null;
+  requireSubscription?: boolean;
 }): TgProtectedPhase {
   if (params.errorMessage) return "error";
   if (!params.hasInitData && !params.profile && !params.pendingRegistration) {
@@ -59,7 +66,17 @@ export function resolveTgProtectedPhase(params: {
   ) {
     return "need_link";
   }
-  if (params.access?.reason === "email_not_verified" || !params.access?.allowed) {
+  if (params.access?.reason === "email_not_verified") {
+    return "need_verify";
+  }
+  if (
+    params.requireSubscription !== false &&
+    (params.access?.reason === "subscription_expired" ||
+      params.access?.subscriptionAllowed === false)
+  ) {
+    return "subscription_expired";
+  }
+  if (!params.access?.allowed && params.access?.reason !== "ok") {
     return "need_verify";
   }
   return "ready";

@@ -21,3 +21,10 @@ export function isTelegramAdmin(params: {
       : "";
   return ids.some((id) => id === chat || (from && id === from));
 }
+
+/** Аккаунты из ADMIN_TELEGRAM_CHAT_ID не должны закрепляться за партнёрами. */
+export function isTelegramAdminUserId(telegramUserId: number): boolean {
+  if (!Number.isFinite(telegramUserId) || telegramUserId <= 0) return false;
+  const ids = parseAdminTelegramIds();
+  return ids.includes(String(Math.trunc(telegramUserId)));
+}
