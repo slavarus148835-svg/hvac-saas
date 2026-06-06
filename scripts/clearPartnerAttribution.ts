@@ -5,11 +5,48 @@
  *   npx tsx scripts/clearPartnerAttribution.ts <uid>
  *   npx tsx scripts/clearPartnerAttribution.ts --telegram <telegramUserId>
  */
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, "..");
+dotenv.config({ path: path.join(ROOT, ".env.vercel.production.local") });
+dotenv.config({ path: path.join(ROOT, ".env.local") });
+dotenv.config({ path: path.join(ROOT, ".env") });
+
 import { getAdminDb } from "../lib/firebaseAdmin";
 import { clearPartnerAttributionFromUser } from "../lib/server/partnerManager/partnerManagerB2b";
 import { PRICING_FS } from "../lib/pricingFirestorePaths";
 
+/** Vercel/env иногда кладут private_key с реальными переносами строк — чиним перед parse. */
+function ensureFirebaseServiceAccountEnv(): boolean {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw || !String(raw).trim()) return false;
+  try {
+    JSON.parse(String(raw));
+    return true;
+  } catch {
+    try {
+      const repaired = String(raw).replace(
+        /("private_key":\s*")([\s\S]*?)("\s*,\s*"client_email")/,
+        (_, a: string, key: string, b: string) =>
+          a + key.replace(/\r?\n/g, "\\n") + b
+      );
+      JSON.parse(repaired);
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON = repaired;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 async function main() {
+  if (!ensureFirebaseServiceAccountEnv()) {
+    console.error("FIREBASE_SERVICE_ACCOUNT_JSON missing or invalid");
+    process.exit(1);
+  }
   const db = getAdminDb();
   if (!db) {
     console.error("Firestore admin unavailable");
