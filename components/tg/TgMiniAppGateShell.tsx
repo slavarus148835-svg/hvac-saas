@@ -1,24 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { auth } from "@/lib/firebase";
 import type { TelegramMiniAppProfile } from "@/lib/telegramMiniAppAuth";
 import { TgMiniAppEmailLink } from "@/app/tg/components/TgMiniAppEmailLink";
+import { TgMiniAppEmailCodeForm } from "@/components/tg/TgMiniAppEmailCodeForm";
 import {
-  buildVerifyEmailCodePathForPostAuth,
   markTelegramPostAuthFlow,
   TG_REGISTER_PATH,
 } from "@/lib/telegramPostAuthRedirect";
-import {
-  formatSendEmailCodeApiError,
-} from "@/lib/sendEmailCodeClientMessages";
-import {
-  getVerificationResendCooldownLeftSec,
-  recordVerificationEmailSentAtNow,
-} from "@/lib/emailVerification";
 import { CABINET_MONTHLY_PRICE_RUB } from "@/lib/subscriptionVisibility";
+import { getMiniAppSessionToken } from "@/lib/telegramMiniAppSession";
 import { getTelegramWebApp } from "@/lib/telegramMiniApp";
 import type { TgProtectedPhase } from "@/lib/miniAppAccessGate";
 import { tgHapticButtonTap } from "@/lib/telegramHaptic";
@@ -89,6 +81,7 @@ type Props = {
   errorMessage?: string | null;
   onLinked?: (profile: TelegramMiniAppProfile) => void;
   onRetryLogin?: () => void;
+  onEmailVerified?: () => void;
 };
 
 export function TgMiniAppGateShell({
@@ -98,9 +91,8 @@ export function TgMiniAppGateShell({
   errorMessage,
   onLinked,
   onRetryLogin,
+  onEmailVerified,
 }: Props) {
-  const router = useRouter();
-
   if (phase === "loading") {
     return (
       <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -170,10 +162,7 @@ export function TgMiniAppGateShell({
     return (
       <TgVerifyEmailScreen
         email={profile?.email ?? null}
-        onContinue={() => {
-          markTelegramPostAuthFlow();
-          router.push(buildVerifyEmailCodePathForPostAuth());
-        }}
+        onVerified={() => onEmailVerified?.()}
       />
     );
   }
@@ -229,19 +218,56 @@ export function TgMiniAppGateShell({
 }
 
 function TgSubscriptionExpiredScreen() {
-  const openBilling = () => {
-    tgHapticButtonTap();
-    const origin =
-      typeof window !== "undefined" && window.location.origin
-        ? window.location.origin
-        : "https://hvac-saas-lovat.vercel.app";
-    const url = `${origin}/billing?reason=expired_trial&from=tg`;
-    const wa = getTelegramWebApp();
-    if (wa?.openLink) {
-      wa.openLink(url, { try_instant_view: false });
-      return;
-    }
-    window.location.href = url;
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  const startPayment = () => {
+    void (async () => {
+      tgHapticButtonTap();
+      const token = getMiniAppSessionToken();
+      if (!token) {
+        setPayError("Сессия не найдена. Закройте Mini App и откройте снова из бота.");
+        return;
+      }
+      setPaying(true);
+      setPayError(null);
+      try {
+        const res = await fetch("/api/telegram/miniapp-create-payment", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          url?: string;
+          error?: string;
+          message?: string;
+        };
+        if (!res.ok || !data.url) {
+          if (data.error === "email_not_verified") {
+            setPayError("Сначала подтвердите email в Mini App.");
+          } else {
+            setPayError(
+              typeof data.message === "string" && data.message.trim()
+                ? data.message
+                : typeof data.error === "string"
+                  ? data.error
+                  : "Не удалось создать платёж"
+            );
+          }
+          return;
+        }
+        const wa = getTelegramWebApp();
+        if (wa?.openLink) {
+          wa.openLink(data.url, { try_instant_view: false });
+        } else {
+          window.location.href = data.url;
+        }
+      } catch {
+        setPayError("Ошибка соединения. Попробуйте позже.");
+      } finally {
+        setPaying(false);
+      }
+    })();
   };
 
   return (
@@ -255,9 +281,19 @@ function TgSubscriptionExpiredScreen() {
         <p style={{ margin: "0 0 18px", fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
           {CABINET_MONTHLY_PRICE_RUB} ₽ / мес
         </p>
-        <button type="button" style={btn} onClick={openBilling}>
-          Оформить подписку
+        <button
+          type="button"
+          style={{ ...btn, opacity: paying ? 0.75 : 1 }}
+          disabled={paying}
+          onClick={startPayment}
+        >
+          {paying ? "Подготовка оплаты…" : "Оформить подписку"}
         </button>
+        {payError ? (
+          <p style={{ margin: "12px 0 0", fontSize: 13, color: "#b91c1c", lineHeight: 1.5 }}>
+            {payError}
+          </p>
+        ) : null}
         <Link href="/tg/cabinet" style={{ ...btnSecondary, marginTop: 12 }}>
           Личный кабинет
         </Link>
@@ -268,54 +304,12 @@ function TgSubscriptionExpiredScreen() {
 
 function TgVerifyEmailScreen({
   email,
-  onContinue,
+  onVerified,
 }: {
   email: string | null;
-  onContinue: () => void;
+  onVerified: () => void;
 }) {
-  const [resendBusy, setResendBusy] = useState(false);
-  const [resendMsg, setResendMsg] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
-
-  const tryResend = () => {
-    void (async () => {
-      const left = getVerificationResendCooldownLeftSec();
-      if (left > 0) {
-        setCooldown(left);
-        setResendMsg(`Повторная отправка через ${left} с`);
-        return;
-      }
-      const user = auth.currentUser;
-      if (!user) {
-        setResendMsg("Войдите по email на сайте, затем подтвердите почту.");
-        return;
-      }
-      setResendBusy(true);
-      setResendMsg(null);
-      try {
-        const idToken = await user.getIdToken(true);
-        const res = await fetch("/api/auth/send-email-code", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (res.ok) {
-          recordVerificationEmailSentAtNow();
-          setResendMsg("Код отправлен на почту");
-          setCooldown(getVerificationResendCooldownLeftSec());
-        } else {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
-            detail?: string;
-          };
-          setResendMsg(formatSendEmailCodeApiError(body));
-        }
-      } catch {
-        setResendMsg("Не удалось отправить код. Попробуйте позже.");
-      } finally {
-        setResendBusy(false);
-      }
-    })();
-  };
+  const [showForm, setShowForm] = useState(false);
 
   return (
     <div style={page}>
@@ -324,44 +318,27 @@ function TgVerifyEmailScreen({
         Доступ к калькулятору и прайсу откроется после подтверждения почты кодом из письма.
       </p>
       <div style={card}>
-        {email ? (
-          <p style={{ margin: "0 0 14px", fontSize: 15, color: "#334155" }}>
-            Email: <strong>{email}</strong>
-          </p>
-        ) : null}
-        <button
-          type="button"
-          style={{ ...btn, opacity: resendBusy ? 0.75 : 1 }}
-          onClick={() => {
-            tgHapticButtonTap();
-            onContinue();
-          }}
-        >
-          Ввести код подтверждения
-        </button>
-        <button
-          type="button"
-          style={{ ...btnSecondary, opacity: resendBusy || cooldown > 0 ? 0.7 : 1 }}
-          disabled={resendBusy || cooldown > 0}
-          onClick={() => {
-            tgHapticButtonTap();
-            tryResend();
-          }}
-        >
-          {resendBusy ? "Отправляем…" : "Отправить код повторно"}
-        </button>
-        {resendMsg ? (
-          <p style={{ margin: "12px 0 0", fontSize: 13, color: "#64748b" }}>{resendMsg}</p>
-        ) : null}
-        {!auth.currentUser ? (
-          <p style={{ margin: "14px 0 0", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-            Если вы регистрировались ранее на другом устройстве,{" "}
-            <Link href="/login" style={{ color: "#0f172a", fontWeight: 600 }}>
-              войдите по email
-            </Link>{" "}
-            и вернитесь в Mini App.
-          </p>
-        ) : null}
+        {showForm ? (
+          <TgMiniAppEmailCodeForm email={email} onVerified={onVerified} />
+        ) : (
+          <>
+            {email ? (
+              <p style={{ margin: "0 0 14px", fontSize: 15, color: "#334155" }}>
+                Email: <strong>{email}</strong>
+              </p>
+            ) : null}
+            <button
+              type="button"
+              style={btn}
+              onClick={() => {
+                tgHapticButtonTap();
+                setShowForm(true);
+              }}
+            >
+              Ввести код подтверждения
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -3,11 +3,12 @@ import {
   cabinetAccessStatusLabel,
   cabinetAccessUntilLabel,
 } from "@/lib/cabinetSubscriptionDisplay";
-import { getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import { firestoreFieldToIsoUtc } from "@/lib/server/telegram/firestoreTimeIso";
 import type { UserTrialFields } from "@/lib/trialSubscription";
 import { evaluateMiniAppAccessGate } from "@/lib/server/telegram/evaluateMiniAppAccessGate";
 import { evaluateMiniAppSubscriptionAccess } from "@/lib/server/evaluateMiniAppSubscriptionAccess";
+import { ensureUserEmailVerificationFromAuth } from "@/lib/server/telegram/ensureUserEmailVerificationFromAuth";
 import {
   loadUserDocByUid,
   telegramMiniAppPublicProfileFromUserDoc,
@@ -31,6 +32,7 @@ export async function GET(req: Request) {
     }
 
     const db = getAdminDb();
+    const app = getAdminApp();
     if (!db) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -45,10 +47,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
     }
 
-    const profile = telegramMiniAppPublicProfileFromUserDoc(v.uid, loaded.data);
-    const access = evaluateMiniAppAccessGate(v.uid, loaded.data);
-    const subscription = evaluateMiniAppSubscriptionAccess(loaded.data);
-    const d = loaded.data;
+    let userData = loaded.data;
+    if (app) {
+      userData = await ensureUserEmailVerificationFromAuth(app, db, v.uid, userData);
+    }
+
+    const profile = telegramMiniAppPublicProfileFromUserDoc(v.uid, userData);
+    const access = evaluateMiniAppAccessGate(v.uid, userData);
+    const subscription = evaluateMiniAppSubscriptionAccess(userData);
+    const d = userData;
     const trialUser = d as UserTrialFields;
     const subscriptionStatus =
       typeof d.subscriptionStatus === "string" ? d.subscriptionStatus : null;

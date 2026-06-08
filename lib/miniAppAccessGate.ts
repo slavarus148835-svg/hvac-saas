@@ -76,8 +76,8 @@ export function resolveTgProtectedPhase(params: {
   ) {
     return "subscription_expired";
   }
-  if (!params.access?.allowed && params.access?.reason !== "ok") {
-    return "need_verify";
+  if (params.access?.reason === "subscription_expired") {
+    return "ready";
   }
   return "ready";
 }

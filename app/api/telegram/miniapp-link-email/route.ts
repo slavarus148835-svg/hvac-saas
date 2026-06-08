@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminApp, getAdminDb } from "@/lib/firebaseAdmin";
 import { findUsersByNormalizedEmail, normalizeEmailForAuth } from "@/lib/server/authDuplicateGuards";
+import { ensureUserEmailVerificationFromAuth } from "@/lib/server/telegram/ensureUserEmailVerificationFromAuth";
 import {
   linkBlockedMessage,
   linkTelegramToEmailUid,
@@ -129,10 +130,9 @@ export async function POST(req: Request) {
     });
 
     const fresh = await db.collection(PRICING_FS.users).doc(targetUid).get();
-    const profile = telegramMiniAppPublicProfileFromUserDoc(
-      targetUid,
-      (fresh.data() ?? targetData) as Record<string, unknown>
-    );
+    let freshData = (fresh.data() ?? targetData) as Record<string, unknown>;
+    freshData = await ensureUserEmailVerificationFromAuth(app, db, targetUid, freshData);
+    const profile = telegramMiniAppPublicProfileFromUserDoc(targetUid, freshData);
 
     return NextResponse.json({
       ok: true,

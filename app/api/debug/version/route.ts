@@ -31,6 +31,7 @@ export async function GET() {
       /** Partner attach only with session referral + subscription gate on Mini App APIs. */
       miniAppPartnerAttachV2: true,
       miniAppSubscriptionGateV1: true,
+      miniAppPaymentAndVerifyV1: true,
       firestoreSafeMode: process.env.FIRESTORE_SAFE_MODE === "1",
       firestoreHeavyScansDisabled:
         process.env.FIRESTORE_SAFE_MODE === "1" ||

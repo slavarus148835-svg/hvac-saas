@@ -13,6 +13,7 @@ import {
 } from "@/lib/server/telegram/telegramLinkShared";
 import { consumeTelegramLinkToken } from "@/lib/server/telegram/telegramLinkTokens";
 import { evaluateMiniAppAccessGate } from "@/lib/server/telegram/evaluateMiniAppAccessGate";
+import { ensureUserEmailVerificationFromAuth } from "@/lib/server/telegram/ensureUserEmailVerificationFromAuth";
 import { evaluateMiniAppSubscriptionAccess } from "@/lib/server/evaluateMiniAppSubscriptionAccess";
 import {
   createTelegramMiniAppSession,
@@ -260,7 +261,8 @@ export async function POST(req: Request) {
 
     if (lookup.kind === "found") {
       const doc = lookup.doc;
-      const userData = doc.data() as Record<string, unknown>;
+      let userData = doc.data() as Record<string, unknown>;
+      userData = await ensureUserEmailVerificationFromAuth(ctx.app, ctx.db, doc.id, userData);
       const access = evaluateMiniAppAccessGate(doc.id, userData);
       const { sessionToken } = await createTelegramMiniAppSession(db, {
         uid: doc.id,

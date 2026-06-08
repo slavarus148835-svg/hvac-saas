@@ -55,6 +55,7 @@ export function TgProtectedMiniApp({
         profile={access.profile}
         errorMessage={access.errorMessage}
         onRetryLogin={() => access.refresh()}
+        onEmailVerified={() => access.refresh()}
         onLinked={() => {
           access.refresh();
         }}

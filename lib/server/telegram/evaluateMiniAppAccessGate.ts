@@ -1,3 +1,4 @@
+import { isEmailVerificationSatisfied } from "@/lib/emailVerificationSatisfied";
 import { isStatsExcludedTelegramProvisionUid } from "@/lib/server/statsExcludeTelegramProvisionUid";
 
 export type MiniAppAccessGateReason =
@@ -53,7 +54,7 @@ export function evaluateMiniAppAccessGate(
   const email = typeof data.email === "string" ? data.email.trim() : "";
   const hasEmail = Boolean(email && email.includes("@"));
   const hasTelegramLinked = hasTelegramKeys(data);
-  const emailVerifiedByCode = data.emailVerifiedByCode === true;
+  const emailVerifiedByCode = isEmailVerificationSatisfied(data);
 
   if (!hasTelegramLinked) {
     return {
@@ -75,7 +76,7 @@ export function evaluateMiniAppAccessGate(
     };
   }
 
-  if (!emailVerifiedByCode) {
+  if (!isEmailVerificationSatisfied(data)) {
     return {
       allowed: false,
       reason: "email_not_verified",
